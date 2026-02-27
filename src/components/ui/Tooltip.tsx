@@ -10,7 +10,7 @@ interface TooltipProps {
 
 export function Tooltip({ content, children, position = "top", delay = 300 }: TooltipProps) {
   const [show, setShow] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout>>();
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   function enter() {
     timer.current = setTimeout(() => setShow(true), delay);

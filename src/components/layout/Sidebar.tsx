@@ -51,7 +51,7 @@ export function Sidebar() {
           const Icon = iconMap[item.icon] || LayoutDashboard;
           const isActive =
             location.pathname === item.path ||
-            (item.path !== "/" && location.pathname.startsWith(item.path));
+            location.pathname.startsWith(item.path);
 
           return (
             <button

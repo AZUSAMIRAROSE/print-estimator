@@ -9,7 +9,7 @@ import { cn } from "@/utils/cn";
 import { Book, Maximize2, Grid } from "lucide-react";
 
 export function StepBookSpec() {
-  const { estimation, updateBookSpec, updateQuantities } = useEstimationStore();
+  const { estimation, updateBookSpec, updateQuantity } = useEstimationStore();
   const { bookSpec, quantities } = estimation;
 
   const presetOptions = [

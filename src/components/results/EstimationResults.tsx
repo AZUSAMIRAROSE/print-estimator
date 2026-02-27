@@ -271,7 +271,7 @@ export function EstimationResults({ estimation, results, spineThickness, onBackT
                     outerRadius={90}
                     paddingAngle={3}
                     dataKey="value"
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
                   >
                     {costBreakdown.map((entry, i) => (
                       <Cell key={i} fill={entry.color} />
@@ -284,7 +284,7 @@ export function EstimationResults({ estimation, results, spineThickness, onBackT
                       borderRadius: "8px",
                       fontSize: "12px",
                     }}
-                    formatter={(value: number) => [formatCurrency(value), "Cost"]}
+                    formatter={(value) => [formatCurrency(value as number), "Cost"]}
                   />
                 </RechartsPie>
               </ResponsiveContainer>
