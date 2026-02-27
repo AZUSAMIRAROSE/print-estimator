@@ -1,0 +1,206 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-surface-light-border;
+  }
+
+  .dark * {
+    @apply border-surface-dark-border;
+  }
+
+  body {
+    @apply bg-surface-light text-text-light-primary font-sans;
+  }
+
+  .dark body {
+    @apply bg-surface-dark text-text-dark-primary;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    @apply w-2 h-2;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-gray-300 rounded-full;
+  }
+
+  .dark ::-webkit-scrollbar-thumb {
+    @apply bg-gray-600;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-400;
+  }
+
+  .dark ::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-500;
+  }
+
+  /* Selection */
+  ::selection {
+    @apply bg-primary-500/30 text-primary-900;
+  }
+
+  .dark ::selection {
+    @apply bg-primary-500/30 text-primary-100;
+  }
+
+  /* Focus ring */
+  *:focus-visible {
+    @apply outline-none ring-2 ring-primary-500/50 ring-offset-2;
+  }
+
+  .dark *:focus-visible {
+    @apply ring-offset-surface-dark;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-white rounded-xl border border-surface-light-border shadow-card-light;
+  }
+
+  .dark .card {
+    @apply bg-surface-dark-secondary border-surface-dark-border shadow-card-dark;
+  }
+
+  .card-elevated {
+    @apply bg-white rounded-xl border border-surface-light-border shadow-elevated-light;
+  }
+
+  .dark .card-elevated {
+    @apply bg-surface-dark-secondary border-surface-dark-border shadow-elevated-dark;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 focus:ring-2 focus:ring-primary-500/50 focus:ring-offset-2 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .dark .btn-primary {
+    @apply focus:ring-offset-surface-dark;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-text-light-primary bg-surface-light-tertiary rounded-lg hover:bg-gray-200 focus:ring-2 focus:ring-gray-500/50 focus:ring-offset-2 transition-all duration-200 border border-surface-light-border;
+  }
+
+  .dark .btn-secondary {
+    @apply text-text-dark-primary bg-surface-dark-tertiary hover:bg-gray-600 border-surface-dark-border focus:ring-offset-surface-dark;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-text-light-secondary rounded-lg hover:bg-surface-light-tertiary transition-all duration-200;
+  }
+
+  .dark .btn-ghost {
+    @apply text-text-dark-secondary hover:bg-surface-dark-tertiary;
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-white bg-danger-600 rounded-lg hover:bg-danger-700 transition-all duration-200;
+  }
+
+  .input-field {
+    @apply w-full px-3 py-2 text-sm bg-white border border-surface-light-border rounded-lg text-text-light-primary placeholder:text-text-light-tertiary focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all duration-200;
+  }
+
+  .dark .input-field {
+    @apply bg-surface-dark-tertiary border-surface-dark-border text-text-dark-primary placeholder:text-text-dark-tertiary focus:border-primary-500;
+  }
+
+  .label {
+    @apply block text-sm font-medium text-text-light-secondary mb-1.5;
+  }
+
+  .dark .label {
+    @apply text-text-dark-secondary;
+  }
+
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full;
+  }
+
+  .badge-success {
+    @apply badge bg-success-50 text-success-700;
+  }
+
+  .dark .badge-success {
+    @apply bg-success-500/20 text-success-500;
+  }
+
+  .badge-warning {
+    @apply badge bg-warning-50 text-warning-700;
+  }
+
+  .dark .badge-warning {
+    @apply bg-warning-500/20 text-warning-500;
+  }
+
+  .badge-danger {
+    @apply badge bg-danger-50 text-danger-700;
+  }
+
+  .dark .badge-danger {
+    @apply bg-danger-500/20 text-danger-500;
+  }
+
+  .badge-info {
+    @apply badge bg-info-50 text-info-700;
+  }
+
+  .dark .badge-info {
+    @apply bg-info-500/20 text-info-500;
+  }
+
+  .stat-card {
+    @apply card p-5 flex flex-col gap-2;
+  }
+
+  .wizard-step-active {
+    @apply bg-primary-50 border-primary-500 text-primary-700;
+  }
+
+  .dark .wizard-step-active {
+    @apply bg-primary-500/10 border-primary-500 text-primary-400;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .animate-in {
+    animation: fadeSlideIn 0.3s ease-out;
+  }
+
+  @keyframes fadeSlideIn {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Hide number input spinners */
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  input[type="number"] {
+    -moz-appearance: textfield;
+  }
+}
