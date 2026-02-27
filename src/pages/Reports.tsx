@@ -94,26 +94,26 @@ export function Reports() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="card p-5">
+            <div className="card p-5 min-w-0">
               <h3 className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary mb-4">Revenue Trend</h3>
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
+              <div className="h-64 min-w-0">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={1}>
                   <AreaChart data={MONTHLY}>
                     <defs><linearGradient id="rg" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#3b82f6" stopOpacity={0.15} /><stop offset="95%" stopColor="#3b82f6" stopOpacity={0} /></linearGradient></defs>
                     <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
                     <XAxis dataKey="month" tick={{ fontSize: 12, fill: tickFill }} />
                     <YAxis tick={{ fontSize: 12, fill: tickFill }} tickFormatter={v => `₹${(v / 100000).toFixed(0)}L`} />
-                    <Tooltip contentStyle={chartStyle} formatter={(v: number) => [formatCurrency(v), "Revenue"]} />
+                    <Tooltip contentStyle={chartStyle} formatter={(v: number | undefined) => [formatCurrency(v ?? 0), "Revenue"]} />
                     <Area type="monotone" dataKey="revenue" stroke="#3b82f6" strokeWidth={2} fill="url(#rg)" />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
             </div>
 
-            <div className="card p-5">
+            <div className="card p-5 min-w-0">
               <h3 className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary mb-4">Binding Distribution</h3>
-              <div className="h-52">
-                <ResponsiveContainer width="100%" height="100%">
+              <div className="h-52 min-w-0">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={1}>
                   <PieChart><Pie data={BINDING_DATA} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="value">{BINDING_DATA.map((e, i) => <Cell key={i} fill={e.color} />)}</Pie><Tooltip contentStyle={chartStyle} /></PieChart>
                 </ResponsiveContainer>
               </div>
@@ -165,10 +165,10 @@ export function Reports() {
       )}
 
       {tab === "paper" && (
-        <div className="card p-5 animate-in">
+        <div className="card p-5 animate-in min-w-0">
           <h3 className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary mb-4">Paper Consumption</h3>
           <div className="h-64 mb-6">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={1}>
               <BarChart data={PAPER_USAGE}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
                 <XAxis dataKey="type" tick={{ fontSize: 12, fill: tickFill }} />
@@ -209,3 +209,4 @@ function StatBox({ icon, label, value, change }: { icon: React.ReactNode; label:
     </div>
   );
 }
+

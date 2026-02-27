@@ -76,15 +76,15 @@ export function Inventory() {
       </div>
 
       {/* Chart */}
-      <div className="card p-5">
+      <div className="card p-5 min-w-0">
         <h3 className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary mb-4">Inventory Value by Category</h3>
-        <div className="h-48">
-          <ResponsiveContainer width="100%" height="100%">
+        <div className="h-48 min-w-0">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={1}>
             <BarChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke={theme === "dark" ? "#334155" : "#e2e8f0"} />
               <XAxis dataKey="category" tick={{ fontSize: 12, fill: theme === "dark" ? "#94a3b8" : "#64748b" }} />
               <YAxis tick={{ fontSize: 12, fill: theme === "dark" ? "#94a3b8" : "#64748b" }} tickFormatter={v => `₹${(v / 100000).toFixed(0)}L`} />
-              <Tooltip contentStyle={{ backgroundColor: theme === "dark" ? "#1e293b" : "#fff", borderRadius: "8px", fontSize: "12px", border: `1px solid ${theme === "dark" ? "#475569" : "#e2e8f0"}` }} formatter={(v: number) => [formatCurrency(v), "Value"]} />
+              <Tooltip contentStyle={{ backgroundColor: theme === "dark" ? "#1e293b" : "#fff", borderRadius: "8px", fontSize: "12px", border: `1px solid ${theme === "dark" ? "#475569" : "#e2e8f0"}` }} formatter={(v: number | undefined) => [formatCurrency(v ?? 0), "Value"]} />
               <Bar dataKey="value" fill="#3b82f6" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
@@ -144,3 +144,4 @@ export function Inventory() {
     </div>
   );
 }
+

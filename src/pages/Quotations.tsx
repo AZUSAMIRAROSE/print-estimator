@@ -1,7 +1,9 @@
 import { useState, useMemo } from "react";
 import { cn } from "@/utils/cn";
 import { useAppStore } from "@/stores/appStore";
+import { useDataStore } from "@/stores/dataStore";
 import { formatCurrency, formatDate, getRelativeTime } from "@/utils/format";
+import { downloadTextFile } from "@/utils/export";
 import {
   FileCheck, Search, Filter, Plus, Eye, Check, X,
   MessageSquare, Download, Clock, AlertCircle, Send,
@@ -41,29 +43,112 @@ const QTN_STATUS_CONFIG: Record<string, { label: string; color: string; icon: Re
 };
 
 export function Quotations() {
-  const { addNotification } = useAppStore();
+  const { addNotification, addActivityLog } = useAppStore();
+  const { quotations, updateQuotation, addQuotationComment } = useDataStore();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedQtn, setSelectedQtn] = useState<string | null>(null);
   const [commentText, setCommentText] = useState("");
+  const [emailQuoteId, setEmailQuoteId] = useState<string | null>(null);
+  const [emailTo, setEmailTo] = useState("");
+  const [emailSubject, setEmailSubject] = useState("Quotation from Print Estimator Pro");
+  const [emailBody, setEmailBody] = useState("Please find the attached quotation details.");
 
   const filtered = useMemo(() => {
-    let items = [...MOCK_QUOTATIONS];
+    const source = quotations.length > 0
+      ? quotations.map((q) => ({
+          id: q.id,
+          quotationNumber: q.quotationNumber,
+          jobTitle: q.jobTitle,
+          customerName: q.customerName,
+          status: q.status,
+          totalValue: q.results[0]?.grandTotal ?? 0,
+          currency: q.currency,
+          validUntil: q.validUntil,
+          revisionNumber: q.revisionNumber,
+          comments: q.comments.length,
+          createdAt: q.createdAt,
+        }))
+      : MOCK_QUOTATIONS;
+
+    let items = [...source];
     if (search) {
       const q = search.toLowerCase();
       items = items.filter(qt => qt.jobTitle.toLowerCase().includes(q) || qt.customerName.toLowerCase().includes(q) || qt.quotationNumber.toLowerCase().includes(q));
     }
     if (statusFilter !== "all") items = items.filter(qt => qt.status === statusFilter);
     return items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [search, statusFilter]);
+  }, [search, statusFilter, quotations]);
 
   const handleStatusChange = (id: string, newStatus: string) => {
+    if (quotations.some((q) => q.id === id)) {
+      updateQuotation(id, {
+        status: newStatus as "draft" | "sent" | "accepted" | "rejected" | "expired" | "revised",
+        ...(newStatus === "sent" ? { sentDate: new Date().toISOString() } : {}),
+        ...(newStatus === "accepted" ? { acceptedDate: new Date().toISOString() } : {}),
+        ...(newStatus === "rejected" ? { rejectedDate: new Date().toISOString() } : {}),
+      });
+    }
     addNotification({
       type: "success",
       title: "Quotation Updated",
       message: `Quotation status changed to ${newStatus}`,
       category: "quotation",
     });
+  };
+
+  const handleExportAll = () => {
+    const rows = filtered.map((q) => [
+      q.quotationNumber,
+      q.jobTitle,
+      q.customerName,
+      q.status,
+      q.totalValue,
+      q.currency,
+      q.validUntil,
+      q.revisionNumber,
+      q.comments,
+    ]);
+    const csv = [
+      ["Quotation #", "Job", "Customer", "Status", "Total Value", "Currency", "Valid Until", "Revision", "Comments"].join(","),
+      ...rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")),
+    ].join("\n");
+    downloadTextFile("quotations-history.csv", csv, "text/csv;charset=utf-8");
+    addNotification({
+      type: "success",
+      title: "Export Complete",
+      message: "Quotation history exported as CSV.",
+      category: "export",
+    });
+  };
+
+  const handleSendEmail = () => {
+    if (!emailQuoteId || !emailTo.trim()) {
+      addNotification({
+        type: "error",
+        title: "Email Error",
+        message: "Recipient email is required.",
+        category: "quotation",
+      });
+      return;
+    }
+
+    const mailto = `mailto:${encodeURIComponent(emailTo.trim())}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`;
+    window.location.href = mailto;
+    handleStatusChange(emailQuoteId, "sent");
+    addQuotationComment(emailQuoteId, "Current User", `Email prepared for ${emailTo}`, "internal");
+    addActivityLog({
+      action: "QUOTE_EMAIL_PREPARED",
+      category: "quotation",
+      description: `Email quote workflow initiated for ${emailTo}`,
+      user: "Current User",
+      entityType: "quotation",
+      entityId: emailQuoteId,
+      level: "info",
+    });
+    setEmailQuoteId(null);
+    setEmailTo("");
+    setEmailBody("Please find the attached quotation details.");
   };
 
   return (
@@ -74,10 +159,10 @@ export function Quotations() {
             <FileCheck className="w-6 h-6" /> Quotations
           </h1>
           <p className="text-sm text-text-light-secondary dark:text-text-dark-secondary mt-1">
-            {MOCK_QUOTATIONS.length} total • {MOCK_QUOTATIONS.filter(q => q.status === "sent").length} pending response
+            {(quotations.length > 0 ? quotations.length : MOCK_QUOTATIONS.length)} total • {(quotations.length > 0 ? quotations.filter(q => q.status === "sent").length : MOCK_QUOTATIONS.filter(q => q.status === "sent").length)} pending response
           </p>
         </div>
-        <button className="btn-secondary flex items-center gap-1.5 text-sm">
+        <button onClick={handleExportAll} className="btn-secondary flex items-center gap-1.5 text-sm">
           <Download className="w-4 h-4" /> Export All
         </button>
       </div>
@@ -167,6 +252,9 @@ export function Quotations() {
                     <button className="btn-secondary text-xs flex items-center gap-1">
                       <Download className="w-3.5 h-3.5" /> Download PDF
                     </button>
+                    <button onClick={() => setEmailQuoteId(qtn.id)} className="btn-secondary text-xs flex items-center gap-1">
+                      <Send className="w-3.5 h-3.5" /> Email Quote
+                    </button>
                     <button className="btn-ghost text-xs">View Details</button>
                   </div>
 
@@ -182,6 +270,9 @@ export function Quotations() {
                     <button
                       onClick={() => {
                         if (commentText.trim()) {
+                          if (quotations.some((q) => q.id === qtn.id)) {
+                            addQuotationComment(qtn.id, "Current User", commentText, "internal");
+                          }
                           addNotification({ type: "info", title: "Comment Added", message: commentText, category: "quotation" });
                           setCommentText("");
                         }
@@ -198,6 +289,31 @@ export function Quotations() {
           );
         })}
       </div>
+
+      {emailQuoteId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setEmailQuoteId(null)} />
+          <div className="relative card p-5 w-full max-w-lg space-y-3">
+            <h3 className="text-base font-semibold text-text-light-primary dark:text-text-dark-primary">Send Quote Email</h3>
+            <div>
+              <label className="label">To</label>
+              <input type="email" value={emailTo} onChange={(e) => setEmailTo(e.target.value)} className="input-field" placeholder="customer@example.com" />
+            </div>
+            <div>
+              <label className="label">Subject</label>
+              <input type="text" value={emailSubject} onChange={(e) => setEmailSubject(e.target.value)} className="input-field" />
+            </div>
+            <div>
+              <label className="label">Message</label>
+              <textarea value={emailBody} onChange={(e) => setEmailBody(e.target.value)} className="input-field min-h-24" />
+            </div>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setEmailQuoteId(null)} className="btn-secondary text-sm">Cancel</button>
+              <button onClick={handleSendEmail} className="btn-primary text-sm">Open Email Client</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

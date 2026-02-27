@@ -16,10 +16,12 @@ export function StepFinishing() {
     label: string;
     sublabel?: string;
   }) => (
-    <div
+    <button
+      type="button"
       onClick={() => onChange(!checked)}
+      aria-pressed={checked}
       className={cn(
-        "flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition-all",
+        "w-full flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition-all text-left",
         checked
           ? "border-primary-500 bg-primary-50 dark:bg-primary-500/10"
           : "border-surface-light-border dark:border-surface-dark-border hover:border-primary-300 bg-white dark:bg-surface-dark-secondary"
@@ -34,7 +36,7 @@ export function StepFinishing() {
       ) : (
         <ToggleLeft className="w-8 h-8 text-gray-400 shrink-0" />
       )}
-    </div>
+    </button>
   );
 
   return (
@@ -46,7 +48,7 @@ export function StepFinishing() {
           <p className="text-sm font-medium text-primary-800 dark:text-primary-300">Finishing Options</p>
           <p className="text-sm text-primary-600 dark:text-primary-400 mt-1">
             Add finishing to enhance your print job. Lamination protects covers, Spot UV creates glossy highlights,
-            and foil blocking adds metallic elements. Each option shows its per-copy rate.
+            and foil blocking adds metallic elements. Lamination rates are shown per sheet.
           </p>
         </div>
       </div>
@@ -90,7 +92,7 @@ export function StepFinishing() {
                     {type.replace("_", " ")}
                   </p>
                   <p className="text-xs text-text-light-tertiary dark:text-text-dark-tertiary mt-1">
-                    ₹{rate.ratePerCopy}/copy
+                    ₹{rate.ratePerCopy}/sheet
                   </p>
                 </button>
               );
@@ -393,6 +395,182 @@ export function StepFinishing() {
       </div>
 
       {/* Additional Finishing */}
+      <div className="card p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <CircleDot className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+          <h3 className="text-base font-semibold text-text-light-primary dark:text-text-dark-primary">
+            Print Product Modules
+          </h3>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <Toggle
+            checked={f.collation.enabled}
+            onChange={(val) => updateFinishing({ collation: { ...f.collation, enabled: val } })}
+            label="Collation"
+            sublabel="Standard, booklet, or sectional collation"
+          />
+          <Toggle
+            checked={f.holePunch.enabled}
+            onChange={(val) => updateFinishing({ holePunch: { ...f.holePunch, enabled: val } })}
+            label="Hole Punch"
+            sublabel="2/3/4 hole punch with setup"
+          />
+          <Toggle
+            checked={f.trimming.enabled}
+            onChange={(val) => updateFinishing({ trimming: { ...f.trimming, enabled: val } })}
+            label="Cutting / Trimming"
+            sublabel="Programmable trimming by sides"
+          />
+          <Toggle
+            checked={f.envelopePrinting.enabled}
+            onChange={(val) => updateFinishing({ envelopePrinting: { ...f.envelopePrinting, enabled: val } })}
+            label="Envelope Printing"
+            sublabel="DL/C5/C4 envelope print runs"
+          />
+          <Toggle
+            checked={f.largeFormat.enabled}
+            onChange={(val) => updateFinishing({ largeFormat: { ...f.largeFormat, enabled: val } })}
+            label="Large Format / Poster"
+            sublabel="Poster/banner/plotter jobs"
+          />
+        </div>
+
+        {f.collation.enabled && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 animate-in">
+            <div>
+              <label className="label">Mode</label>
+              <select
+                value={f.collation.mode}
+                onChange={(e) => updateFinishing({ collation: { ...f.collation, mode: e.target.value as "standard" | "booklet" | "sectional" } })}
+                className="input-field"
+              >
+                <option value="standard">Standard</option>
+                <option value="booklet">Booklet</option>
+                <option value="sectional">Sectional</option>
+              </select>
+            </div>
+            <div>
+              <label className="label">Rate / Copy (₹)</label>
+              <input type="number" value={f.collation.ratePerCopy} onChange={(e) => updateFinishing({ collation: { ...f.collation, ratePerCopy: parseFloat(e.target.value) || 0 } })} className="input-field" />
+            </div>
+            <div>
+              <label className="label">Setup (₹)</label>
+              <input type="number" value={f.collation.setupCost} onChange={(e) => updateFinishing({ collation: { ...f.collation, setupCost: parseFloat(e.target.value) || 0 } })} className="input-field" />
+            </div>
+          </div>
+        )}
+
+        {f.holePunch.enabled && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 animate-in">
+            <div>
+              <label className="label">Holes</label>
+              <select
+                value={f.holePunch.holes}
+                onChange={(e) => updateFinishing({ holePunch: { ...f.holePunch, holes: parseInt(e.target.value) as 2 | 3 | 4 } })}
+                className="input-field"
+              >
+                <option value={2}>2 holes</option>
+                <option value={3}>3 holes</option>
+                <option value={4}>4 holes</option>
+              </select>
+            </div>
+            <div>
+              <label className="label">Rate / Copy (₹)</label>
+              <input type="number" value={f.holePunch.ratePerCopy} onChange={(e) => updateFinishing({ holePunch: { ...f.holePunch, ratePerCopy: parseFloat(e.target.value) || 0 } })} className="input-field" />
+            </div>
+            <div>
+              <label className="label">Setup (₹)</label>
+              <input type="number" value={f.holePunch.setupCost} onChange={(e) => updateFinishing({ holePunch: { ...f.holePunch, setupCost: parseFloat(e.target.value) || 0 } })} className="input-field" />
+            </div>
+          </div>
+        )}
+
+        {f.trimming.enabled && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 animate-in">
+            <div>
+              <label className="label">Trim Sides</label>
+              <select
+                value={f.trimming.sides}
+                onChange={(e) => updateFinishing({ trimming: { ...f.trimming, sides: parseInt(e.target.value) as 1 | 2 | 3 } })}
+                className="input-field"
+              >
+                <option value={1}>1 side</option>
+                <option value={2}>2 sides</option>
+                <option value={3}>3 sides</option>
+              </select>
+            </div>
+            <div>
+              <label className="label">Rate / Copy (₹)</label>
+              <input type="number" value={f.trimming.ratePerCopy} onChange={(e) => updateFinishing({ trimming: { ...f.trimming, ratePerCopy: parseFloat(e.target.value) || 0 } })} className="input-field" />
+            </div>
+          </div>
+        )}
+
+        {f.envelopePrinting.enabled && (
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 animate-in">
+            <div>
+              <label className="label">Size</label>
+              <select value={f.envelopePrinting.envelopeSize} onChange={(e) => updateFinishing({ envelopePrinting: { ...f.envelopePrinting, envelopeSize: e.target.value as "dl" | "c5" | "c4" | "custom" } })} className="input-field">
+                <option value="dl">DL</option>
+                <option value="c5">C5</option>
+                <option value="c4">C4</option>
+                <option value="custom">Custom</option>
+              </select>
+            </div>
+            <div>
+              <label className="label">Qty</label>
+              <input type="number" value={f.envelopePrinting.quantity} onChange={(e) => updateFinishing({ envelopePrinting: { ...f.envelopePrinting, quantity: parseInt(e.target.value) || 0 } })} className="input-field" />
+            </div>
+            <div>
+              <label className="label">Colors</label>
+              <select value={f.envelopePrinting.colors} onChange={(e) => updateFinishing({ envelopePrinting: { ...f.envelopePrinting, colors: parseInt(e.target.value) as 1 | 2 | 4 } })} className="input-field">
+                <option value={1}>1C</option>
+                <option value={2}>2C</option>
+                <option value={4}>4C</option>
+              </select>
+            </div>
+            <div>
+              <label className="label">Rate / Envelope (₹)</label>
+              <input type="number" value={f.envelopePrinting.ratePerEnvelope} onChange={(e) => updateFinishing({ envelopePrinting: { ...f.envelopePrinting, ratePerEnvelope: parseFloat(e.target.value) || 0 } })} className="input-field" />
+            </div>
+            <div>
+              <label className="label">Setup (₹)</label>
+              <input type="number" value={f.envelopePrinting.setupCost} onChange={(e) => updateFinishing({ envelopePrinting: { ...f.envelopePrinting, setupCost: parseFloat(e.target.value) || 0 } })} className="input-field" />
+            </div>
+          </div>
+        )}
+
+        {f.largeFormat.enabled && (
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 animate-in">
+            <div>
+              <label className="label">Type</label>
+              <select value={f.largeFormat.productType} onChange={(e) => updateFinishing({ largeFormat: { ...f.largeFormat, productType: e.target.value as "poster" | "banner" | "plotter" } })} className="input-field">
+                <option value="poster">Poster</option>
+                <option value="banner">Banner</option>
+                <option value="plotter">Plotter</option>
+              </select>
+            </div>
+            <div>
+              <label className="label">Width (mm)</label>
+              <input type="number" value={f.largeFormat.widthMM} onChange={(e) => updateFinishing({ largeFormat: { ...f.largeFormat, widthMM: parseInt(e.target.value) || 0 } })} className="input-field" />
+            </div>
+            <div>
+              <label className="label">Height (mm)</label>
+              <input type="number" value={f.largeFormat.heightMM} onChange={(e) => updateFinishing({ largeFormat: { ...f.largeFormat, heightMM: parseInt(e.target.value) || 0 } })} className="input-field" />
+            </div>
+            <div>
+              <label className="label">Qty</label>
+              <input type="number" value={f.largeFormat.quantity} onChange={(e) => updateFinishing({ largeFormat: { ...f.largeFormat, quantity: parseInt(e.target.value) || 0 } })} className="input-field" />
+            </div>
+            <div>
+              <label className="label">Rate / sqm (₹)</label>
+              <input type="number" value={f.largeFormat.ratePerSqM} onChange={(e) => updateFinishing({ largeFormat: { ...f.largeFormat, ratePerSqM: parseFloat(e.target.value) || 0 } })} className="input-field" />
+            </div>
+          </div>
+        )}
+      </div>
+
       <div className="card p-5 space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">

@@ -15,6 +15,8 @@ export interface FinishingCostInput {
   bookSpec: BookSpec;
   spineThickness: number;
   coverMachineHasAQ: boolean;
+  coverSheetCount?: number;
+  jacketSheetCount?: number;
 }
 
 export interface FinishingCostResult {
@@ -24,7 +26,7 @@ export interface FinishingCostResult {
 }
 
 export function calculateFinishingCost(input: FinishingCostInput): FinishingCostResult {
-  const { finishing, quantity, bookSpec, spineThickness, coverMachineHasAQ } = input;
+  const { finishing, quantity, bookSpec, spineThickness, coverMachineHasAQ, coverSheetCount, jacketSheetCount } = input;
   const breakdown: Record<string, number> = {};
   let totalCost = 0;
   
@@ -39,7 +41,8 @@ export function calculateFinishingCost(input: FinishingCostInput): FinishingCost
   if (finishing.coverLamination.enabled && finishing.coverLamination.type !== "none") {
     const lamRate = LAMINATION_RATES[finishing.coverLamination.type];
     if (lamRate) {
-      const cost = Math.max(lamRate.ratePerCopy * areaFactor * quantity, lamRate.minOrder);
+      const coverSheets = Math.max(0, Math.ceil(coverSheetCount ?? quantity));
+      const cost = Math.max(lamRate.ratePerCopy * areaFactor * coverSheets, lamRate.minOrder);
       breakdown["Cover Lamination"] = Math.round(cost * 100) / 100;
       totalCost += cost;
     }
@@ -49,8 +52,9 @@ export function calculateFinishingCost(input: FinishingCostInput): FinishingCost
   if (finishing.jacketLamination.enabled && finishing.jacketLamination.type !== "none") {
     const lamRate = LAMINATION_RATES[finishing.jacketLamination.type];
     if (lamRate) {
+      const jacketSheets = Math.max(0, Math.ceil(jacketSheetCount ?? quantity));
       const jacketAreaFactor = areaFactor * 1.3; // Jacket is wider due to flaps
-      const cost = Math.max(lamRate.ratePerCopy * jacketAreaFactor * quantity, lamRate.minOrder);
+      const cost = Math.max(lamRate.ratePerCopy * jacketAreaFactor * jacketSheets, lamRate.minOrder);
       breakdown["Jacket Lamination"] = Math.round(cost * 100) / 100;
       totalCost += cost;
     }
@@ -140,8 +144,48 @@ export function calculateFinishingCost(input: FinishingCostInput): FinishingCost
     breakdown["Numbering"] = Math.round(cost * 100) / 100;
     totalCost += cost;
   }
+
+  // 11. Collation / Hole Punch / Trimming
+  if (finishing.collation.enabled) {
+    const modeFactor = finishing.collation.mode === "booklet" ? 1.5 : finishing.collation.mode === "sectional" ? 1.25 : 1;
+    const cost = (finishing.collation.ratePerCopy * modeFactor * quantity) + finishing.collation.setupCost;
+    breakdown["Collation"] = Math.round(cost * 100) / 100;
+    totalCost += cost;
+  }
+  if (finishing.holePunch.enabled) {
+    const holeFactor = finishing.holePunch.holes / 2;
+    const cost = (finishing.holePunch.ratePerCopy * holeFactor * quantity) + finishing.holePunch.setupCost;
+    breakdown["Hole Punch"] = Math.round(cost * 100) / 100;
+    totalCost += cost;
+  }
+  if (finishing.trimming.enabled) {
+    const cost = finishing.trimming.ratePerCopy * finishing.trimming.sides * quantity;
+    breakdown["Cutting / Trimming"] = Math.round(cost * 100) / 100;
+    totalCost += cost;
+  }
+
+  // 12. Envelope printing
+  if (finishing.envelopePrinting.enabled && finishing.envelopePrinting.quantity > 0) {
+    const colorFactor = finishing.envelopePrinting.colors === 4 ? 1.8 : finishing.envelopePrinting.colors === 2 ? 1.3 : 1;
+    const sizeFactor = finishing.envelopePrinting.envelopeSize === "c4" ? 1.4 : finishing.envelopePrinting.envelopeSize === "c5" ? 1.2 : 1;
+    const envCost = (finishing.envelopePrinting.ratePerEnvelope * colorFactor * sizeFactor * finishing.envelopePrinting.quantity)
+      + finishing.envelopePrinting.setupCost;
+    breakdown["Envelope Printing"] = Math.round(envCost * 100) / 100;
+    totalCost += envCost;
+  }
+
+  // 13. Large format / poster printing
+  if (finishing.largeFormat.enabled && finishing.largeFormat.quantity > 0) {
+    const widthM = finishing.largeFormat.widthMM / 1000;
+    const heightM = finishing.largeFormat.heightMM / 1000;
+    const areaSqM = Math.max(0.01, widthM * heightM);
+    const typeFactor = finishing.largeFormat.productType === "banner" ? 1.2 : finishing.largeFormat.productType === "plotter" ? 1.1 : 1;
+    const lfCost = areaSqM * finishing.largeFormat.ratePerSqM * typeFactor * finishing.largeFormat.quantity;
+    breakdown["Large Format"] = Math.round(lfCost * 100) / 100;
+    totalCost += lfCost;
+  }
   
-  // 11. Additional finishing items
+  // 14. Additional finishing items
   for (const item of finishing.additionalFinishing) {
     if (item.costPerCopy > 0 || item.setupCost > 0) {
       const cost = item.costPerCopy * quantity + item.setupCost;

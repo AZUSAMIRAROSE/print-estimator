@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { persist, createJSONStorage } from "zustand/middleware";
 import { immer } from "zustand/middleware/immer";
 import type {
   EstimationInput, BookSpec, TextSection, CoverSection, JacketSection,
@@ -191,6 +192,11 @@ const createDefaultEstimation = (): EstimationInput => ({
     perforation: { enabled: false },
     scoring: { enabled: false },
     numbering: { enabled: false },
+    collation: { enabled: false, mode: "standard", ratePerCopy: 0.04, setupCost: 0 },
+    holePunch: { enabled: false, holes: 2, ratePerCopy: 0.05, setupCost: 350 },
+    trimming: { enabled: false, sides: 3, ratePerCopy: 0.03 },
+    envelopePrinting: { enabled: false, envelopeSize: "dl", quantity: 0, colors: 1, ratePerEnvelope: 1.2, setupCost: 500 },
+    largeFormat: { enabled: false, productType: "poster", widthMM: 594, heightMM: 841, quantity: 0, ratePerSqM: 140 },
     additionalFinishing: [],
   },
   
@@ -276,7 +282,8 @@ const createDefaultEstimation = (): EstimationInput => ({
 });
 
 export const useEstimationStore = create<EstimationState>()(
-  immer((set) => ({
+  persist(
+    immer((set) => ({
     estimation: createDefaultEstimation(),
     currentStep: 1,
     results: [],
@@ -346,5 +353,17 @@ export const useEstimationStore = create<EstimationState>()(
       state.isCalculated = false;
       state.showResults = false;
     }),
-  }))
+    })),
+    {
+      name: "print-estimator-estimation-store",
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({
+        estimation: state.estimation,
+        currentStep: state.currentStep,
+        results: state.results,
+        isCalculated: state.isCalculated,
+        showResults: state.showResults,
+      }),
+    }
+  )
 );

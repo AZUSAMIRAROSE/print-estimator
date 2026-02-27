@@ -47,10 +47,9 @@ export function StepBookSpec() {
   }
 
   function handleQuantityChange(index: number, value: string) {
-    const num = parseInt(value) || 0;
-    const newQuantities = [...quantities];
-    newQuantities[index] = num;
-    updateQuantities(newQuantities);
+    const parsed = Number.parseInt(value, 10);
+    const quantity = Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+    updateQuantity(index, quantity);
   }
 
   // Book preview dimensions (scaled)

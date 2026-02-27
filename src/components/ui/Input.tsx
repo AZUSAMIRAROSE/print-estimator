@@ -12,10 +12,12 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
   ({ label, error, tip, icon, suffix, className, ...props }, ref) => {
+    const inputId = props.id ?? props.name;
+    const errorId = inputId ? `${inputId}-error` : undefined;
     return (
       <div className={className}>
         {label && (
-          <label className="label">
+          <label className="label" htmlFor={inputId}>
             {label}
             {props.required && <span className="text-danger-500 ml-0.5">*</span>}
             {tip && (
@@ -34,6 +36,9 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           )}
           <input
             ref={ref}
+            id={inputId}
+            aria-invalid={!!error}
+            aria-describedby={error && errorId ? errorId : undefined}
             className={cn(
               "input-field",
               icon && "pl-10",
@@ -49,7 +54,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           )}
         </div>
         {error && (
-          <p className="flex items-center gap-1 text-xs text-danger-500 mt-1">
+          <p id={errorId} className="flex items-center gap-1 text-xs text-danger-500 mt-1" role="alert">
             <AlertCircle className="w-3 h-3" />
             {error}
           </p>

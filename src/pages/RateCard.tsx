@@ -32,10 +32,11 @@ const TABS: { key: RateTab; label: string; icon: React.ReactNode }[] = [
 ];
 
 export function RateCard() {
-  const { addNotification, addActivityLog } = useAppStore();
+  const { addNotification, addActivityLog, user } = useAppStore();
   const [activeTab, setActiveTab] = useState<RateTab>("paper");
   const [search, setSearch] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
+  const canEditRates = (user?.role || "").toLowerCase().includes("admin");
 
   const handleSave = (tableName: string) => {
     setEditingId(null);
@@ -55,7 +56,7 @@ export function RateCard() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button className="btn-secondary text-sm flex items-center gap-1.5">
+          <button className="btn-secondary text-sm flex items-center gap-1.5" disabled={!canEditRates}>
             <Upload className="w-4 h-4" /> Import Excel
           </button>
           <button className="btn-secondary text-sm flex items-center gap-1.5">
@@ -63,6 +64,14 @@ export function RateCard() {
           </button>
         </div>
       </div>
+
+      {!canEditRates && (
+        <div className="card p-3 border-warning-500/30 bg-warning-50 dark:bg-warning-500/10">
+          <p className="text-xs text-warning-700 dark:text-warning-400">
+            View-only mode: admin role is required to edit pricing tables.
+          </p>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex gap-1 overflow-x-auto pb-1">
@@ -91,7 +100,7 @@ export function RateCard() {
 
       {/* Tab Content */}
       <div className="card overflow-hidden">
-        {activeTab === "paper" && <PaperRatesTable search={search} editingId={editingId} setEditingId={setEditingId} onSave={() => handleSave("Paper")} />}
+        {activeTab === "paper" && <PaperRatesTable canEditRates={canEditRates} search={search} editingId={editingId} setEditingId={setEditingId} onSave={() => handleSave("Paper")} />}
         {activeTab === "machines" && <MachinesTable search={search} />}
         {activeTab === "impressions" && <ImpressionRatesTable />}
         {activeTab === "wastage" && <WastageChartTable />}
@@ -106,7 +115,7 @@ export function RateCard() {
   );
 }
 
-function PaperRatesTable({ search, editingId, setEditingId, onSave }: { search: string; editingId: string | null; setEditingId: (id: string | null) => void; onSave: () => void }) {
+function PaperRatesTable({ canEditRates, search, editingId, setEditingId, onSave }: { canEditRates: boolean; search: string; editingId: string | null; setEditingId: (id: string | null) => void; onSave: () => void }) {
   const filtered = DEFAULT_PAPER_RATES.filter(r => !search || r.paperType.toLowerCase().includes(search.toLowerCase()) || r.code.toLowerCase().includes(search.toLowerCase()));
 
   return (
@@ -138,15 +147,15 @@ function PaperRatesTable({ search, editingId, setEditingId, onSave }: { search: 
                 <td className="py-2.5 px-4 text-right font-semibold text-primary-600 dark:text-primary-400">{isEditing ? <input type="number" defaultValue={rate.chargeRate} className="input-field w-24 text-right text-xs py-1" /> : formatCurrency(rate.chargeRate)}</td>
                 <td className="py-2.5 px-4 text-right">{isEditing ? <input type="number" defaultValue={rate.ratePerKg} className="input-field w-20 text-right text-xs py-1" /> : `₹${rate.ratePerKg}`}</td>
                 <td className="py-2.5 px-4 text-center">
-                  {isEditing ? (
+                  {isEditing && canEditRates ? (
                     <div className="flex items-center justify-center gap-1">
                       <button onClick={onSave} className="p-1 text-success-600 hover:bg-success-50 dark:hover:bg-success-500/10 rounded"><Check className="w-4 h-4" /></button>
                       <button onClick={() => setEditingId(null)} className="p-1 text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-500/10 rounded"><X className="w-4 h-4" /></button>
                     </div>
                   ) : (
                     <div className="flex items-center justify-center gap-1">
-                      <button onClick={() => setEditingId(id)} className="p-1 hover:bg-surface-light-tertiary dark:hover:bg-surface-dark-tertiary rounded"><Edit3 className="w-3.5 h-3.5 text-text-light-tertiary" /></button>
-                      <button className="p-1 hover:bg-danger-50 dark:hover:bg-danger-500/10 rounded"><Trash2 className="w-3.5 h-3.5 text-danger-400" /></button>
+                      <button disabled={!canEditRates} onClick={() => setEditingId(id)} className="p-1 hover:bg-surface-light-tertiary dark:hover:bg-surface-dark-tertiary rounded disabled:opacity-40"><Edit3 className="w-3.5 h-3.5 text-text-light-tertiary" /></button>
+                      <button disabled={!canEditRates} className="p-1 hover:bg-danger-50 dark:hover:bg-danger-500/10 rounded disabled:opacity-40"><Trash2 className="w-3.5 h-3.5 text-danger-400" /></button>
                     </div>
                   )}
                 </td>
@@ -157,7 +166,7 @@ function PaperRatesTable({ search, editingId, setEditingId, onSave }: { search: 
       </table>
       <div className="p-3 border-t border-surface-light-border dark:border-surface-dark-border flex justify-between items-center">
         <p className="text-xs text-text-light-tertiary dark:text-text-dark-tertiary">{filtered.length} paper rates</p>
-        <button className="btn-secondary text-xs flex items-center gap-1"><Plus className="w-3.5 h-3.5" /> Add Paper Rate</button>
+        <button disabled={!canEditRates} className="btn-secondary text-xs flex items-center gap-1 disabled:opacity-40"><Plus className="w-3.5 h-3.5" /> Add Paper Rate</button>
       </div>
     </div>
   );

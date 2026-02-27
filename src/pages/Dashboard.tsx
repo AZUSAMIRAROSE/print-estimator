@@ -190,7 +190,7 @@ export function Dashboard() {
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Revenue Chart */}
-        <div className="lg:col-span-2 card p-5">
+        <div className="lg:col-span-2 card p-5 min-w-0">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary">
               Revenue & Jobs Trend
@@ -200,8 +200,8 @@ export function Dashboard() {
               <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500" /> Jobs</span>
             </div>
           </div>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="h-64 min-w-0">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={1}>
               <AreaChart data={MONTHLY_DATA}>
                 <defs>
                   <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
@@ -219,10 +219,13 @@ export function Dashboard() {
                     borderRadius: "8px",
                     fontSize: "12px",
                   }}
-                  formatter={(value: number, name: string) => [
-                    name === "revenue" ? formatCurrency(value) : value,
-                    name === "revenue" ? "Revenue" : "Jobs"
-                  ]}
+                  formatter={(value: number | undefined, name: string | undefined) => {
+                    const safeValue = value ?? 0;
+                    return [
+                      name === "revenue" ? formatCurrency(safeValue) : safeValue,
+                      name === "revenue" ? "Revenue" : "Jobs",
+                    ];
+                  }}
                 />
                 <Area type="monotone" dataKey="revenue" stroke="#3b82f6" strokeWidth={2} fill="url(#revGrad)" />
                 <Line type="monotone" dataKey="jobs" stroke="#f59e0b" strokeWidth={2} dot={{ r: 4 }} />
@@ -232,12 +235,12 @@ export function Dashboard() {
         </div>
 
         {/* Binding Distribution Pie */}
-        <div className="card p-5">
+        <div className="card p-5 min-w-0">
           <h3 className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary mb-4">
             Binding Type Distribution
           </h3>
-          <div className="h-48">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="h-48 min-w-0">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={1}>
               <RechartsPie>
                 <Pie
                   data={BINDING_DISTRIBUTION}
@@ -259,7 +262,7 @@ export function Dashboard() {
                     borderRadius: "8px",
                     fontSize: "12px",
                   }}
-                  formatter={(value: number) => [`${value}%`, "Share"]}
+                  formatter={(value: number | undefined) => [`${value ?? 0}%`, "Share"]}
                 />
               </RechartsPie>
             </ResponsiveContainer>
@@ -373,3 +376,4 @@ export function Dashboard() {
     </div>
   );
 }
+

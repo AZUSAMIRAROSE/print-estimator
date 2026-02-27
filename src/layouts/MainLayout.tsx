@@ -58,7 +58,7 @@ export function Sidebar() {
       <nav className="flex-1 overflow-y-auto py-3 px-2.5 space-y-1">
         {SIDEBAR_ITEMS.map((item) => {
           const isActive = location.pathname === item.path ||
-            (item.path !== "/" && location.pathname.startsWith(item.path));
+            location.pathname.startsWith(`${item.path}/`);
 
           return (
             <button

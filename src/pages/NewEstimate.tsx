@@ -1,5 +1,4 @@
-import { useState, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { useEstimationStore } from "@/stores/estimationStore";
 import { useAppStore } from "@/stores/appStore";
 import { cn } from "@/utils/cn";
@@ -8,7 +7,9 @@ import { WizardStepRenderer } from "@/components/wizard/WizardStepRenderer";
 import { EstimationResults } from "@/components/results/EstimationResults";
 import { calculateFullEstimation } from "@/utils/calculations/estimator";
 import { calculateSpineThickness } from "@/utils/calculations/spine";
-import { formatCurrency, formatNumber } from "@/utils/format";
+import { formatNumber } from "@/utils/format";
+import { normalizeEstimationForCalculation, validateEstimation } from "@/utils/validation/estimation";
+import { useDataStore } from "@/stores/dataStore";
 import {
   ChevronLeft, ChevronRight, RotateCcw, Calculator, Save,
   FileText, CheckCircle, AlertCircle, BookOpen, Layers,
@@ -35,15 +36,16 @@ const STEP_ICON_MAP: Record<string, React.ReactNode> = {
 };
 
 export function NewEstimate() {
-  const navigate = useNavigate();
   const {
     estimation, currentStep, results, isCalculating, showResults,
     setCurrentStep, nextStep, prevStep, resetEstimation,
-    setResults, setIsCalculating, setShowResults
+    setResults, setIsCalculating, setShowResults, loadEstimation
   } = useEstimationStore();
   const { addNotification, addActivityLog } = useAppStore();
+  const { saveDraft, draftEstimation } = useDataStore();
 
   const [savingDraft, setSavingDraft] = useState(false);
+  const [calculationMessage, setCalculationMessage] = useState("");
 
   // Live spine calculation
   const spineThickness = calculateSpineThickness({
@@ -57,17 +59,42 @@ export function NewEstimate() {
 
   const totalPages = estimation.textSections.reduce((sum, s) => s.enabled ? sum + s.pages : sum, 0);
   const activeQuantities = estimation.quantities.filter(q => q > 0);
+  const validationErrors = useMemo(() => validateEstimation(estimation), [estimation]);
+  const canCalculate = validationErrors.length === 0 && !isCalculating;
 
   const handleCalculate = useCallback(() => {
+    if (results.length > 0 && !window.confirm("Recalculate and overwrite existing results?")) {
+      return;
+    }
+
+    if (validationErrors.length > 0) {
+      const message = validationErrors[0];
+      setCalculationMessage(message);
+      addNotification({
+        type: "error",
+        title: "Validation Error",
+        message,
+        category: "estimate",
+      });
+      return;
+    }
+
+    setCalculationMessage("Calculation in progress...");
     setIsCalculating(true);
 
     // Run calculation in a setTimeout to allow UI to update
     setTimeout(() => {
       try {
-        const calcResults = calculateFullEstimation(estimation);
+        const normalizedEstimation = normalizeEstimationForCalculation(estimation);
+        const calcResults = calculateFullEstimation(normalizedEstimation);
+        if (calcResults.length === 0) {
+          throw new Error("No valid quantity found for calculation.");
+        }
+
         setResults(calcResults);
         setShowResults(true);
         setIsCalculating(false);
+        setCalculationMessage(`Calculation complete for ${calcResults.length} quantity variant${calcResults.length > 1 ? "s" : ""}.`);
 
         addNotification({
           type: "success",
@@ -87,6 +114,7 @@ export function NewEstimate() {
         });
       } catch (error) {
         setIsCalculating(false);
+        setCalculationMessage("Calculation failed. Please check inputs and try again.");
         addNotification({
           type: "error",
           title: "Calculation Error",
@@ -105,11 +133,12 @@ export function NewEstimate() {
         });
       }
     }, 100);
-  }, [estimation, setResults, setShowResults, setIsCalculating, addNotification, addActivityLog, activeQuantities]);
+  }, [estimation, setResults, setShowResults, setIsCalculating, addNotification, addActivityLog, activeQuantities, validationErrors]);
 
   const handleSaveDraft = useCallback(() => {
     setSavingDraft(true);
     setTimeout(() => {
+      saveDraft(estimation);
       setSavingDraft(false);
       addNotification({
         type: "success",
@@ -127,7 +156,19 @@ export function NewEstimate() {
         level: "info",
       });
     }, 500);
-  }, [estimation, addNotification, addActivityLog]);
+  }, [estimation, addNotification, addActivityLog, saveDraft]);
+
+  useEffect(() => {
+    if (draftEstimation && !estimation.jobTitle && !showResults && results.length === 0) {
+      loadEstimation(draftEstimation);
+      addNotification({
+        type: "info",
+        title: "Draft Restored",
+        message: "Unsaved draft restored from local storage.",
+        category: "estimate",
+      });
+    }
+  }, [draftEstimation, estimation.jobTitle, showResults, results.length, addNotification, loadEstimation]);
 
   const handleReset = () => {
     if (window.confirm("Are you sure you want to reset this estimation? All data will be lost.")) {
@@ -158,6 +199,9 @@ export function NewEstimate() {
 
   return (
     <div className="flex gap-6 h-[calc(100vh-112px)] animate-in">
+      <div className="sr-only" aria-live="polite" aria-atomic="true">
+        {calculationMessage}
+      </div>
       {/* Left: Step Navigation */}
       <div className="w-56 shrink-0 overflow-y-auto pr-1">
         <div className="space-y-1">
@@ -280,7 +324,7 @@ export function NewEstimate() {
             {currentStep === 15 ? (
               <button
                 onClick={handleCalculate}
-                disabled={isCalculating}
+                disabled={!canCalculate}
                 className="btn-primary flex items-center gap-2 px-6"
               >
                 <Calculator className="w-4 h-4" />
@@ -302,6 +346,12 @@ export function NewEstimate() {
 
       {/* Right: Live Preview Panel */}
       <div className="w-64 shrink-0 space-y-4 overflow-y-auto pl-1">
+        {validationErrors.length > 0 && (
+          <div className="card p-3 border-danger-500/30 bg-danger-50 dark:bg-danger-500/10" role="alert" aria-live="assertive">
+            <p className="text-xs font-semibold text-danger-700 dark:text-danger-400">Validation</p>
+            <p className="text-xs text-danger-700 dark:text-danger-400 mt-1">{validationErrors[0]}</p>
+          </div>
+        )}
         {/* Live Spec Preview */}
         <div className="card p-4 space-y-3">
           <h4 className="text-xs font-bold text-text-light-tertiary dark:text-text-dark-tertiary uppercase tracking-wider">

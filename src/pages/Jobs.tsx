@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAppStore } from "@/stores/appStore";
+import { useDataStore } from "@/stores/dataStore";
 import { cn } from "@/utils/cn";
 import { formatCurrency, formatDate, getRelativeTime, formatNumber } from "@/utils/format";
 import {
@@ -43,13 +43,30 @@ const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
 
 export function Jobs() {
   const navigate = useNavigate();
+  const { jobs } = useDataStore();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [sortField, setSortField] = useState<"createdAt" | "title" | "totalValue">("createdAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
   const filtered = useMemo(() => {
-    let items = [...MOCK_JOBS];
+    const source = jobs.length > 0
+      ? jobs.map((j) => ({
+          id: j.id,
+          jobNumber: j.jobNumber,
+          title: j.title,
+          customerName: j.customerName,
+          status: j.status,
+          quantities: j.quantities,
+          totalValue: j.totalValue,
+          currency: j.currency,
+          binding: "saved",
+          createdAt: j.createdAt,
+          updatedAt: j.updatedAt,
+        }))
+      : MOCK_JOBS;
+
+    let items = [...source];
 
     if (search) {
       const q = search.toLowerCase();
@@ -73,7 +90,7 @@ export function Jobs() {
     });
 
     return items;
-  }, [search, statusFilter, sortField, sortDir]);
+  }, [search, statusFilter, sortField, sortDir, jobs]);
 
   const toggleSort = (field: typeof sortField) => {
     if (sortField === field) setSortDir(d => d === "asc" ? "desc" : "asc");
@@ -88,7 +105,7 @@ export function Jobs() {
             <Briefcase className="w-6 h-6" /> Jobs
           </h1>
           <p className="text-sm text-text-light-secondary dark:text-text-dark-secondary mt-1">
-            {MOCK_JOBS.length} total jobs • {MOCK_JOBS.filter(j => j.status === "in_production").length} in production
+            {(jobs.length > 0 ? jobs.length : MOCK_JOBS.length)} total jobs • {(jobs.length > 0 ? jobs.filter(j => j.status === "in_production").length : MOCK_JOBS.filter(j => j.status === "in_production").length)} in production
           </p>
         </div>
         <button onClick={() => navigate("/estimate/new")} className="btn-primary flex items-center gap-1.5">
@@ -206,7 +223,7 @@ export function Jobs() {
       </div>
 
       <p className="text-xs text-text-light-tertiary dark:text-text-dark-tertiary text-center">
-        Showing {filtered.length} of {MOCK_JOBS.length} jobs
+        Showing {filtered.length} of {(jobs.length > 0 ? jobs.length : MOCK_JOBS.length)} jobs
       </p>
     </div>
   );

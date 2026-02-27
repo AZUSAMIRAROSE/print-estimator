@@ -531,6 +531,39 @@ export interface FinishingSection {
   perforation: { enabled: boolean };
   scoring: { enabled: boolean };
   numbering: { enabled: boolean };
+  collation: {
+    enabled: boolean;
+    mode: "standard" | "booklet" | "sectional";
+    ratePerCopy: number;
+    setupCost: number;
+  };
+  holePunch: {
+    enabled: boolean;
+    holes: 2 | 3 | 4;
+    ratePerCopy: number;
+    setupCost: number;
+  };
+  trimming: {
+    enabled: boolean;
+    sides: 1 | 2 | 3;
+    ratePerCopy: number;
+  };
+  envelopePrinting: {
+    enabled: boolean;
+    envelopeSize: "dl" | "c5" | "c4" | "custom";
+    quantity: number;
+    colors: 1 | 2 | 4;
+    ratePerEnvelope: number;
+    setupCost: number;
+  };
+  largeFormat: {
+    enabled: boolean;
+    productType: "poster" | "banner" | "plotter";
+    widthMM: number;
+    heightMM: number;
+    quantity: number;
+    ratePerSqM: number;
+  };
   additionalFinishing: {
     type: string;
     description: string;

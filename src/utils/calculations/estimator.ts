@@ -286,6 +286,8 @@ export function calculateFullEstimation(estimation: EstimationInput): Estimation
     
     // ── Finishing Cost ────────────────────────────────────────────────────
     const coverMachine = DEFAULT_MACHINES.find(m => m.id === estimation.cover.machineId);
+    const coverPaperCost = paperCosts.find((p) => p.sectionType === "cover");
+    const jacketPaperCost = paperCosts.find((p) => p.sectionType === "jacket");
     
     const finishingResult = calculateFinishingCost({
       finishing: estimation.finishing,
@@ -293,6 +295,8 @@ export function calculateFullEstimation(estimation: EstimationInput): Estimation
       bookSpec: estimation.bookSpec,
       spineThickness: spineWithBoard,
       coverMachineHasAQ: coverMachine?.hasAQUnit || false,
+      coverSheetCount: coverPaperCost?.grossSheets ?? quantity,
+      jacketSheetCount: jacketPaperCost?.grossSheets ?? quantity,
     });
     
     // ── Packing Cost ─────────────────────────────────────────────────────

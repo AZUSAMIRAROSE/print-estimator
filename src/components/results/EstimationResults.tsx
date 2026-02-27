@@ -1,8 +1,10 @@
 import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppStore } from "@/stores/appStore";
+import { useDataStore } from "@/stores/dataStore";
 import { cn } from "@/utils/cn";
-import { formatCurrency, formatNumber, formatPercent, generateQuotationNumber, generateJobNumber } from "@/utils/format";
+import { formatCurrency, formatNumber, formatPercent } from "@/utils/format";
+import { buildEstimationCsv, downloadTextFile } from "@/utils/export";
 import type { EstimationInput, EstimationResult } from "@/types";
 import {
   ArrowLeft, Download, FileText, Printer as PrinterIcon, Save,
@@ -31,9 +33,11 @@ const COST_COLORS = [
 export function EstimationResults({ estimation, results, spineThickness, onBackToWizard }: Props) {
   const navigate = useNavigate();
   const { addNotification, addActivityLog, theme } = useAppStore();
+  const { addJob, addQuotation } = useDataStore();
   const [activeTab, setActiveTab] = useState<"summary" | "breakdown" | "comparison" | "detailed">("summary");
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(["paper", "printing"]));
   const [showQuotationModal, setShowQuotationModal] = useState(false);
+  const [liveMessage, setLiveMessage] = useState("");
   const printRef = useRef<HTMLDivElement>(null);
 
   const primaryResult = results[0];
@@ -76,6 +80,10 @@ export function EstimationResults({ estimation, results, spineThickness, onBackT
   }));
 
   const handleExport = () => {
+    const csv = buildEstimationCsv(estimation, results);
+    const title = (estimation.jobTitle || "estimate").replace(/[^a-z0-9-_]/gi, "_").toLowerCase();
+    downloadTextFile(`${title}-report.csv`, csv, "text/csv;charset=utf-8");
+    setLiveMessage("CSV export generated.");
     addNotification({
       type: "success",
       title: "Export Generated",
@@ -86,6 +94,7 @@ export function EstimationResults({ estimation, results, spineThickness, onBackT
 
   const handlePrint = () => {
     window.print();
+    setLiveMessage("Print dialog opened.");
     addActivityLog({
       action: "REPORT_PRINTED",
       category: "estimation",
@@ -98,19 +107,60 @@ export function EstimationResults({ estimation, results, spineThickness, onBackT
   };
 
   const handleGeneratePDF = () => {
+    const html = printRef.current?.innerHTML;
+    if (html) {
+      const pdfWindow = window.open("", "_blank", "width=1024,height=768");
+      if (pdfWindow) {
+        pdfWindow.document.write(`
+          <html>
+            <head>
+              <title>${estimation.jobTitle || "Estimate"} - PDF</title>
+              <style>
+                body { font-family: Arial, sans-serif; padding: 16px; }
+                table { border-collapse: collapse; width: 100%; }
+                th, td { border: 1px solid #ddd; padding: 6px; font-size: 12px; }
+              </style>
+            </head>
+            <body>${html}</body>
+          </html>
+        `);
+        pdfWindow.document.close();
+        pdfWindow.focus();
+        pdfWindow.print();
+      }
+    }
+    setLiveMessage("PDF print view opened.");
     addNotification({
       type: "success",
       title: "PDF Generated",
-      message: `Quotation PDF generated for "${estimation.jobTitle}"`,
+      message: `PDF print view opened for "${estimation.jobTitle}"`,
       category: "export",
     });
   };
 
   const handleSave = () => {
+    const savedJob = addJob({
+      title: estimation.jobTitle || "Untitled Job",
+      customerId: estimation.customerId || "",
+      customerName: estimation.customerName || "Unknown Customer",
+      estimationId: estimation.id,
+      status: "estimated",
+      quantities: results.map((r) => r.quantity),
+      results,
+      bookSpec: estimation.bookSpec,
+      totalValue: primaryResult.grandTotal,
+      currency: estimation.pricing.currency,
+      assignedTo: estimation.estimatedBy || "Current User",
+      dueDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString(),
+      notes: estimation.notes || "",
+      tags: [],
+    });
+
+    setLiveMessage(`Job ${savedJob.jobNumber} saved.`);
     addNotification({
       type: "success",
       title: "Estimation Saved",
-      message: `Job "${estimation.jobTitle}" has been saved successfully.`,
+      message: `Job "${savedJob.title}" has been saved successfully.`,
       category: "job",
       actionUrl: "/jobs",
     });
@@ -130,11 +180,32 @@ export function EstimationResults({ estimation, results, spineThickness, onBackT
   };
 
   const handleSaveQuotation = () => {
+    const newQuotation = addQuotation({
+      jobId: estimation.id,
+      jobTitle: estimation.jobTitle || "Untitled Job",
+      customerId: estimation.customerId || "",
+      customerName: estimation.customerName || "Unknown Customer",
+      status: "draft",
+      quantities: results.map((r) => r.quantity),
+      results,
+      currency: estimation.pricing.currency,
+      exchangeRate: estimation.pricing.exchangeRate,
+      validityDays: estimation.pricing.quotationValidity,
+      validUntil: new Date(Date.now() + estimation.pricing.quotationValidity * 24 * 60 * 60 * 1000).toISOString(),
+      paymentTerms: estimation.pricing.paymentTerms,
+      deliveryTerms: `${estimation.delivery.deliveryType.toUpperCase()} ${estimation.delivery.freightMode}`,
+      notes: estimation.notes || "",
+      termsAndConditions: "Subject to final artwork approval and raw material availability.",
+      comments: [],
+      revisionNumber: 0,
+    });
+
     setShowQuotationModal(false);
+    setLiveMessage(`Quotation ${newQuotation.quotationNumber} created.`);
     addNotification({
       type: "success",
       title: "Quotation Created",
-      message: `Quotation ${generateQuotationNumber()} created and saved.`,
+      message: `Quotation ${newQuotation.quotationNumber} created and saved.`,
       category: "quotation",
       actionUrl: "/quotations",
     });
@@ -151,6 +222,7 @@ export function EstimationResults({ estimation, results, spineThickness, onBackT
 
   return (
     <div className="space-y-6 animate-in" ref={printRef}>
+      <div className="sr-only" aria-live="polite" aria-atomic="true">{liveMessage}</div>
       {/* Top Action Bar */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -238,7 +310,10 @@ export function EstimationResults({ estimation, results, spineThickness, onBackT
         ] as const).map(tab => (
           <button
             key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
+            onClick={() => {
+              setActiveTab(tab.key);
+              setLiveMessage(`${tab.label} tab selected.`);
+            }}
             className={cn(
               "flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all",
               activeTab === tab.key
@@ -256,12 +331,12 @@ export function EstimationResults({ estimation, results, spineThickness, onBackT
       {activeTab === "summary" && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-in">
           {/* Cost Pie Chart */}
-          <div className="card p-5">
+          <div className="card p-5 min-w-0">
             <h3 className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary mb-4">
               Cost Distribution — {formatNumber(primaryResult.quantity)} copies
             </h3>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
+            <div className="h-64 min-w-0">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={1}>
                 <RechartsPie>
                   <Pie
                     data={costBreakdown}
@@ -530,12 +605,12 @@ export function EstimationResults({ estimation, results, spineThickness, onBackT
 
       {activeTab === "comparison" && results.length > 1 && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-in">
-          <div className="card p-5">
+          <div className="card p-5 min-w-0">
             <h3 className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary mb-4">
               Cost Per Copy Comparison
             </h3>
-            <div className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
+            <div className="h-72 min-w-0">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={1}>
                 <BarChart data={comparisonData}>
                   <CartesianGrid strokeDasharray="3 3" stroke={theme === "dark" ? "#334155" : "#e2e8f0"} />
                   <XAxis dataKey="quantity" tick={{ fontSize: 12, fill: theme === "dark" ? "#94a3b8" : "#64748b" }} />
@@ -548,12 +623,12 @@ export function EstimationResults({ estimation, results, spineThickness, onBackT
             </div>
           </div>
 
-          <div className="card p-5">
+          <div className="card p-5 min-w-0">
             <h3 className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary mb-4">
               Volume Savings
             </h3>
-            <div className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
+            <div className="h-72 min-w-0">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={1}>
                 <BarChart data={savingsData}>
                   <CartesianGrid strokeDasharray="3 3" stroke={theme === "dark" ? "#334155" : "#e2e8f0"} />
                   <XAxis dataKey="quantity" tick={{ fontSize: 12, fill: theme === "dark" ? "#94a3b8" : "#64748b" }} />
@@ -798,3 +873,4 @@ function DetailRow({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
+
