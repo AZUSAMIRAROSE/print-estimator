@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { cn } from "@/utils/cn";
 import { useAppStore } from "@/stores/appStore";
 import { useDataStore } from "@/stores/dataStore";
+import { apiClient } from "@/api/client";
 import { formatCurrency, formatDate, getRelativeTime } from "@/utils/format";
 import { downloadTextFile } from "@/utils/export";
 import {
@@ -122,7 +123,7 @@ export function Quotations() {
     });
   };
 
-  const handleSendEmail = () => {
+  const handleSendEmail = async () => {
     if (!emailQuoteId || !emailTo.trim()) {
       addNotification({
         type: "error",
@@ -133,8 +134,20 @@ export function Quotations() {
       return;
     }
 
-    const mailto = `mailto:${encodeURIComponent(emailTo.trim())}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`;
-    window.location.href = mailto;
+    let backendSent = false;
+    try {
+      await apiClient.sendQuoteEmail({
+        to: emailTo.trim(),
+        subject: emailSubject,
+        text: emailBody,
+        quoteId: emailQuoteId,
+      });
+      backendSent = true;
+    } catch {
+      const mailto = `mailto:${encodeURIComponent(emailTo.trim())}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`;
+      window.location.href = mailto;
+    }
+
     handleStatusChange(emailQuoteId, "sent");
     addQuotationComment(emailQuoteId, "Current User", `Email prepared for ${emailTo}`, "internal");
     addActivityLog({
@@ -145,6 +158,12 @@ export function Quotations() {
       entityType: "quotation",
       entityId: emailQuoteId,
       level: "info",
+    });
+    addNotification({
+      type: "success",
+      title: backendSent ? "Quote Email Sent" : "Email Client Opened",
+      message: backendSent ? "Quote email sent via backend service." : "Backend unavailable. Opened default email client instead.",
+      category: "quotation",
     });
     setEmailQuoteId(null);
     setEmailTo("");

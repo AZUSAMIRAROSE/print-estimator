@@ -32,6 +32,12 @@ export default defineConfig(async ({ command }) => {
     strictPort: true,
     host: host || false,
     hmr: host ? { protocol: "ws", host, port: 1421 } : undefined,
+    proxy: {
+      "/api": {
+        target: "http://localhost:4000",
+        changeOrigin: true,
+      },
+    },
     watch: { ignored: ["**/src-tauri/**"] },
     headers: {
       "X-Content-Type-Options": "nosniff",

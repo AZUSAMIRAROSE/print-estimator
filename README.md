@@ -18,6 +18,8 @@ Print Estimator Pro is a React + TypeScript + Tauri application for estimating b
 - Advanced print modules: collation, hole punch, cutting/trimming, envelope, and large-format poster/banner options
 - Role-gated rate management (admin edit mode)
 - Quote email workflow (mail client integration)
+- Full backend/API module with auth, persistence, uploads, email, payments, and admin endpoints
+- Docker-based deployment configuration for frontend + backend
 
 ## Tech Stack
 
@@ -54,6 +56,18 @@ Web app:
 
 ```bash
 npm run dev
+```
+
+Backend API:
+
+```bash
+npm run api:dev
+```
+
+Frontend + Backend together:
+
+```bash
+npm run dev:full
 ```
 
 Desktop app (Tauri):
@@ -131,6 +145,23 @@ npm run benchmark
 - Browser support matrix: `docs/browser-compatibility.md`
 - Benchmark suite: `benchmarks/estimator-benchmark.ts` (`npm run benchmark`)
 - Backend rate-limiting blueprint: `docs/rate-limiting.md`
+- Backend API guide: `docs/backend-api.md`
+
+## Backend Stack
+
+- API framework: Express
+- Database: SQLite (`better-sqlite3`)
+- Authentication: JWT + bcrypt password hashing
+- Security: helmet, CORS policy, API rate limiting
+- File uploads: multer (local storage)
+- Email: nodemailer (SMTP or simulated mode)
+- Payments: Stripe payment intent endpoint (or simulated mode)
+
+## Deployment
+
+- Frontend container: `Dockerfile.frontend` + Nginx reverse proxy
+- Backend container: `Dockerfile.backend`
+- Orchestration: `docker-compose.yml`
 
 ## Rate Management and Roles
 
