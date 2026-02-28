@@ -233,7 +233,7 @@ export function Header() {
               {/* Menu Items */}
               <div className="py-1">
                 <button
-                  onClick={() => { setProfileOpen(false); navigate("/settings"); }}
+                  onClick={() => { setProfileOpen(false); navigate("/profile-settings"); }}
                   className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-text-light-secondary dark:text-text-dark-secondary hover:bg-surface-light-tertiary dark:hover:bg-surface-dark-tertiary transition-colors"
                 >
                   <User className="w-4 h-4" />

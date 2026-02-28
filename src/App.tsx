@@ -13,6 +13,7 @@ import { Calculator } from "@/pages/Calculator";
 import { Inventory } from "@/pages/Inventory";
 import { Reports } from "@/pages/Reports";
 import { Settings } from "@/pages/Settings";
+import { ProfileSettings } from "@/pages/ProfileSettings";
 
 export default function App() {
   const { isOnboarded, theme } = useAppStore();
@@ -47,6 +48,7 @@ export default function App() {
         <Route path="/inventory" element={<Inventory />} />
         <Route path="/reports" element={<Reports />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/profile-settings" element={<ProfileSettings />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Route>
     </Routes>
