@@ -139,6 +139,208 @@ export interface Machine {
   description: string;
 }
 
+// ── Advanced Inventory ───────────────────────────────────────────────────────
+export type InventoryCategory = "paper" | "plates" | "finishing" | "packing" | "ink" | "chemicals" | "consumables" | "spare_parts" | "other";
+export type InventoryStatus = "active" | "inactive" | "discontinued" | "draft";
+export type ItemCondition = "new" | "good" | "fair" | "damaged";
+export type MovementClass = "fast_moving" | "slow_moving" | "non_moving";
+
+export interface InventoryItem {
+  id: string;
+  // ── Basic ──
+  name: string;
+  sku: string;
+  barcode: string;
+  category: InventoryCategory;
+  subcategory: string;
+  description: string;
+  tags: string[];
+  // ── Stock ──
+  stock: number;
+  minLevel: number;
+  maxLevel: number;
+  reorderQty: number;
+  unit: string;
+  batchNumber: string;
+  lotNumber: string;
+  // ── Pricing ──
+  costPerUnit: number;
+  sellingPrice: number;
+  lastPurchasePrice: number;
+  avgCost: number;
+  taxRate: number;
+  hsnCode: string;
+  // ── Location ──
+  warehouse: string;
+  zone: string;
+  rack: string;
+  shelf: string;
+  bin: string;
+  // ── Supplier ──
+  supplier: string;
+  supplierCode: string;
+  leadTimeDays: number;
+  alternateSuppliers: string[];
+  // ── Dates ──
+  lastUpdated: string;
+  expiryDate: string;
+  manufacturedDate: string;
+  lastAuditDate: string;
+  lastMovedDate: string;
+  // ── Physical ──
+  weight: number;
+  weightUnit: string;
+  length: number;
+  width: number;
+  height: number;
+  dimensionUnit: string;
+  volumeCBM: number;
+  // ── Status ──
+  status: InventoryStatus;
+  condition: ItemCondition;
+  nmiFlag: boolean;
+  movementClass: MovementClass;
+  // ── Quality ──
+  qualityGrade: string;
+  certifications: string[];
+  shelfLifeDays: number;
+  storageConditions: string;
+  handlingInstructions: string;
+  // ── Notes ──
+  notes: string;
+}
+
+export interface MachineDetail {
+  id: string;
+  // ── Basic ──
+  code: string;
+  name: string;
+  type: "offset" | "digital" | "flexo" | "gravure" | "screen" | "cutting" | "folding" | "binding" | "lamination" | "other";
+  manufacturer: string;
+  model: string;
+  serialNumber: string;
+  yearOfManufacture: number;
+  // ── Specs ──
+  maxSheetWidth: number;
+  maxSheetHeight: number;
+  minSheetWidth: number;
+  minSheetHeight: number;
+  maxColors: number;
+  hasAQUnit: boolean;
+  hasPerfector: boolean;
+  speedSPH: number;
+  plateSize: string;
+  gripperMargin: number;
+  tailMargin: number;
+  sideMargin: number;
+  maxPaperWeight: number;
+  minPaperWeight: number;
+  // ── Costs ──
+  purchaseCost: number;
+  currentValue: number;
+  depreciationRate: number;
+  makeReadyCost: number;
+  makeReadyTime: number;
+  washingCost: number;
+  ctpRate: number;
+  hourlyRate: number;
+  maintenanceCostPerMonth: number;
+  inkCostPerHour: number;
+  powerConsumptionKW: number;
+  electricityCostPerUnit: number;
+  // ── Maintenance ──
+  lastMaintenanceDate: string;
+  nextMaintenanceDate: string;
+  maintenanceIntervalDays: number;
+  totalRunningHours: number;
+  hoursUntilService: number;
+  maintenanceNotes: string;
+  // ── Operational ──
+  isActive: boolean;
+  operationalStatus: "running" | "idle" | "maintenance" | "decommissioned";
+  location: string;
+  operatorName: string;
+  shiftCapacity: number;
+  avgUptimePercent: number;
+  avgEfficiencyPercent: number;
+  description: string;
+  // ── Insurance ──
+  insuranceProvider: string;
+  insuranceExpiry: string;
+  insurancePremium: number;
+  warrantyExpiry: string;
+}
+
+export type NMIAction = "hold" | "write_off" | "liquidate" | "transfer" | "dispose" | "revalue";
+export type NMICategory = "slow_moving" | "non_moving" | "dead_stock" | "obsolete";
+
+export interface NMIRecord {
+  id: string;
+  inventoryItemId: string;
+  itemName: string;
+  sku: string;
+  category: InventoryCategory;
+  daysWithoutMovement: number;
+  lastMovementDate: string;
+  currentStock: number;
+  unit: string;
+  currentValue: number;
+  depreciatedValue: number;
+  nmiCategory: NMICategory;
+  action: NMIAction;
+  actionDate: string;
+  actionNotes: string;
+  approvedBy: string;
+  location: string;
+  status: "pending" | "approved" | "completed" | "rejected";
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type TransferStatus = "pending" | "approved" | "in_transit" | "received" | "cancelled";
+
+export interface InventoryTransfer {
+  id: string;
+  inventoryItemId: string;
+  itemName: string;
+  sku: string;
+  quantity: number;
+  unit: string;
+  // ── Locations ──
+  fromWarehouse: string;
+  fromZone: string;
+  toWarehouse: string;
+  toZone: string;
+  // ── Dates ──
+  transferDate: string;
+  expectedArrivalDate: string;
+  actualArrivalDate: string;
+  // ── Status ──
+  status: TransferStatus;
+  // ── Transport ──
+  transportMode: "manual" | "truck" | "courier" | "rail" | "air";
+  vehicleNumber: string;
+  driverName: string;
+  trackingNumber: string;
+  // ── Charges ──
+  transportCharges: number;
+  handlingCharges: number;
+  insuranceCharges: number;
+  packagingCharges: number;
+  otherCharges: number;
+  totalTransferCost: number;
+  // ── People ──
+  requestedBy: string;
+  approvedBy: string;
+  receivedBy: string;
+  // ── Notes ──
+  notes: string;
+  reason: string;
+  priorityLevel: "low" | "medium" | "high" | "urgent";
+  createdAt: string;
+  updatedAt: string;
+}
+
 // ── Impression Rates ─────────────────────────────────────────────────────────
 export interface ImpressionRate {
   id: string;

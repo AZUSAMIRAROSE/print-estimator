@@ -1,328 +1,803 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { cn } from "@/utils/cn";
 import { formatCurrency, formatNumber } from "@/utils/format";
 import { calculateSpineThickness } from "@/utils/calculations/spine";
 import { calculateBookWeight } from "@/utils/calculations/weight";
-import { Calculator as CalcIcon, Book, Layers, DollarSign, RefreshCcw, AlertTriangle } from "lucide-react";
-import { DEFAULT_PAPER_RATES, TRIM_SIZE_PRESETS } from "@/constants";
-import type { PricingMode, QuickCalcForm, Turnaround } from "@/utils/calculations/quickQuote";
-import { calculateQuickCosts, validateAndParseQuickCalc } from "@/utils/calculations/quickQuote";
+import {
+  Calculator as CalcIcon, Book, Layers, DollarSign, RefreshCcw, AlertTriangle,
+  ChevronDown, ChevronRight, Printer, Settings2, Sparkles, BarChart3,
+  Copy, TrendingDown, TrendingUp, Info, Zap, Package, Weight, Ruler,
+  Palette, Grid3X3, FileText, Eye, EyeOff, ArrowRight, CheckCircle2,
+  Maximize2, Minimize2
+} from "lucide-react";
+import { DEFAULT_PAPER_RATES, TRIM_SIZE_PRESETS, DEFAULT_MACHINES, STANDARD_PAPER_SIZES, DEFAULT_DESTINATIONS, LAMINATION_RATES } from "@/constants";
+import type { PricingMode, Turnaround, BindingType } from "@/utils/calculations/quickQuote";
+import type { QuickCalcForm, AdvancedCostResult } from "@/utils/calculations/quickQuote";
+import { ADVANCED_DEFAULT_FORM, validateAndParseQuickCalc, calculateAdvancedCosts, calculateMultiQuantity } from "@/utils/calculations/quickQuote";
 
-const DEFAULT_FORM: QuickCalcForm = {
-  bookHeight: "234",
-  bookWidth: "153",
-  pages: "256",
-  gsm: "130",
-  paperType: "Matt Art Paper",
-  quantity: "5000",
-  colorsFront: "4",
-  colorsBack: "4",
-  coverGSM: "300",
-  coverPaper: "Art Card",
-  bindingType: "perfect_binding",
-  laminationType: "gloss",
-  pricingMode: "margin",
-  pricingPercent: "20",
-  taxRate: "0",
-  turnaround: "standard",
+// ── Binding type labels ──────────────────────────────────────────────────────
+const BINDING_LABELS: Record<string, string> = {
+  perfect_binding: "Perfect Binding",
+  pur_binding: "PUR Binding",
+  section_sewn_perfect: "Section Sewn + Perfect",
+  section_sewn_hardcase: "Section Sewn Hardcase",
+  saddle_stitching: "Saddle Stitching",
+  wire_o: "Wire-O",
+  spiral: "Spiral",
+  case_binding: "Case Binding",
+  lay_flat: "Lay Flat",
+  coptic: "Coptic",
+  japanese: "Japanese",
+  singer_sewn: "Singer Sewn",
+  pamphlet: "Pamphlet",
+  tape_binding: "Tape Binding",
+  thermal_binding: "Thermal Binding",
 };
 
-export function Calculator() {
-  const [form, setForm] = useState<QuickCalcForm>(DEFAULT_FORM);
+const BINDING_TYPES = Object.keys(BINDING_LABELS) as BindingType[];
 
-  const paperTypes = useMemo(() => [...new Set(DEFAULT_PAPER_RATES.map((r) => r.paperType))], []);
+// ── Component ────────────────────────────────────────────────────────────────
+
+export function Calculator() {
+  const [form, setForm] = useState<QuickCalcForm>(ADVANCED_DEFAULT_FORM);
+  const [activeSection, setActiveSection] = useState(0);
+  const [showAudit, setShowAudit] = useState(false);
+  const [showMultiQty, setShowMultiQty] = useState(false);
+  const [compactResults, setCompactResults] = useState(false);
+
+  const paperTypes = useMemo(() => [...new Set(DEFAULT_PAPER_RATES.map(r => r.paperType))], []);
+  const paperSizes = useMemo(() => STANDARD_PAPER_SIZES.map(ps => ps.label), []);
   const { parsed, errors } = useMemo(() => validateAndParseQuickCalc(form), [form]);
 
+  // ── Compute result ─────────────────────────────────────────────────────────
   const runtimeError = useMemo(() => {
     if (!parsed || errors.length > 0) return "";
     try {
-      calculateQuickCosts(parsed);
+      calculateAdvancedCosts(parsed);
       return "";
     } catch (err) {
       return (err as Error).message;
     }
   }, [parsed, errors]);
 
-  const spine = useMemo(() => {
-    if (!parsed) return 0;
-    return calculateSpineThickness({
-      textSections: [{ pages: parsed.pages, gsm: parsed.gsm, paperType: parsed.paperType }],
-    });
-  }, [parsed]);
-
-  const bookWeight = useMemo(() => {
-    if (!parsed) return { totalWeight: 0 };
-    return calculateBookWeight({
-      trimHeightMM: parsed.bookHeight,
-      trimWidthMM: parsed.bookWidth,
-      textSections: [{ pages: parsed.pages, gsm: parsed.gsm }],
-      coverGSM: parsed.coverGSM,
-      spineThickness: spine,
-      hasEndleaves: false,
-      endleavesPages: 0,
-      endleavesGSM: 0,
-      hasJacket: false,
-      jacketGSM: 0,
-      boardThicknessMM: 0,
-      hasBoard: false,
-    });
-  }, [parsed, spine]);
-
-  const result = useMemo(() => {
+  const result: AdvancedCostResult | null = useMemo(() => {
     if (!parsed || errors.length > 0) return null;
     try {
-      return calculateQuickCosts(parsed);
+      return calculateAdvancedCosts(parsed);
     } catch {
       return null;
     }
   }, [parsed, errors]);
 
-  const allErrors = [...errors, ...(runtimeError ? [runtimeError] : [])];
-  const liveMessage = result
-    ? `Estimate updated. Grand total ${formatCurrency(result.grandTotal)} for ${parsed?.quantity ?? 0} copies.`
-    : allErrors.length > 0
-      ? `Validation errors: ${allErrors[0]}`
-      : "Enter values to calculate.";
+  const multiResults: AdvancedCostResult[] = useMemo(() => {
+    if (!parsed || errors.length > 0) return [];
+    try {
+      return calculateMultiQuantity(parsed);
+    } catch {
+      return [];
+    }
+  }, [parsed, errors]);
 
-  const handleReset = () => setForm(DEFAULT_FORM);
+  const allErrors = [...errors, ...(runtimeError ? [runtimeError] : [])];
+
+  const updateForm = useCallback((updates: Partial<QuickCalcForm>) => {
+    setForm(prev => ({ ...prev, ...updates }));
+  }, []);
+
+  const handleReset = () => setForm(ADVANCED_DEFAULT_FORM);
+
+  const setQuantityAt = (index: number, value: string) => {
+    const q = [...form.quantities];
+    q[index] = value;
+    updateForm({ quantities: q, quantity: q[0] || form.quantity });
+  };
+
+  // ── Input sections config ──────────────────────────────────────────────────
+  const sections = [
+    { icon: <Book className="w-4 h-4" />, label: "Book Spec", key: 0 },
+    { icon: <Layers className="w-4 h-4" />, label: "Paper & Printing", key: 1 },
+    { icon: <Package className="w-4 h-4" />, label: "Binding & Finishing", key: 2 },
+    { icon: <DollarSign className="w-4 h-4" />, label: "Pricing", key: 3 },
+  ];
 
   return (
-    <div className="space-y-6 animate-in">
-      <div className="sr-only" aria-live="polite" aria-atomic="true">{liveMessage}</div>
+    <div className="space-y-4 animate-in">
+      {/* ── Header ──────────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-text-light-primary dark:text-text-dark-primary flex items-center gap-2">
-            <CalcIcon className="w-6 h-6" /> Quick Calculator
+            <div className="p-2 rounded-xl bg-gradient-to-br from-primary-500 to-primary-700 text-white">
+              <CalcIcon className="w-5 h-5" />
+            </div>
+            Advanced Print Calculator
           </h1>
           <p className="text-sm text-text-light-secondary dark:text-text-dark-secondary mt-1">
-            Fast estimate with validation, realistic pricing, volume discounts, tax, and rush pricing.
+            Full-precision estimation engine × Real imposition × Industry wastage charts × Machine-specific rates
           </p>
         </div>
-        <button onClick={handleReset} className="btn-secondary flex items-center gap-1.5">
-          <RefreshCcw className="w-4 h-4" /> Reset
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowMultiQty(!showMultiQty)}
+            className={cn("btn-secondary flex items-center gap-1.5 text-xs", showMultiQty && "bg-primary-50 dark:bg-primary-500/10 border-primary-300 dark:border-primary-500/40")}
+          >
+            <Grid3X3 className="w-3.5 h-3.5" />
+            Multi-Qty
+          </button>
+          <button onClick={handleReset} className="btn-secondary flex items-center gap-1.5 text-xs">
+            <RefreshCcw className="w-3.5 h-3.5" />
+            Reset
+          </button>
+        </div>
       </div>
 
+      {/* ── Errors ──────────────────────────────────────────────────────────── */}
       {allErrors.length > 0 && (
-        <div className="card p-4 border-danger-500/40 bg-danger-50 dark:bg-danger-500/10" role="alert" aria-live="assertive">
+        <div className="card p-3 border-danger-500/40 bg-danger-50 dark:bg-danger-500/10" role="alert">
           <div className="flex items-start gap-2">
-            <AlertTriangle className="w-5 h-5 text-danger-600 dark:text-danger-400 mt-0.5" />
+            <AlertTriangle className="w-4 h-4 text-danger-600 dark:text-danger-400 mt-0.5 shrink-0" />
             <div>
-              <p className="text-sm font-semibold text-danger-700 dark:text-danger-400">Fix the following before calculation:</p>
-              <ul className="mt-1 text-xs text-danger-700 dark:text-danger-400 list-disc pl-4">
-                {allErrors.map((err) => <li key={err}>{err}</li>)}
+              <p className="text-xs font-semibold text-danger-700 dark:text-danger-400">Fix the following:</p>
+              <ul className="mt-1 text-xs text-danger-700 dark:text-danger-400 list-disc pl-4 space-y-0.5">
+                {allErrors.map(err => <li key={err}>{err}</li>)}
               </ul>
             </div>
           </div>
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-4">
-          <div className="card p-5 space-y-4">
-            <h3 className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary flex items-center gap-2">
-              <Book className="w-4 h-4 text-primary-500" /> Book Specification
-            </h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <Field label="Width (mm)" value={form.bookWidth} onChange={(value) => setForm({ ...form, bookWidth: value })} />
-              <Field label="Height (mm)" value={form.bookHeight} onChange={(value) => setForm({ ...form, bookHeight: value })} />
-              <Field label="Pages" value={form.pages} onChange={(value) => setForm({ ...form, pages: value })} />
-              <Field label="Quantity" value={form.quantity} onChange={(value) => setForm({ ...form, quantity: value })} />
-            </div>
-            <div>
-              <label className="label">Preset Size</label>
-              <div className="flex flex-wrap gap-1.5">
-                {TRIM_SIZE_PRESETS.slice(0, 10).map((p) => (
-                  <button
-                    key={p.label}
-                    onClick={() => setForm({ ...form, bookWidth: String(p.width), bookHeight: String(p.height) })}
-                    className={cn(
-                      "px-2.5 py-1 rounded-lg border text-xs transition-all",
-                      form.bookWidth === String(p.width) && form.bookHeight === String(p.height)
-                        ? "border-primary-500 bg-primary-50 dark:bg-primary-500/10 text-primary-700 dark:text-primary-400"
-                        : "border-surface-light-border dark:border-surface-dark-border hover:border-primary-300"
-                    )}
-                  >
-                    {p.label.split("(")[0].trim()}
-                  </button>
-                ))}
+      {/* ── Main Layout ─────────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
+
+        {/* ═══════════════════════════════════════════════════════════════════ */}
+        {/* LEFT: Input Sections (5 cols)                                      */}
+        {/* ═══════════════════════════════════════════════════════════════════ */}
+        <div className="xl:col-span-5 space-y-3">
+          {/* Tab bar */}
+          <div className="flex gap-1 bg-surface-light-secondary dark:bg-surface-dark-secondary rounded-xl p-1">
+            {sections.map(s => (
+              <button
+                key={s.key}
+                onClick={() => setActiveSection(s.key)}
+                className={cn(
+                  "flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg text-xs font-medium transition-all",
+                  activeSection === s.key
+                    ? "bg-white dark:bg-surface-dark-primary text-primary-700 dark:text-primary-400 shadow-sm"
+                    : "text-text-light-secondary dark:text-text-dark-secondary hover:text-text-light-primary dark:hover:text-text-dark-primary"
+                )}
+              >
+                {s.icon}
+                <span className="hidden lg:inline">{s.label}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* ── Section 0: Book Spec ─────────────────────────────────────────── */}
+          {activeSection === 0 && (
+            <div className="card p-4 space-y-4">
+              <SectionTitle icon={<Book className="w-4 h-4 text-primary-500" />} title="Book Specification" />
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Width (mm)" value={form.bookWidth} onChange={v => updateForm({ bookWidth: v })} />
+                <Field label="Height (mm)" value={form.bookHeight} onChange={v => updateForm({ bookHeight: v })} />
+                <Field label="Pages" value={form.pages} onChange={v => updateForm({ pages: v })} hint="Must be even" />
+                <Field label="Quantity" value={form.quantity} onChange={v => updateForm({ quantity: v, quantities: [v, ...form.quantities.slice(1)] })} />
               </div>
-            </div>
-          </div>
 
-          <div className="card p-5 space-y-4">
-            <h3 className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary flex items-center gap-2">
-              <Layers className="w-4 h-4 text-blue-500" /> Paper, Binding, and Pricing
-            </h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <SelectField label="Text Paper" value={form.paperType} onChange={(value) => setForm({ ...form, paperType: value })} options={paperTypes} />
-              <Field label="Text GSM" value={form.gsm} onChange={(value) => setForm({ ...form, gsm: value })} />
-              <Field label="Front Colors" value={form.colorsFront} onChange={(value) => setForm({ ...form, colorsFront: value })} />
-              <Field label="Back Colors" value={form.colorsBack} onChange={(value) => setForm({ ...form, colorsBack: value })} />
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <SelectField label="Cover Paper" value={form.coverPaper} onChange={(value) => setForm({ ...form, coverPaper: value })} options={paperTypes} />
-              <Field label="Cover GSM" value={form.coverGSM} onChange={(value) => setForm({ ...form, coverGSM: value })} />
-              <SelectField
-                label="Binding"
-                value={form.bindingType}
-                onChange={(value) => setForm({ ...form, bindingType: value as QuickCalcForm["bindingType"] })}
-                options={["perfect_binding", "saddle_stitching", "section_sewn_hardcase"]}
-              />
-              <SelectField
-                label="Lamination"
-                value={form.laminationType}
-                onChange={(value) => setForm({ ...form, laminationType: value as QuickCalcForm["laminationType"] })}
-                options={["gloss", "matt", "velvet", "anti_scratch", "none"]}
-              />
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <SelectField
-                label="Pricing Mode"
-                value={form.pricingMode}
-                onChange={(value) => setForm({ ...form, pricingMode: value as PricingMode })}
-                options={["margin", "markup"]}
-              />
-              <Field label={form.pricingMode === "margin" ? "Margin (%)" : "Markup (%)"} value={form.pricingPercent} onChange={(value) => setForm({ ...form, pricingPercent: value })} />
-              <Field label="Tax (%)" value={form.taxRate} onChange={(value) => setForm({ ...form, taxRate: value })} />
-              <SelectField
-                label="Turnaround"
-                value={form.turnaround}
-                onChange={(value) => setForm({ ...form, turnaround: value as Turnaround })}
-                options={["standard", "rush", "express"]}
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          <div className="card p-5 text-center">
-            <div className="flex items-center justify-center py-4">
-              <div className="relative">
-                <div
-                  className="bg-gradient-to-br from-primary-400 to-primary-600 rounded-r-md rounded-l-sm shadow-lg flex items-center justify-center"
-                  style={{
-                    width: `${Math.min(Math.max((parsed?.bookWidth ?? 0) * 0.5, 40), 100)}px`,
-                    height: `${Math.min(Math.max((parsed?.bookHeight ?? 0) * 0.5, 50), 130)}px`,
-                  }}
-                >
-                  <div className="text-white text-center">
-                    <p className="text-[9px] font-medium">{parsed?.bookWidth ?? 0}x{parsed?.bookHeight ?? 0}mm</p>
-                    <p className="text-[8px] opacity-70">{parsed?.pages ?? 0}pp</p>
+              {/* Multi-quantity inputs */}
+              {showMultiQty && (
+                <div className="border-t border-surface-light-border dark:border-surface-dark-border pt-3 space-y-2">
+                  <p className="text-xs font-semibold text-text-light-secondary dark:text-text-dark-secondary flex items-center gap-1.5">
+                    <Grid3X3 className="w-3.5 h-3.5" /> Multi-Quantity Comparison
+                  </p>
+                  <div className="grid grid-cols-5 gap-2">
+                    {form.quantities.map((q, i) => (
+                      <div key={i}>
+                        <label className="label text-[10px]">Qty {i + 1}</label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={q}
+                          onChange={e => setQuantityAt(i, e.target.value)}
+                          className="input-field text-xs"
+                          placeholder="—"
+                        />
+                      </div>
+                    ))}
                   </div>
                 </div>
-                {spine > 0 && (
-                  <div className="absolute top-0 left-0 bg-primary-800 rounded-l-sm" style={{ width: `${Math.max(spine * 0.7, 2)}px`, height: "100%" }} />
+              )}
+
+              {/* Preset sizes */}
+              <div>
+                <label className="label text-[10px]">Preset Sizes</label>
+                <div className="flex flex-wrap gap-1">
+                  {TRIM_SIZE_PRESETS.map(p => (
+                    <button
+                      key={p.label}
+                      onClick={() => updateForm({ bookWidth: String(p.width), bookHeight: String(p.height) })}
+                      className={cn(
+                        "px-2 py-1 rounded-lg border text-[10px] transition-all",
+                        form.bookWidth === String(p.width) && form.bookHeight === String(p.height)
+                          ? "border-primary-500 bg-primary-50 dark:bg-primary-500/10 text-primary-700 dark:text-primary-400 font-medium"
+                          : "border-surface-light-border dark:border-surface-dark-border hover:border-primary-300 text-text-light-secondary dark:text-text-dark-secondary"
+                      )}
+                    >
+                      {p.label.split("(")[0].trim().length > 20 ? p.label.split("(")[0].trim().slice(0, 18) + "…" : p.label.split("(")[0].trim()}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Section 1: Paper & Printing ──────────────────────────────────── */}
+          {activeSection === 1 && (
+            <div className="card p-4 space-y-4">
+              <SectionTitle icon={<Layers className="w-4 h-4 text-blue-500" />} title="Paper & Printing" />
+
+              {/* Text section */}
+              <div className="space-y-3">
+                <p className="text-xs font-semibold text-text-light-tertiary dark:text-text-dark-tertiary uppercase tracking-wider">Text Section</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <SelectField label="Text Paper" value={form.paperType} onChange={v => updateForm({ paperType: v })} options={paperTypes} />
+                  <Field label="Text GSM" value={form.gsm} onChange={v => updateForm({ gsm: v })} />
+                  <SelectField label="Paper Size" value={form.paperSize} onChange={v => updateForm({ paperSize: v })} options={paperSizes} />
+                  <SelectField
+                    label="Machine"
+                    value={form.machineId}
+                    onChange={v => updateForm({ machineId: v })}
+                    options={DEFAULT_MACHINES.map(m => m.id)}
+                    labels={DEFAULT_MACHINES.map(m => m.name)}
+                  />
+                  <Field label="Front Colors" value={form.colorsFront} onChange={v => updateForm({ colorsFront: v })} />
+                  <Field label="Back Colors" value={form.colorsBack} onChange={v => updateForm({ colorsBack: v })} />
+                </div>
+                <SelectField
+                  label="Printing Method"
+                  value={form.printingMethod}
+                  onChange={v => updateForm({ printingMethod: v as QuickCalcForm["printingMethod"] })}
+                  options={["sheetwise", "work_and_turn", "work_and_tumble", "perfector"]}
+                  labels={["Sheetwise", "Work & Turn", "Work & Tumble", "Perfector"]}
+                />
+              </div>
+
+              {/* Cover section */}
+              <div className="border-t border-surface-light-border dark:border-surface-dark-border pt-3 space-y-3">
+                <p className="text-xs font-semibold text-text-light-tertiary dark:text-text-dark-tertiary uppercase tracking-wider">Cover</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <SelectField label="Cover Paper" value={form.coverPaper} onChange={v => updateForm({ coverPaper: v })} options={paperTypes} />
+                  <Field label="Cover GSM" value={form.coverGSM} onChange={v => updateForm({ coverGSM: v })} />
+                  <Field label="Cover Front Colors" value={form.coverColorsFront} onChange={v => updateForm({ coverColorsFront: v })} />
+                  <Field label="Cover Back Colors" value={form.coverColorsBack} onChange={v => updateForm({ coverColorsBack: v })} />
+                  <SelectField
+                    label="Cover Machine"
+                    value={form.coverMachineId}
+                    onChange={v => updateForm({ coverMachineId: v })}
+                    options={DEFAULT_MACHINES.map(m => m.id)}
+                    labels={DEFAULT_MACHINES.map(m => m.name)}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Section 2: Binding & Finishing ───────────────────────────────── */}
+          {activeSection === 2 && (
+            <div className="card p-4 space-y-4">
+              <SectionTitle icon={<Package className="w-4 h-4 text-amber-500" />} title="Binding & Finishing" />
+
+              {/* Binding */}
+              <div className="space-y-3">
+                <SelectField
+                  label="Binding Type"
+                  value={form.bindingType}
+                  onChange={v => updateForm({ bindingType: v as BindingType })}
+                  options={BINDING_TYPES}
+                  labels={BINDING_TYPES.map(b => BINDING_LABELS[b])}
+                />
+                {(form.bindingType === "section_sewn_hardcase" || form.bindingType === "case_binding") && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Board Thickness (mm)" value={form.boardThickness} onChange={v => updateForm({ boardThickness: v })} />
+                    <SelectField
+                      label="Board Origin"
+                      value={form.boardOrigin}
+                      onChange={v => updateForm({ boardOrigin: v as "imported" | "indian" })}
+                      options={["imported", "indian"]}
+                      labels={["Imported", "Indian"]}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Finishing */}
+              <div className="border-t border-surface-light-border dark:border-surface-dark-border pt-3 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold text-text-light-tertiary dark:text-text-dark-tertiary uppercase tracking-wider">Finishing Options</p>
+                  <Toggle checked={form.includeFinishing} onChange={v => updateForm({ includeFinishing: v })} label="Enable" />
+                </div>
+
+                {form.includeFinishing && (
+                  <>
+                    <SelectField
+                      label="Lamination"
+                      value={form.laminationType}
+                      onChange={v => updateForm({ laminationType: v as QuickCalcForm["laminationType"] })}
+                      options={["gloss", "matt", "velvet", "anti_scratch", "none"]}
+                      labels={["Gloss", "Matt", "Velvet", "Anti-Scratch", "None"]}
+                    />
+                    <div className="grid grid-cols-2 gap-3">
+                      <ToggleOption label="Spot UV" checked={form.spotUV} onChange={v => updateForm({ spotUV: v })} />
+                      <ToggleOption label="Embossing" checked={form.embossing} onChange={v => updateForm({ embossing: v })} />
+                      <ToggleOption label="Foil Blocking" checked={form.foilBlocking} onChange={v => updateForm({ foilBlocking: v })} />
+                      <ToggleOption label="Die Cutting" checked={form.dieCutting} onChange={v => updateForm({ dieCutting: v })} />
+                    </div>
+                  </>
                 )}
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-2 text-xs mt-2">
-              <Metric label="Spine" value={`${spine.toFixed(2)}mm`} />
-              <Metric label="Weight" value={`${bookWeight.totalWeight.toFixed(0)}g`} />
+          )}
+
+          {/* ── Section 3: Pricing ───────────────────────────────────────────── */}
+          {activeSection === 3 && (
+            <div className="card p-4 space-y-4">
+              <SectionTitle icon={<DollarSign className="w-4 h-4 text-green-500" />} title="Pricing & Delivery" />
+              <div className="grid grid-cols-2 gap-3">
+                <SelectField
+                  label="Pricing Mode"
+                  value={form.pricingMode}
+                  onChange={v => updateForm({ pricingMode: v as PricingMode })}
+                  options={["margin", "markup"]}
+                  labels={["Margin", "Markup"]}
+                />
+                <Field
+                  label={form.pricingMode === "margin" ? "Margin (%)" : "Markup (%)"}
+                  value={form.pricingPercent}
+                  onChange={v => updateForm({ pricingPercent: v })}
+                />
+                <Field label="Tax (%)" value={form.taxRate} onChange={v => updateForm({ taxRate: v })} />
+                <SelectField
+                  label="Turnaround"
+                  value={form.turnaround}
+                  onChange={v => updateForm({ turnaround: v as Turnaround })}
+                  options={["standard", "rush", "express"]}
+                  labels={["Standard", "Rush (+15%)", "Express (+30%)"]}
+                />
+              </div>
             </div>
-          </div>
+          )}
+        </div>
 
-          <div className="card p-5 space-y-3">
-            <h3 className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary flex items-center gap-2">
-              <DollarSign className="w-4 h-4 text-green-500" /> Estimate
-            </h3>
+        {/* ═══════════════════════════════════════════════════════════════════ */}
+        {/* RIGHT: Results Dashboard (7 cols)                                   */}
+        {/* ═══════════════════════════════════════════════════════════════════ */}
+        <div className="xl:col-span-7 space-y-3">
+          {result ? (
+            <>
+              {/* ── Hero Summary Cards ──────────────────────────────────────── */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                <HeroCard
+                  label="Grand Total"
+                  value={formatCurrency(result.grandTotal)}
+                  icon={<DollarSign className="w-4 h-4" />}
+                  color="primary"
+                  subtitle={`${formatNumber(result.quantity)} copies`}
+                />
+                <HeroCard
+                  label="Per Copy"
+                  value={formatCurrency(result.sellPerCopy)}
+                  icon={<Copy className="w-4 h-4" />}
+                  color="blue"
+                  subtitle={`Cost: ${formatCurrency(result.costPerCopy)}`}
+                />
+                <HeroCard
+                  label="Spine"
+                  value={`${result.spineThickness.toFixed(2)}mm`}
+                  icon={<Ruler className="w-4 h-4" />}
+                  color="amber"
+                  subtitle={result.spineWithBoard !== result.spineThickness ? `With board: ${result.spineWithBoard.toFixed(2)}mm` : "Text only"}
+                />
+                <HeroCard
+                  label="Book Weight"
+                  value={`${result.bookWeight.totalWeight.toFixed(0)}g`}
+                  icon={<Weight className="w-4 h-4" />}
+                  color="emerald"
+                  subtitle={`${result.bookWeight.totalWeightKg.toFixed(2)} kg`}
+                />
+              </div>
 
-            {result ? (
-              <>
-                <Rows rows={[
-                  { label: "Text Paper", value: result.paperCost },
-                  { label: "Cover Paper", value: result.coverCost },
-                  { label: "Printing", value: result.printingCost },
-                  { label: "CTP", value: result.ctpCost },
-                  { label: "Make Ready", value: result.makeReady },
-                  { label: "Binding", value: result.bindingCost },
-                  { label: "Lamination", value: result.laminationCost },
-                  { label: "Rush/Express", value: result.rushSurcharge },
-                  { label: `Volume Discount (${result.volumeDiscountPercent}%)`, value: -result.volumeDiscountAmount },
-                  { label: "Min Order Adj.", value: result.minimumOrderAdjustment },
-                  { label: "Selling (before tax)", value: result.sellingBeforeTax },
-                  { label: "Tax", value: result.taxAmount },
-                ]} />
-
-                <div className="border-t-2 border-primary-500 pt-2 mt-2">
-                  <div className="flex justify-between">
-                    <span className="font-bold text-text-light-primary dark:text-text-dark-primary">Grand Total</span>
-                    <span className="font-bold text-primary-600 dark:text-primary-400 text-lg">{formatCurrency(result.grandTotal)}</span>
+              {/* ── Production Metrics ─────────────────────────────────────── */}
+              <div className="card p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-xs font-bold text-text-light-tertiary dark:text-text-dark-tertiary uppercase tracking-wider">Production Metrics</h3>
+                  <button
+                    onClick={() => setCompactResults(!compactResults)}
+                    className="text-text-light-tertiary dark:text-text-dark-tertiary hover:text-primary-500 transition-colors"
+                  >
+                    {compactResults ? <Maximize2 className="w-3.5 h-3.5" /> : <Minimize2 className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+                <div className="grid grid-cols-3 lg:grid-cols-6 gap-3">
+                  <MetricBadge label="Reams" value={result.totalReams.toFixed(1)} />
+                  <MetricBadge label="Plates" value={String(result.totalPlates)} />
+                  <MetricBadge label="Impressions" value={formatNumber(result.totalImpressions)} />
+                  <MetricBadge label="Forms" value={String(result.totalForms)} />
+                  <MetricBadge label="PP/Form" value={String(result.textPPPerForm)} />
+                  <MetricBadge label="Ups" value={String(result.ups)} />
+                </div>
+                {!compactResults && (
+                  <div className="grid grid-cols-3 lg:grid-cols-6 gap-3 mt-3 pt-3 border-t border-surface-light-border dark:border-surface-dark-border">
+                    <MetricBadge label="Format" value={result.formatSize} />
+                    <MetricBadge label="Paper Size" value={result.paperSizeUsed} />
+                    <MetricBadge label="Machine" value={result.machineUsed.split(" ")[0]} />
+                    <MetricBadge label="Wastage Sht" value={formatNumber(result.textWastageSheets)} />
+                    <MetricBadge label="Margin" value={formatCurrency(result.marginAmount)} />
+                    <MetricBadge label="Total Wt" value={`${((result.bookWeight.totalWeight * result.quantity) / 1000).toFixed(0)} kg`} />
                   </div>
-                  <div className="flex justify-between mt-1">
-                    <span className="text-text-light-secondary dark:text-text-dark-secondary">Sell/Copy</span>
-                    <span className="font-semibold">{formatCurrency(result.sellPerCopy)}</span>
+                )}
+              </div>
+
+              {/* ── Detailed Cost Breakdown ────────────────────────────────── */}
+              <div className="card p-4 space-y-2">
+                <h3 className="text-xs font-bold text-text-light-tertiary dark:text-text-dark-tertiary uppercase tracking-wider mb-2">
+                  Cost Breakdown
+                </h3>
+
+                <CostRow label="Text Paper" value={result.textPaper.totalCost} detail={`${result.textPaper.reams.toFixed(1)} reams × ₹${result.textPaper.ratePerReam.toLocaleString()}`} />
+                <CostRow label="Cover Paper" value={result.coverPaper.totalCost} detail={`${result.coverPaper.reams.toFixed(1)} reams × ₹${result.coverPaper.ratePerReam.toLocaleString()}`} />
+                <CostRow label="Text Printing" value={result.textPrinting.totalCost} detail={`${formatNumber(result.textPrinting.totalImpressions)} imp @ ₹${result.textPrinting.ratePer1000}/K + MR ₹${formatNumber(result.textPrinting.makeReadyCost)}`} />
+                <CostRow label="Cover Printing" value={result.coverPrinting.totalCost} detail={`${formatNumber(result.coverPrinting.totalImpressions)} imp`} />
+                <CostRow label="Text CTP" value={result.textCTP.totalCost} detail={`${result.textCTP.totalPlates} plates × ₹${result.textCTP.ratePerPlate}`} />
+                <CostRow label="Cover CTP" value={result.coverCTP.totalCost} detail={`${result.coverCTP.totalPlates} plates × ₹${result.coverCTP.ratePerPlate}`} />
+                <CostRow label="Binding" value={result.bindingCost} detail={`₹${result.bindingCostPerCopy.toFixed(2)}/copy × ${formatNumber(result.quantity)}`} accent />
+                {result.laminationCost > 0 && <CostRow label="Lamination" value={result.laminationCost} />}
+                {result.spotUVCost > 0 && <CostRow label="Spot UV" value={result.spotUVCost} />}
+                {result.embossingCost > 0 && <CostRow label="Embossing" value={result.embossingCost} />}
+                {result.foilBlockingCost > 0 && <CostRow label="Foil Blocking" value={result.foilBlockingCost} />}
+                {result.dieCuttingCost > 0 && <CostRow label="Die Cutting" value={result.dieCuttingCost} />}
+
+                <div className="border-t border-surface-light-border dark:border-surface-dark-border pt-2 mt-1">
+                  <CostRow label="Production Cost" value={result.productionCost} bold />
+                </div>
+                {result.rushSurcharge > 0 && <CostRow label="Rush Surcharge" value={result.rushSurcharge} accent />}
+                {result.volumeDiscountAmount > 0 && <CostRow label={`Volume Discount (${result.volumeDiscountPercent}%)`} value={-result.volumeDiscountAmount} dimmed />}
+                {result.minimumOrderAdjustment > 0 && <CostRow label="Min Order Adj." value={result.minimumOrderAdjustment} />}
+                <CostRow label="Selling (before tax)" value={result.sellingBeforeTax} bold />
+                {result.taxAmount > 0 && <CostRow label="Tax" value={result.taxAmount} />}
+
+                <div className="border-t-2 border-primary-500 pt-3 mt-2">
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold text-base text-text-light-primary dark:text-text-dark-primary">Grand Total</span>
+                    <span className="font-bold text-xl text-primary-600 dark:text-primary-400">{formatCurrency(result.grandTotal)}</span>
+                  </div>
+                  <div className="flex justify-between mt-1.5">
+                    <span className="text-xs text-text-light-secondary dark:text-text-dark-secondary">Sell Per Copy</span>
+                    <span className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary">{formatCurrency(result.sellPerCopy)}</span>
+                  </div>
+                  <div className="flex justify-between mt-0.5">
+                    <span className="text-xs text-text-light-secondary dark:text-text-dark-secondary">Cost Per Copy</span>
+                    <span className="text-sm font-medium text-text-light-tertiary dark:text-text-dark-tertiary">{formatCurrency(result.costPerCopy)}</span>
                   </div>
                 </div>
+              </div>
 
-                <div className="grid grid-cols-3 gap-2 pt-3 border-t border-surface-light-border dark:border-surface-dark-border text-xs text-center">
-                  <Metric label="Reams" value={result.reams.toFixed(1)} />
-                  <Metric label="Plates" value={String(result.plates)} />
-                  <Metric label="Impressions" value={formatNumber(result.impressions)} />
+              {/* ── Weight Breakdown ────────────────────────────────────────── */}
+              <div className="card p-4">
+                <h3 className="text-xs font-bold text-text-light-tertiary dark:text-text-dark-tertiary uppercase tracking-wider mb-3">Weight Breakdown (per book)</h3>
+                <div className="grid grid-cols-3 lg:grid-cols-6 gap-2 text-center">
+                  <WeightItem label="Text" value={result.bookWeight.textWeight} />
+                  <WeightItem label="Cover" value={result.bookWeight.coverWeight} />
+                  <WeightItem label="Board" value={result.bookWeight.boardWeight} />
+                  <WeightItem label="Endleaves" value={result.bookWeight.endleavesWeight} />
+                  <WeightItem label="Misc (10%)" value={result.bookWeight.miscWeight} />
+                  <WeightItem label="Total" value={result.bookWeight.totalWeight} highlight />
                 </div>
-              </>
-            ) : (
-              <p className="text-sm text-text-light-secondary dark:text-text-dark-secondary">Enter valid inputs to view calculated pricing.</p>
-            )}
-          </div>
+              </div>
+
+              {/* ── Multi-Quantity Comparison ───────────────────────────────── */}
+              {showMultiQty && multiResults.length > 1 && (
+                <div className="card p-4">
+                  <h3 className="text-xs font-bold text-text-light-tertiary dark:text-text-dark-tertiary uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                    <BarChart3 className="w-3.5 h-3.5" /> Multi-Quantity Comparison
+                  </h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-surface-light-border dark:border-surface-dark-border">
+                          <th className="text-left py-2 pr-3 text-text-light-tertiary dark:text-text-dark-tertiary font-medium">Metric</th>
+                          {multiResults.map(r => (
+                            <th key={r.quantity} className="text-right py-2 px-2 text-text-light-primary dark:text-text-dark-primary font-semibold">
+                              {formatNumber(r.quantity)}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-surface-light-border dark:divide-surface-dark-border">
+                        <CompRow label="Grand Total" values={multiResults.map(r => formatCurrency(r.grandTotal))} bold />
+                        <CompRow label="Per Copy" values={multiResults.map(r => formatCurrency(r.sellPerCopy))} />
+                        <CompRow label="Cost/Copy" values={multiResults.map(r => formatCurrency(r.costPerCopy))} />
+                        <CompRow label="Paper" values={multiResults.map(r => formatCurrency(r.totalPaperCost))} />
+                        <CompRow label="Printing" values={multiResults.map(r => formatCurrency(r.totalPrintingCost))} />
+                        <CompRow label="CTP" values={multiResults.map(r => formatCurrency(r.totalCTPCost))} />
+                        <CompRow label="Binding" values={multiResults.map(r => formatCurrency(r.bindingCost))} />
+                        <CompRow label="Finishing" values={multiResults.map(r => formatCurrency(r.totalFinishingCost))} />
+                        <CompRow label="Margin" values={multiResults.map(r => formatCurrency(r.marginAmount))} />
+                        <CompRow label="Reams" values={multiResults.map(r => r.totalReams.toFixed(1))} />
+                        <CompRow label="Weight (kg)" values={multiResults.map(r => ((r.bookWeight.totalWeight * r.quantity) / 1000).toFixed(0))} />
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Calculation Audit Trail ─────────────────────────────────── */}
+              <div className="card overflow-hidden">
+                <button
+                  onClick={() => setShowAudit(!showAudit)}
+                  className="w-full flex items-center justify-between p-4 hover:bg-surface-light-secondary dark:hover:bg-surface-dark-secondary transition-colors"
+                >
+                  <span className="text-xs font-bold text-text-light-tertiary dark:text-text-dark-tertiary uppercase tracking-wider flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5" /> Calculation Audit Trail
+                  </span>
+                  {showAudit ? <ChevronDown className="w-4 h-4 text-text-light-tertiary dark:text-text-dark-tertiary" /> : <ChevronRight className="w-4 h-4 text-text-light-tertiary dark:text-text-dark-tertiary" />}
+                </button>
+                {showAudit && (
+                  <div className="px-4 pb-4 space-y-3 text-xs">
+                    <AuditGroup title="Imposition">
+                      <AuditLine label="Text PP/Form" value={String(result.textPPPerForm)} />
+                      <AuditLine label="Text Forms" value={String(result.textPaper.imposition.numberOfForms)} />
+                      <AuditLine label="Text Ups" value={String(result.textPaper.imposition.ups)} />
+                      <AuditLine label="Text Format" value={result.textPaper.imposition.formatLabel} />
+                      <AuditLine label="Paper Size" value={result.textPaper.imposition.paperSizeLabel} />
+                      <AuditLine label="Paper Waste %" value={`${result.textPaper.imposition.wastePercent.toFixed(1)}%`} />
+                    </AuditGroup>
+                    <AuditGroup title="Paper">
+                      <AuditLine label="Text Net Sheets" value={formatNumber(result.textPaper.netSheets)} />
+                      <AuditLine label="Text Wastage Sheets" value={formatNumber(result.textPaper.wastageSheets)} />
+                      <AuditLine label="Text Gross Sheets" value={formatNumber(result.textPaper.grossSheets)} />
+                      <AuditLine label="Text Reams" value={result.textPaper.reams.toFixed(2)} />
+                      <AuditLine label="Text Rate/Ream" value={`₹${formatNumber(result.textPaper.ratePerReam)}`} />
+                      <AuditLine label="Weight/Ream" value={`${result.textPaper.weightPerReam.toFixed(1)} kg`} />
+                      <AuditLine label="Cover Gross Sheets" value={formatNumber(result.coverPaper.grossSheets)} />
+                      <AuditLine label="Cover Reams" value={result.coverPaper.reams.toFixed(2)} />
+                    </AuditGroup>
+                    <AuditGroup title="Printing">
+                      <AuditLine label="Text Impressions/Form" value={formatNumber(result.textPrinting.impressionsPerForm)} />
+                      <AuditLine label="Text Total Impressions" value={formatNumber(result.textPrinting.totalImpressions)} />
+                      <AuditLine label="Text Rate/1000" value={`₹${result.textPrinting.ratePer1000}`} />
+                      <AuditLine label="Text Make-Ready" value={`₹${formatNumber(result.textPrinting.makeReadyCost)}`} />
+                      <AuditLine label="Text Plates" value={String(result.textPrinting.totalPlates)} />
+                      <AuditLine label="Cover Plates" value={String(result.coverPrinting.totalPlates)} />
+                    </AuditGroup>
+                    <AuditGroup title="Binding">
+                      {Object.entries(result.bindingBreakdown).map(([k, v]) => (
+                        <AuditLine key={k} label={k} value={`₹${formatNumber(v)}`} />
+                      ))}
+                    </AuditGroup>
+                    <AuditGroup title="Spine & Weight">
+                      <AuditLine label="Spine (text)" value={`${result.spineThickness.toFixed(3)} mm`} />
+                      <AuditLine label="Spine (with board)" value={`${result.spineWithBoard.toFixed(3)} mm`} />
+                      <AuditLine label="Text Weight" value={`${result.bookWeight.textWeight.toFixed(1)} g`} />
+                      <AuditLine label="Cover Weight" value={`${result.bookWeight.coverWeight.toFixed(1)} g`} />
+                      <AuditLine label="Board Weight" value={`${result.bookWeight.boardWeight.toFixed(1)} g`} />
+                      <AuditLine label="Total Book Weight" value={`${result.bookWeight.totalWeight.toFixed(1)} g`} />
+                    </AuditGroup>
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="card p-12 text-center">
+              <CalcIcon className="w-12 h-12 mx-auto text-text-light-tertiary dark:text-text-dark-tertiary opacity-30 mb-4" />
+              <p className="text-sm text-text-light-secondary dark:text-text-dark-secondary">
+                Enter valid inputs to see detailed estimation results.
+              </p>
+              {allErrors.length > 0 && (
+                <p className="text-xs text-danger-600 dark:text-danger-400 mt-2">{allErrors[0]}</p>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-function Field({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+// ══════════════════════════════════════════════════════════════════════════════
+// SUB-COMPONENTS
+// ══════════════════════════════════════════════════════════════════════════════
+
+function SectionTitle({ icon, title }: { icon: React.ReactNode; title: string }) {
+  return (
+    <h3 className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary flex items-center gap-2">
+      {icon} {title}
+    </h3>
+  );
+}
+
+function Field({ label, value, onChange, hint }: { label: string; value: string; onChange: (v: string) => void; hint?: string }) {
   return (
     <div>
-      <label className="label">{label}</label>
-      <input type="text" inputMode="decimal" value={value} onChange={(e) => onChange(e.target.value)} className="input-field" />
+      <label className="label text-[10px]">{label}</label>
+      <input type="text" inputMode="decimal" value={value} onChange={e => onChange(e.target.value)} className="input-field text-sm" />
+      {hint && <p className="text-[9px] text-text-light-tertiary dark:text-text-dark-tertiary mt-0.5">{hint}</p>}
     </div>
   );
 }
 
-function SelectField({
-  label,
-  value,
-  onChange,
-  options,
-}: {
+function SelectField({ label, value, onChange, options, labels }: {
   label: string;
   value: string;
-  onChange: (value: string) => void;
+  onChange: (v: string) => void;
   options: string[];
+  labels?: string[];
 }) {
   return (
     <div>
-      <label className="label">{label}</label>
-      <select value={value} onChange={(e) => onChange(e.target.value)} className="input-field">
-        {options.map((option) => (
-          <option key={option} value={option}>
-            {option.replace(/_/g, " ")}
-          </option>
+      <label className="label text-[10px]">{label}</label>
+      <select value={value} onChange={e => onChange(e.target.value)} className="input-field text-sm">
+        {options.map((opt, i) => (
+          <option key={opt} value={opt}>{labels?.[i] ?? opt.replace(/_/g, " ")}</option>
         ))}
       </select>
     </div>
   );
 }
 
-function Rows({ rows }: { rows: Array<{ label: string; value: number }> }) {
+function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
   return (
-    <div className="space-y-2 text-sm">
-      {rows.map((row) => (
-        <div key={row.label} className="flex justify-between">
-          <span className="text-text-light-secondary dark:text-text-dark-secondary">{row.label}</span>
-          <span className="font-medium">{formatCurrency(row.value)}</span>
-        </div>
-      ))}
+    <button
+      onClick={() => onChange(!checked)}
+      className="flex items-center gap-1.5 text-xs"
+    >
+      <div className={cn(
+        "w-7 h-4 rounded-full transition-colors relative",
+        checked ? "bg-primary-500" : "bg-gray-300 dark:bg-gray-600"
+      )}>
+        <div className={cn(
+          "w-3 h-3 rounded-full bg-white absolute top-0.5 transition-transform",
+          checked ? "translate-x-3.5" : "translate-x-0.5"
+        )} />
+      </div>
+      <span className="text-text-light-secondary dark:text-text-dark-secondary">{label}</span>
+    </button>
+  );
+}
+
+function ToggleOption({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      onClick={() => onChange(!checked)}
+      className={cn(
+        "flex items-center gap-2 px-3 py-2 rounded-lg border text-xs transition-all text-left",
+        checked
+          ? "border-primary-500 bg-primary-50 dark:bg-primary-500/10 text-primary-700 dark:text-primary-400"
+          : "border-surface-light-border dark:border-surface-dark-border text-text-light-secondary dark:text-text-dark-secondary hover:border-primary-300"
+      )}
+    >
+      <div className={cn(
+        "w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors",
+        checked ? "border-primary-500 bg-primary-500" : "border-gray-300 dark:border-gray-600"
+      )}>
+        {checked && <CheckCircle2 className="w-3 h-3 text-white" />}
+      </div>
+      {label}
+    </button>
+  );
+}
+
+function HeroCard({ label, value, icon, color, subtitle }: {
+  label: string;
+  value: string;
+  icon: React.ReactNode;
+  color: "primary" | "blue" | "amber" | "emerald";
+  subtitle?: string;
+}) {
+  const colorMap = {
+    primary: "from-primary-500/10 to-primary-500/5 border-primary-200 dark:border-primary-500/20",
+    blue: "from-blue-500/10 to-blue-500/5 border-blue-200 dark:border-blue-500/20",
+    amber: "from-amber-500/10 to-amber-500/5 border-amber-200 dark:border-amber-500/20",
+    emerald: "from-emerald-500/10 to-emerald-500/5 border-emerald-200 dark:border-emerald-500/20",
+  };
+  const iconColor = {
+    primary: "text-primary-600 dark:text-primary-400",
+    blue: "text-blue-600 dark:text-blue-400",
+    amber: "text-amber-600 dark:text-amber-400",
+    emerald: "text-emerald-600 dark:text-emerald-400",
+  };
+  return (
+    <div className={cn("card p-3 bg-gradient-to-br border", colorMap[color])}>
+      <div className="flex items-center gap-1.5 mb-1">
+        <span className={iconColor[color]}>{icon}</span>
+        <span className="text-[10px] font-medium text-text-light-tertiary dark:text-text-dark-tertiary uppercase tracking-wider">{label}</span>
+      </div>
+      <p className="text-lg font-bold text-text-light-primary dark:text-text-dark-primary leading-tight">{value}</p>
+      {subtitle && <p className="text-[10px] text-text-light-tertiary dark:text-text-dark-tertiary mt-0.5">{subtitle}</p>}
     </div>
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+function MetricBadge({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="text-center p-2 rounded-lg bg-surface-light-secondary dark:bg-surface-dark-secondary">
+      <p className="text-[10px] text-text-light-tertiary dark:text-text-dark-tertiary">{label}</p>
+      <p className="text-sm font-bold text-text-light-primary dark:text-text-dark-primary leading-tight mt-0.5">{value}</p>
+    </div>
+  );
+}
+
+function CostRow({ label, value, detail, bold, accent, dimmed }: {
+  label: string;
+  value: number;
+  detail?: string;
+  bold?: boolean;
+  accent?: boolean;
+  dimmed?: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between py-1">
+      <div className="min-w-0 flex-1">
+        <span className={cn(
+          "text-xs",
+          bold ? "font-semibold text-text-light-primary dark:text-text-dark-primary" :
+            accent ? "font-medium text-amber-600 dark:text-amber-400" :
+              dimmed ? "text-success-600 dark:text-success-400" :
+                "text-text-light-secondary dark:text-text-dark-secondary"
+        )}>{label}</span>
+        {detail && <p className="text-[9px] text-text-light-tertiary dark:text-text-dark-tertiary mt-0">{detail}</p>}
+      </div>
+      <span className={cn(
+        "font-medium text-xs tabular-nums ml-3 shrink-0",
+        bold ? "font-bold text-text-light-primary dark:text-text-dark-primary" :
+          value < 0 ? "text-success-600 dark:text-success-400" :
+            "text-text-light-primary dark:text-text-dark-primary"
+      )}>
+        {value < 0 ? `−${formatCurrency(Math.abs(value))}` : formatCurrency(value)}
+      </span>
+    </div>
+  );
+}
+
+function WeightItem({ label, value, highlight }: { label: string; value: number; highlight?: boolean }) {
+  return (
+    <div className={cn(
+      "p-2 rounded-lg",
+      highlight ? "bg-primary-50 dark:bg-primary-500/10" : "bg-surface-light-secondary dark:bg-surface-dark-secondary"
+    )}>
+      <p className="text-[10px] text-text-light-tertiary dark:text-text-dark-tertiary">{label}</p>
+      <p className={cn(
+        "text-xs font-bold mt-0.5",
+        highlight ? "text-primary-600 dark:text-primary-400" : "text-text-light-primary dark:text-text-dark-primary"
+      )}>{value.toFixed(1)}g</p>
+    </div>
+  );
+}
+
+function CompRow({ label, values, bold }: { label: string; values: string[]; bold?: boolean }) {
+  return (
+    <tr>
+      <td className={cn("py-1.5 pr-3", bold ? "font-semibold text-text-light-primary dark:text-text-dark-primary" : "text-text-light-secondary dark:text-text-dark-secondary")}>{label}</td>
+      {values.map((v, i) => (
+        <td key={i} className={cn("text-right py-1.5 px-2 tabular-nums", bold ? "font-bold text-primary-600 dark:text-primary-400" : "text-text-light-primary dark:text-text-dark-primary")}>{v}</td>
+      ))}
+    </tr>
+  );
+}
+
+function AuditGroup({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <p className="text-text-light-tertiary dark:text-text-dark-tertiary">{label}</p>
-      <p className="font-bold">{value}</p>
+      <p className="text-[10px] font-bold text-primary-600 dark:text-primary-400 uppercase tracking-wider mb-1">{title}</p>
+      <div className="space-y-0.5 pl-2 border-l-2 border-primary-200 dark:border-primary-500/30">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function AuditLine({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between py-0.5">
+      <span className="text-text-light-tertiary dark:text-text-dark-tertiary">{label}</span>
+      <span className="font-mono font-medium text-text-light-primary dark:text-text-dark-primary">{value}</span>
     </div>
   );
 }

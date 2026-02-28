@@ -191,8 +191,12 @@ export function Header() {
             onClick={() => setProfileOpen(!profileOpen)}
             className="flex items-center gap-2.5 pl-3 pr-2 py-1.5 rounded-xl hover:bg-surface-light-tertiary dark:hover:bg-surface-dark-tertiary transition-colors"
           >
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-white text-xs font-bold shadow-sm">
-              {user?.initials || "U"}
+            <div className="w-8 h-8 shrink-0 rounded-full bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-white text-xs font-bold shadow-sm overflow-hidden">
+              {user?.avatar ? (
+                <img src={user.avatar} alt="Avatar" className="w-full h-full object-cover" />
+              ) : (
+                user?.initials || "U"
+              )}
             </div>
             {user && (
               <div className="hidden md:block text-left min-w-0">
@@ -216,8 +220,12 @@ export function Header() {
               {/* User Info */}
               <div className="px-4 py-3 border-b border-surface-light-border dark:border-surface-dark-border">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-white text-sm font-bold">
-                    {user?.initials || "U"}
+                  <div className="w-10 h-10 shrink-0 rounded-full bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-white text-sm font-bold overflow-hidden">
+                    {user?.avatar ? (
+                      <img src={user.avatar} alt="Avatar" className="w-full h-full object-cover" />
+                    ) : (
+                      user?.initials || "U"
+                    )}
                   </div>
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary truncate">

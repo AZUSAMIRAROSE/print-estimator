@@ -3,7 +3,8 @@ import { cn } from "@/utils/cn";
 import { useAppStore } from "@/stores/appStore";
 import { useDataStore } from "@/stores/dataStore";
 import { formatCurrency, formatNumber } from "@/utils/format";
-import { downloadTextFile } from "@/utils/export";
+import { save } from '@tauri-apps/plugin-dialog';
+import { writeTextFile } from '@tauri-apps/plugin-fs';
 import { BarChart3, Download, Calendar, TrendingUp, TrendingDown, Users, FileCheck, Briefcase, Printer, Layers, PieChart as PieIcon, Target, DollarSign } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, AreaChart, Area, Legend } from "recharts";
 
@@ -50,7 +51,7 @@ const BINDING_DATA = [
 type ReportTab = "overview" | "revenue" | "jobs" | "quotations" | "customers" | "machines" | "paper";
 
 export function Reports() {
-  const { theme, addNotification } = useAppStore();
+  const { theme, settings, addNotification } = useAppStore();
   const { jobs, quotations, customers } = useDataStore();
   const [tab, setTab] = useState<ReportTab>("overview");
   const [dateRange, setDateRange] = useState("6m");
@@ -125,18 +126,219 @@ export function Reports() {
     }));
   }, [quotations]);
 
-  const handleExport = () => {
-    const lines = [
-      "Report Type,Category,Value",
-      `Total Jobs,Overview,${realJobCount || 97}`,
-      `Total Revenue,Overview,${realRevenue || 24450000}`,
-      `Conversion Rate,Overview,${conversionRate.toFixed(1)}%`,
-      `Total Customers,Overview,${realCustomerCount || 89}`,
-      ...revenueByMonth.map(m => `${m.month},Monthly Revenue,${m.revenue}`),
-      ...customerRevenue.map(c => `${c.name},Customer Revenue,${c.revenue}`),
-    ];
-    downloadTextFile("reports-export.csv", lines.join("\n"), "text/csv;charset=utf-8");
-    addNotification({ type: "success", title: "Report Exported", message: "Report data exported as CSV.", category: "export" });
+  const handleExport = async () => {
+    try {
+      const co = settings.company;
+      const now = new Date();
+      const dateStr = now.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+      const timeStr = now.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true });
+
+      // ── Company Letterhead ──
+      const header = [
+        `"${co.name}"`,
+        co.address ? `"${co.address}"` : null,
+        `"${[co.city, co.state, co.country].filter(Boolean).join(", ")}"`,
+        co.phone ? `"Phone: ${co.phone}"` : null,
+        co.email ? `"Email: ${co.email}"` : null,
+        co.website ? `"Website: ${co.website}"` : null,
+        co.gstNumber ? `"GSTIN: ${co.gstNumber}"` : null,
+        co.panNumber ? `"PAN: ${co.panNumber}"` : null,
+        "",
+      ].filter(v => v !== null);
+
+      const TAB_TITLES: Record<ReportTab, string> = {
+        overview: "Business Overview Report",
+        revenue: "Revenue Analysis Report",
+        jobs: "Jobs Performance Report",
+        quotations: "Quotations Analysis Report",
+        customers: "Customer Intelligence Report",
+        machines: "Machine Utilization Report",
+        paper: "Paper Consumption Report",
+      };
+
+      const reportMeta = [
+        `"REPORT: ${TAB_TITLES[tab]}"`,
+        `"Generated: ${dateStr} at ${timeStr}"`,
+        `"Period: ${dateRange === '3m' ? 'Last 3 Months' : dateRange === '6m' ? 'Last 6 Months' : 'Last 12 Months'}"`,
+        `"Confidential — For Internal Use Only"`,
+        "",
+        "═══════════════════════════════════════════════════",
+        "",
+      ];
+
+      let dataRows: string[] = [];
+
+      // ── Tab-specific data ──
+      switch (tab) {
+        case "overview": {
+          dataRows = [
+            "KEY PERFORMANCE INDICATORS",
+            "Metric,Value,Change",
+            `"Total Jobs","${formatNumber(realJobCount || 97)}","+12.5%"`,
+            `"Total Revenue","${formatCurrency(realRevenue || 24450000)}","+15.7%"`,
+            `"Conversion Rate","${conversionRate.toFixed(1)}%","+3.2%"`,
+            `"Avg Job Value","${formatCurrency(realJobCount > 0 ? realRevenue / realJobCount : 252000)}","+8.1%"`,
+            `"Total Customers","${formatNumber(realCustomerCount || 89)}","+8.1%"`,
+            `"Accepted Quotations","${acceptedQuotations}",""`,
+            `"Pending Quotations","${sentQuotations}",""`,
+            "",
+            "MONTHLY TREND",
+            "Month,Jobs,Revenue,Quotations Sent,Quotations Accepted",
+            ...revenueByMonth.map(m => `"${m.month}","${m.jobs}","${formatCurrency(m.revenue)}","${m.quotations}","${m.accepted}"`),
+            "",
+            "TOP CUSTOMERS BY REVENUE",
+            "Rank,Customer Name,Revenue,Jobs Count",
+            ...customerRevenue.map((c, i) => `"${i + 1}","${c.name}","${formatCurrency(c.revenue)}","${c.jobs}"`),
+            "",
+            "BINDING DISTRIBUTION",
+            "Binding Type,Percentage",
+            ...BINDING_DATA.map(b => `"${b.name}","${b.value}%"`),
+          ];
+          break;
+        }
+        case "revenue": {
+          const avgMonthly = (realRevenue || 24450000) / 6;
+          dataRows = [
+            "REVENUE SUMMARY",
+            "Metric,Value",
+            `"Total Revenue","${formatCurrency(realRevenue || 24450000)}"`,
+            `"Average Monthly Revenue","${formatCurrency(avgMonthly)}"`,
+            `"Average Revenue per Job","${formatCurrency(realJobCount > 0 ? realRevenue / realJobCount : 252000)}"`,
+            `"Best Performing Month","May"`,
+            "",
+            "MONTHLY REVENUE BREAKDOWN",
+            "Month,Revenue,Jobs Count,Revenue per Job",
+            ...revenueByMonth.map(m => `"${m.month}","${formatCurrency(m.revenue)}","${m.jobs}","${m.jobs > 0 ? formatCurrency(m.revenue / m.jobs) : '—'}"`),
+          ];
+          break;
+        }
+        case "jobs": {
+          const inProd = jobs.filter(j => j.status === "in_production").length;
+          const completed = jobs.filter(j => j.status === "completed").length;
+          const draft = jobs.filter(j => j.status === "draft").length;
+          dataRows = [
+            "JOB STATUS SUMMARY",
+            "Status,Count,Percentage",
+            `"Total Jobs","${realJobCount || 97}","100%"`,
+            `"In Production","${inProd || 3}","${realJobCount > 0 ? ((inProd / realJobCount) * 100).toFixed(1) : '3.1'}%"`,
+            `"Completed","${completed || 45}","${realJobCount > 0 ? ((completed / realJobCount) * 100).toFixed(1) : '46.4'}%"`,
+            `"Draft","${draft || 12}","${realJobCount > 0 ? ((draft / realJobCount) * 100).toFixed(1) : '12.4'}%"`,
+            "",
+            "JOBS BY MONTH",
+            "Month,Jobs Created,Revenue Generated",
+            ...revenueByMonth.map(m => `"${m.month}","${m.jobs}","${formatCurrency(m.revenue)}"`),
+            "",
+            "DETAILED JOB REGISTER",
+            "Sr No,Job Number,Job Title,Customer,Status,Value,Created Date",
+            ...jobs.map((j, i) => `"${i + 1}","${j.jobNumber || ''}","${(j.title || '').replace(/"/g, '""')}","${(j.customerName || '').replace(/"/g, '""')}","${j.status}","${formatCurrency(j.totalValue || 0)}","${new Date(j.createdAt).toLocaleDateString('en-IN')}"`),
+          ];
+          break;
+        }
+        case "quotations": {
+          dataRows = [
+            "QUOTATION PERFORMANCE SUMMARY",
+            "Metric,Value",
+            `"Total Quotations","${realQuotationCount || 134}"`,
+            `"Accepted","${acceptedQuotations || 71}"`,
+            `"Pending (Sent)","${sentQuotations || 23}"`,
+            `"Conversion Rate","${conversionRate.toFixed(1)}%"`,
+            "",
+            "STATUS DISTRIBUTION",
+            "Status,Count,Percentage",
+            ...quotationBreakdown.map(b => `"${b.name}","${b.value}","${realQuotationCount > 0 ? ((b.value / realQuotationCount) * 100).toFixed(1) : '—'}%"`),
+            "",
+            "MONTHLY QUOTATION TREND",
+            "Month,Quotations Sent,Accepted,Acceptance Rate",
+            ...revenueByMonth.map(m => `"${m.month}","${m.quotations}","${m.accepted}","${m.quotations > 0 ? ((m.accepted / m.quotations) * 100).toFixed(1) : '0'}%"`),
+            "",
+            "DETAILED QUOTATION REGISTER",
+            "Sr No,Quotation No,Customer,Status,Total Amount,Valid Until,Created Date",
+            ...quotations.map((q, i) => `"${i + 1}","${q.quotationNumber || ''}","${(q.customerName || '').replace(/"/g, '""')}","${q.status}","${formatCurrency(q.results?.[0]?.grandTotal || 0)}","${q.validUntil ? new Date(q.validUntil).toLocaleDateString('en-IN') : '—'}","${new Date(q.createdAt).toLocaleDateString('en-IN')}"`),
+          ];
+          break;
+        }
+        case "customers": {
+          const activeCount = customers.filter(c => c.isActive).length;
+          const highPriority = customers.filter(c => c.priority === "high").length;
+          dataRows = [
+            "CUSTOMER INTELLIGENCE SUMMARY",
+            "Metric,Value",
+            `"Total Customers","${realCustomerCount || 89}"`,
+            `"Active Customers","${activeCount || 78}"`,
+            `"High Priority","${highPriority || 12}"`,
+            `"Avg Revenue per Customer","${formatCurrency(realCustomerCount > 0 ? realRevenue / realCustomerCount : 274720)}"`,
+            "",
+            "TOP CUSTOMERS BY REVENUE",
+            "Rank,Customer Name,Total Revenue,Jobs Count,Revenue per Job",
+            ...customerRevenue.map((c, i) => `"${i + 1}","${c.name}","${formatCurrency(c.revenue)}","${c.jobs}","${c.jobs > 0 ? formatCurrency(c.revenue / c.jobs) : '—'}"`),
+            "",
+            "COMPLETE CUSTOMER DIRECTORY",
+            "Sr No,Code,Name,Email,Phone,City,Priority,Status",
+            ...customers.map((c, i) => `"${i + 1}","${c.code || ''}","${(c.name || '').replace(/"/g, '""')}","${c.email || ''}","${c.phone || ''}","${c.city || ''}","${c.priority || 'normal'}","${c.isActive ? 'Active' : 'Inactive'}"`),
+          ];
+          break;
+        }
+        case "machines": {
+          const totalHours = MACHINE_UTIL.reduce((s, m) => s + m.hours, 0);
+          const totalJobs = MACHINE_UTIL.reduce((s, m) => s + m.jobs, 0);
+          const avgUtil = MACHINE_UTIL.reduce((s, m) => s + m.utilization, 0) / MACHINE_UTIL.length;
+          dataRows = [
+            "MACHINE UTILIZATION SUMMARY",
+            "Metric,Value",
+            `"Total Machine Hours","${formatNumber(totalHours)}"`,
+            `"Total Jobs Processed","${totalJobs}"`,
+            `"Average Utilization","${avgUtil.toFixed(1)}%"`,
+            "",
+            "MACHINE-WISE BREAKDOWN",
+            "Machine Name,Hours Logged,Utilization %,Jobs Processed,Avg Hours/Job,Status",
+            ...MACHINE_UTIL.map(m => `"${m.name}","${formatNumber(m.hours)}","${m.utilization}%","${m.jobs}","${(m.hours / m.jobs).toFixed(1)}","${m.utilization > 70 ? 'Optimal' : m.utilization > 40 ? 'Moderate' : 'Under-utilized'}"`),
+          ];
+          break;
+        }
+        case "paper": {
+          const totalReams = PAPER_USAGE.reduce((s, p) => s + p.reams, 0);
+          const totalWeight = PAPER_USAGE.reduce((s, p) => s + p.weight, 0);
+          dataRows = [
+            "PAPER CONSUMPTION SUMMARY",
+            "Metric,Value",
+            `"Total Reams Used","${formatNumber(totalReams)}"`,
+            `"Total Weight","${formatNumber(totalWeight)} kg"`,
+            `"Paper Types","${PAPER_USAGE.length}"`,
+            "",
+            "PAPER-WISE BREAKDOWN",
+            "Paper Type,Reams Used,Weight (kg),% of Total Reams,% of Total Weight",
+            ...PAPER_USAGE.map(p => `"${p.type}","${formatNumber(p.reams)}","${formatNumber(p.weight)}","${((p.reams / totalReams) * 100).toFixed(1)}%","${((p.weight / totalWeight) * 100).toFixed(1)}%"`),
+          ];
+          break;
+        }
+      }
+
+      // ── Footer ──
+      const footer = [
+        "",
+        "═══════════════════════════════════════════════════",
+        `"End of Report"`,
+        `"This report was auto-generated by Print Estimator Pro."`,
+        `"© ${now.getFullYear()} ${co.name}. All rights reserved."`,
+      ];
+
+      const csv = [...header, ...reportMeta, ...dataRows, ...footer].join("\n");
+
+      const tabLabel = TAB_TITLES[tab].replace(/ /g, "-").toLowerCase();
+      const defaultFilename = `${tabLabel}-${now.toISOString().split('T')[0]}.csv`;
+
+      const filePath = await save({
+        filters: [{ name: 'CSV Report', extensions: ['csv'] }],
+        defaultPath: defaultFilename,
+      });
+
+      if (!filePath) return;
+
+      await writeTextFile(filePath, csv);
+      addNotification({ type: "success", title: "Report Exported", message: `${TAB_TITLES[tab]} saved to ${filePath}`, category: "export" });
+    } catch (error: any) {
+      addNotification({ type: "error", title: "Export Failed", message: error.message || "Failed to export the report.", category: "system" });
+    }
   };
 
   return (

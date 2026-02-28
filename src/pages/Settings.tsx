@@ -4,13 +4,16 @@ import { useDataStore } from "@/stores/dataStore";
 import { cn } from "@/utils/cn";
 import { downloadTextFile } from "@/utils/export";
 import { APP_VERSION, APP_BUILD, APP_NAME } from "@/constants";
+import { save, open } from '@tauri-apps/plugin-dialog';
+import { writeTextFile, readTextFile } from '@tauri-apps/plugin-fs';
 import {
   Settings as SettingsIcon, Building, Palette, Bell, Database,
   Save, Download, Upload, Trash2,
-  Sun, Moon, Info, Activity, Globe, ChevronRight, Check
+  Sun, Moon, Info, Activity, Globe, ChevronRight, Check,
+  Languages, Clock, Calendar, Hash, Ruler, MapPin
 } from "lucide-react";
 
-type SettingsTab = "company" | "appearance" | "notifications" | "currency" | "database" | "activity" | "about";
+type SettingsTab = "company" | "appearance" | "notifications" | "locale" | "currency" | "database" | "activity" | "about";
 
 export function Settings() {
   const {
@@ -29,7 +32,27 @@ export function Settings() {
     exportCompleted: true,
     systemAlerts: true,
   });
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showBackupModal, setShowBackupModal] = useState(false);
+  const [backupType, setBackupType] = useState<"complete" | "data">("complete");
+  const [localeSaved, setLocaleSaved] = useState(false);
+  const [localePrefs, setLocalePrefs] = useState({
+    language: "en-IN",
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata",
+    dateFormat: "DD/MM/YYYY",
+    timeFormat: "12h" as "12h" | "24h",
+    numberFormat: "en-IN",
+    firstDayOfWeek: "monday" as "monday" | "sunday" | "saturday",
+    fiscalYearStart: "april" as string,
+    measurementUnit: "metric" as "metric" | "imperial",
+    paperSize: "A4" as "A4" | "Letter" | "Legal",
+  });
+
+  const handleSaveLocale = () => {
+    addNotification({ type: "success", title: "Region Settings Saved", message: "Language & region preferences have been updated.", category: "system" });
+    addActivityLog({ action: "LOCALE_UPDATED", category: "settings", description: `Locale updated: ${localePrefs.language}, TZ: ${localePrefs.timezone}, Date: ${localePrefs.dateFormat}`, user: "Current User", entityType: "settings", entityId: "", level: "info" });
+    setLocaleSaved(true);
+    setTimeout(() => setLocaleSaved(false), 2000);
+  };
 
   const handleSaveCompany = () => {
     updateSettings({ company: companyForm } as any);
@@ -40,51 +63,83 @@ export function Settings() {
   };
 
   const handleBackup = () => {
-    // Actually export all data from localStorage as a JSON file
-    const backupData: Record<string, string | null> = {};
-    const keys = ["print-estimator-app", "print-estimator-data", "print-estimator-estimation"];
-    keys.forEach(key => {
-      const val = localStorage.getItem(key);
-      if (val) backupData[key] = val;
-    });
-    const jsonStr = JSON.stringify(backupData, null, 2);
-    const date = new Date().toISOString().split("T")[0];
-    downloadTextFile(`print-estimator-backup-${date}.json`, jsonStr, "application/json");
-    addNotification({ type: "success", title: "Backup Created", message: `Database backup exported with ${Object.keys(backupData).length} data stores.`, category: "system" });
-    addActivityLog({ action: "BACKUP_CREATED", category: "settings", description: `Backup exported: ${customers.length} customers, ${jobs.length} jobs, ${quotations.length} quotations`, user: "Current User", entityType: "settings", entityId: "", level: "info" });
+    setShowBackupModal(true);
   };
 
-  const handleRestore = () => {
-    fileInputRef.current?.click();
-  };
+  const executeBackup = async () => {
+    try {
+      const backupData: Record<string, string | null> = {};
+      let keys: string[] = [];
 
-  const handleRestoreFile = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const data = JSON.parse(e.target?.result as string);
-        if (!data || typeof data !== "object") throw new Error("Invalid backup format");
-
-        if (window.confirm("Are you sure? This will replace all current data with the backup.")) {
-          Object.entries(data).forEach(([key, value]) => {
-            if (typeof value === "string") {
-              localStorage.setItem(key, value);
-            }
-          });
-          addNotification({ type: "success", title: "Restore Complete", message: "Database restored from backup. Please refresh the page.", category: "system" });
-          addActivityLog({ action: "BACKUP_RESTORED", category: "settings", description: "Database restored from backup file", user: "Current User", entityType: "settings", entityId: "", level: "warning" });
-          setTimeout(() => window.location.reload(), 1500);
-        }
-      } catch {
-        addNotification({ type: "error", title: "Restore Failed", message: "Invalid backup file format.", category: "system" });
+      if (backupType === "complete") {
+        keys = ["print-estimator-app", "print-estimator-data", "print-estimator-estimation"];
+      } else {
+        keys = ["print-estimator-data"];
       }
-    };
-    reader.readAsText(file);
-    // Reset the input so the same file can be re-selected
-    event.target.value = "";
+
+      keys.forEach(key => {
+        const val = localStorage.getItem(key);
+        if (val) backupData[key] = val;
+      });
+
+      const jsonStr = JSON.stringify(backupData, null, 2);
+      const date = new Date().toISOString().split("T")[0];
+      const defaultFilename = `print-estimator-${backupType}-backup-${date}.json`;
+
+      const filePath = await save({
+        filters: [{
+          name: 'JSON Backup',
+          extensions: ['json']
+        }],
+        defaultPath: defaultFilename,
+      });
+
+      if (!filePath) {
+        setShowBackupModal(false);
+        return; // User cancelled
+      }
+
+      await writeTextFile(filePath, jsonStr);
+
+      addNotification({ type: "success", title: "Backup Saved", message: `Backup saved successfully.`, category: "system" });
+      addActivityLog({ action: "BACKUP_CREATED", category: "settings", description: `Backup exported (${backupType}) to: ${filePath}`, user: "Current User", entityType: "settings", entityId: "", level: "info" });
+      setShowBackupModal(false);
+    } catch (error: any) {
+      addNotification({ type: "error", title: "Backup Failed", message: error.message || "An error occurred while saving the backup.", category: "system" });
+      setShowBackupModal(false);
+    }
+  };
+
+  const handleRestore = async () => {
+    try {
+      const selectedPath = await open({
+        multiple: false,
+        filters: [{
+          name: 'JSON Backup',
+          extensions: ['json']
+        }]
+      });
+
+      if (!selectedPath) return; // User cancelled
+      const pathStr = Array.isArray(selectedPath) ? selectedPath[0] : selectedPath;
+      const fileContent = await readTextFile(pathStr);
+      const data = JSON.parse(fileContent);
+
+      if (!data || typeof data !== "object") throw new Error("Invalid backup format");
+
+      if (window.confirm("⚠️ Are you sure? This will replace current data with the backup.")) {
+        Object.entries(data).forEach(([key, value]) => {
+          if (typeof value === "string") {
+            localStorage.setItem(key, value);
+          }
+        });
+        addNotification({ type: "success", title: "Restore Complete", message: "Database restored from backup. Reloading...", category: "system" });
+        addActivityLog({ action: "BACKUP_RESTORED", category: "settings", description: `Database restored from backup file`, user: "Current User", entityType: "settings", entityId: "", level: "warning" });
+        setTimeout(() => window.location.reload(), 1500);
+      }
+    } catch (error: any) {
+      addNotification({ type: "error", title: "Restore Failed", message: error.message || "Invalid backup file or format.", category: "system" });
+    }
   };
 
   const handleReset = () => {
@@ -103,20 +158,33 @@ export function Settings() {
     }
   };
 
-  const handleExportActivityLog = () => {
-    const csv = [
-      "Timestamp,Action,Category,Description,User,Level",
-      ...activityLog.map(l =>
-        `"${new Date(l.timestamp).toISOString()}","${l.action}","${l.category}","${l.description.replace(/"/g, '""')}","${l.user}","${l.level}"`
-      )
-    ].join("\n");
-    downloadTextFile("activity-log.csv", csv, "text/csv;charset=utf-8");
-    addNotification({ type: "success", title: "Activity Log Exported", message: `${activityLog.length} entries exported.`, category: "export" });
+  const handleExportActivityLog = async () => {
+    try {
+      const csv = [
+        "Timestamp,Action,Category,Description,User,Level",
+        ...activityLog.map(l =>
+          `"${new Date(l.timestamp).toISOString()}","${l.action}","${l.category}","${l.description.replace(/"/g, '""')}","${l.user}","${l.level}"`
+        )
+      ].join("\n");
+
+      const filePath = await save({
+        filters: [{ name: 'CSV Files', extensions: ['csv'] }],
+        defaultPath: 'activity-log.csv',
+      });
+
+      if (!filePath) return;
+
+      await writeTextFile(filePath, csv);
+      addNotification({ type: "success", title: "Activity Log Exported", message: `${activityLog.length} entries exported to ${filePath}.`, category: "export" });
+    } catch (error: any) {
+      addNotification({ type: "error", title: "Export Failed", message: error.message || "Failed to export activity log.", category: "system" });
+    }
   };
 
   const TABS: { key: SettingsTab; label: string; icon: React.ReactNode }[] = [
     { key: "company", label: "Company", icon: <Building className="w-4 h-4" /> },
     { key: "appearance", label: "Appearance", icon: <Palette className="w-4 h-4" /> },
+    { key: "locale", label: "Language & Region", icon: <Languages className="w-4 h-4" /> },
     { key: "notifications", label: "Notifications", icon: <Bell className="w-4 h-4" /> },
     { key: "currency", label: "Currency", icon: <Globe className="w-4 h-4" /> },
     { key: "database", label: "Database", icon: <Database className="w-4 h-4" /> },
@@ -126,7 +194,6 @@ export function Settings() {
 
   return (
     <div className="space-y-6 animate-in">
-      <input type="file" ref={fileInputRef} accept=".json" onChange={handleRestoreFile} className="hidden" />
       <div>
         <h1 className="text-2xl font-bold text-text-light-primary dark:text-text-dark-primary flex items-center gap-2">
           <SettingsIcon className="w-6 h-6" /> Settings
@@ -218,6 +285,159 @@ export function Settings() {
                   />
                 </label>
               ))}
+            </div>
+          )}
+
+          {activeTab === "locale" && (
+            <div className="space-y-4 animate-in">
+              {/* Language & Display */}
+              <div className="card p-6 space-y-5">
+                <div className="flex items-center gap-2 mb-1">
+                  <Languages className="w-5 h-5 text-primary-500" />
+                  <h3 className="text-lg font-semibold text-text-light-primary dark:text-text-dark-primary">Language & Display</h3>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="label">Application Language</label>
+                    <select value={localePrefs.language} onChange={e => setLocalePrefs(p => ({ ...p, language: e.target.value }))} className="input-field">
+                      <option value="en-IN">English (India)</option>
+                      <option value="en-US">English (United States)</option>
+                      <option value="en-GB">English (United Kingdom)</option>
+                      <option value="hi-IN">हिन्दी (Hindi)</option>
+                      <option value="mr-IN">मराठी (Marathi)</option>
+                      <option value="ta-IN">தமிழ் (Tamil)</option>
+                      <option value="te-IN">తెలుగు (Telugu)</option>
+                      <option value="gu-IN">ગુજરાતી (Gujarati)</option>
+                      <option value="bn-IN">বাংলা (Bengali)</option>
+                      <option value="kn-IN">ಕನ್ನಡ (Kannada)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="label">Number Format</label>
+                    <select value={localePrefs.numberFormat} onChange={e => setLocalePrefs(p => ({ ...p, numberFormat: e.target.value }))} className="input-field">
+                      <option value="en-IN">Indian (12,34,567.89)</option>
+                      <option value="en-US">US/International (1,234,567.89)</option>
+                      <option value="de-DE">European (1.234.567,89)</option>
+                      <option value="fr-FR">French (1 234 567,89)</option>
+                    </select>
+                  </div>
+                </div>
+                {/* Live Preview */}
+                <div className="p-3 rounded-xl bg-gradient-to-r from-primary-50 to-blue-50 dark:from-primary-500/5 dark:to-blue-500/5 border border-primary-200 dark:border-primary-500/20">
+                  <p className="text-[10px] uppercase font-medium text-primary-600 dark:text-primary-400 mb-1.5 tracking-wider">Live Preview</p>
+                  <p className="text-sm text-text-light-primary dark:text-text-dark-primary font-mono">
+                    {new Intl.NumberFormat(localePrefs.numberFormat, { style: "currency", currency: "INR" }).format(1234567.89)}
+                    {" · "}
+                    {new Intl.NumberFormat(localePrefs.numberFormat).format(98765432.1)}
+                  </p>
+                </div>
+              </div>
+
+              {/* Date & Time */}
+              <div className="card p-6 space-y-5">
+                <div className="flex items-center gap-2 mb-1">
+                  <Clock className="w-5 h-5 text-amber-500" />
+                  <h3 className="text-lg font-semibold text-text-light-primary dark:text-text-dark-primary">Date & Time</h3>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="label">Timezone</label>
+                    <select value={localePrefs.timezone} onChange={e => setLocalePrefs(p => ({ ...p, timezone: e.target.value }))} className="input-field">
+                      <option value="Asia/Kolkata">Asia/Kolkata (IST, UTC+5:30)</option>
+                      <option value="America/New_York">America/New York (EST, UTC−5)</option>
+                      <option value="America/Chicago">America/Chicago (CST, UTC−6)</option>
+                      <option value="America/Los_Angeles">America/Los Angeles (PST, UTC−8)</option>
+                      <option value="Europe/London">Europe/London (GMT, UTC+0)</option>
+                      <option value="Europe/Berlin">Europe/Berlin (CET, UTC+1)</option>
+                      <option value="Asia/Dubai">Asia/Dubai (GST, UTC+4)</option>
+                      <option value="Asia/Singapore">Asia/Singapore (SGT, UTC+8)</option>
+                      <option value="Asia/Tokyo">Asia/Tokyo (JST, UTC+9)</option>
+                      <option value="Australia/Sydney">Australia/Sydney (AEST, UTC+10)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="label">Date Format</label>
+                    <select value={localePrefs.dateFormat} onChange={e => setLocalePrefs(p => ({ ...p, dateFormat: e.target.value }))} className="input-field">
+                      <option value="DD/MM/YYYY">DD/MM/YYYY (28/02/2026)</option>
+                      <option value="MM/DD/YYYY">MM/DD/YYYY (02/28/2026)</option>
+                      <option value="YYYY-MM-DD">YYYY-MM-DD (2026-02-28)</option>
+                      <option value="DD-MMM-YYYY">DD-MMM-YYYY (28-Feb-2026)</option>
+                      <option value="MMM DD, YYYY">MMM DD, YYYY (Feb 28, 2026)</option>
+                      <option value="DD.MM.YYYY">DD.MM.YYYY (28.02.2026)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="label">Time Format</label>
+                    <div className="flex gap-3">
+                      <button onClick={() => setLocalePrefs(p => ({ ...p, timeFormat: "12h" }))} className={cn("flex-1 py-2.5 rounded-xl border-2 text-sm font-medium transition-all", localePrefs.timeFormat === "12h" ? "border-primary-500 bg-primary-50 dark:bg-primary-500/10 text-primary-700 dark:text-primary-400" : "border-surface-light-border dark:border-surface-dark-border text-text-light-secondary dark:text-text-dark-secondary hover:border-primary-300")}>
+                        12-Hour
+                      </button>
+                      <button onClick={() => setLocalePrefs(p => ({ ...p, timeFormat: "24h" }))} className={cn("flex-1 py-2.5 rounded-xl border-2 text-sm font-medium transition-all", localePrefs.timeFormat === "24h" ? "border-primary-500 bg-primary-50 dark:bg-primary-500/10 text-primary-700 dark:text-primary-400" : "border-surface-light-border dark:border-surface-dark-border text-text-light-secondary dark:text-text-dark-secondary hover:border-primary-300")}>
+                        24-Hour
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="label">First Day of Week</label>
+                    <select value={localePrefs.firstDayOfWeek} onChange={e => setLocalePrefs(p => ({ ...p, firstDayOfWeek: e.target.value as any }))} className="input-field">
+                      <option value="monday">Monday</option>
+                      <option value="sunday">Sunday</option>
+                      <option value="saturday">Saturday</option>
+                    </select>
+                  </div>
+                </div>
+                {/* Live Preview */}
+                <div className="p-3 rounded-xl bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-500/5 dark:to-orange-500/5 border border-amber-200 dark:border-amber-500/20">
+                  <p className="text-[10px] uppercase font-medium text-amber-600 dark:text-amber-400 mb-1.5 tracking-wider">Live Preview</p>
+                  <p className="text-sm text-text-light-primary dark:text-text-dark-primary font-mono">
+                    {new Date().toLocaleDateString(localePrefs.language, { year: "numeric", month: "2-digit", day: "2-digit", timeZone: localePrefs.timezone })}
+                    {" · "}
+                    {new Date().toLocaleTimeString(localePrefs.language, { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: localePrefs.timeFormat === "12h", timeZone: localePrefs.timezone })}
+                  </p>
+                </div>
+              </div>
+
+              {/* Business & Measurement */}
+              <div className="card p-6 space-y-5">
+                <div className="flex items-center gap-2 mb-1">
+                  <Ruler className="w-5 h-5 text-emerald-500" />
+                  <h3 className="text-lg font-semibold text-text-light-primary dark:text-text-dark-primary">Business & Measurement</h3>
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="label">Fiscal Year Start</label>
+                    <select value={localePrefs.fiscalYearStart} onChange={e => setLocalePrefs(p => ({ ...p, fiscalYearStart: e.target.value }))} className="input-field">
+                      <option value="january">January</option>
+                      <option value="april">April (India Standard)</option>
+                      <option value="july">July</option>
+                      <option value="october">October</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="label">Measurement Units</label>
+                    <select value={localePrefs.measurementUnit} onChange={e => setLocalePrefs(p => ({ ...p, measurementUnit: e.target.value as any }))} className="input-field">
+                      <option value="metric">Metric (mm, cm, kg)</option>
+                      <option value="imperial">Imperial (in, ft, lbs)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="label">Default Paper Size</label>
+                    <select value={localePrefs.paperSize} onChange={e => setLocalePrefs(p => ({ ...p, paperSize: e.target.value as any }))} className="input-field">
+                      <option value="A4">A4 (210 × 297 mm)</option>
+                      <option value="Letter">Letter (8.5 × 11 in)</option>
+                      <option value="Legal">Legal (8.5 × 14 in)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Save Button */}
+              <div className="flex justify-end pt-2">
+                <button onClick={handleSaveLocale} className="btn-primary flex items-center gap-1.5">
+                  {localeSaved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
+                  {localeSaved ? "Saved!" : "Save Preferences"}
+                </button>
+              </div>
             </div>
           )}
 
@@ -339,6 +559,43 @@ export function Settings() {
           )}
         </div>
       </div>
+
+      {/* Backup Modal */}
+      {showBackupModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-surface-light-primary dark:bg-surface-dark-primary rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6">
+              <h2 className="text-xl font-bold text-text-light-primary dark:text-text-dark-primary mb-2">Backup Data</h2>
+              <p className="text-sm text-text-light-secondary dark:text-text-dark-secondary mb-6">Choose what data you would like to include in this backup.</p>
+
+              <div className="space-y-3">
+                <label className={cn("flex items-start gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all", backupType === "complete" ? "border-primary-500 bg-primary-50 dark:bg-primary-500/10" : "border-surface-light-border dark:border-surface-dark-border hover:border-primary-300")}>
+                  <input type="radio" name="backupType" value="complete" checked={backupType === "complete"} onChange={() => setBackupType("complete")} className="mt-1 w-4 h-4 text-primary-600 border-gray-300 focus:ring-primary-500" />
+                  <div>
+                    <p className="font-semibold text-text-light-primary dark:text-text-dark-primary">Complete Application</p>
+                    <p className="text-xs text-text-light-secondary dark:text-text-dark-secondary mt-1">Includes all application settings, templates, estimation configurations, customers, jobs, and quotations.</p>
+                  </div>
+                </label>
+
+                <label className={cn("flex items-start gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all", backupType === "data" ? "border-primary-500 bg-primary-50 dark:bg-primary-500/10" : "border-surface-light-border dark:border-surface-dark-border hover:border-primary-300")}>
+                  <input type="radio" name="backupType" value="data" checked={backupType === "data"} onChange={() => setBackupType("data")} className="mt-1 w-4 h-4 text-primary-600 border-gray-300 focus:ring-primary-500" />
+                  <div>
+                    <p className="font-semibold text-text-light-primary dark:text-text-dark-primary">Data Only</p>
+                    <p className="text-xs text-text-light-secondary dark:text-text-dark-secondary mt-1">Includes only customers, jobs, and quotations data. Settings and configurations are ignored.</p>
+                  </div>
+                </label>
+              </div>
+
+              <div className="flex gap-3 justify-end mt-8">
+                <button onClick={() => setShowBackupModal(false)} className="btn-ghost">Cancel</button>
+                <button onClick={executeBackup} className="btn-primary flex items-center gap-2">
+                  <Download className="w-4 h-4" /> Save Backup
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
