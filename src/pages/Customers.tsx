@@ -17,12 +17,12 @@ const PRIORITY_DOTS: Record<string, { color: string; label: string }> = {
 };
 
 const MOCK_CUSTOMERS: Customer[] = [
-  { id: "mock-1", code: "OUP-001", name: "Oxford University Press", contactPerson: "James Smith", email: "james@oup.com", phone: "+44 1865 556767", city: "Oxford", country: "United Kingdom", priority: "high", isActive: true, totalOrders: 45, totalRevenue: 28500000, createdAt: "2024-01-15T10:00:00Z", updatedAt: "2024-01-15T10:00:00Z", gstNumber: "", address: "", state: "", pincode: "" },
-  { id: "mock-2", code: "CUP-002", name: "Cambridge University Press", contactPerson: "Sarah Johnson", email: "sarah@cup.org", phone: "+44 1223 358331", city: "Cambridge", country: "United Kingdom", priority: "high", isActive: true, totalOrders: 38, totalRevenue: 19200000, createdAt: "2024-02-20T09:00:00Z", updatedAt: "2024-02-20T09:00:00Z", gstNumber: "", address: "", state: "", pincode: "" },
-  { id: "mock-3", code: "PEN-003", name: "Penguin Random House", contactPerson: "Mike Wilson", email: "mike@penguin.com", phone: "+1 212 782 9000", city: "New York", country: "United States", priority: "medium", isActive: true, totalOrders: 22, totalRevenue: 12800000, createdAt: "2024-03-10T11:00:00Z", updatedAt: "2024-03-10T11:00:00Z", gstNumber: "", address: "", state: "", pincode: "" },
-  { id: "mock-4", code: "NGS-004", name: "National Geographic Society", contactPerson: "Emily Davis", email: "emily@natgeo.com", phone: "+1 202 857 7000", city: "Washington DC", country: "United States", priority: "medium", isActive: true, totalOrders: 8, totalRevenue: 8900000, createdAt: "2024-05-01T14:00:00Z", updatedAt: "2024-05-01T14:00:00Z", gstNumber: "", address: "", state: "", pincode: "" },
-  { id: "mock-5", code: "HAR-005", name: "HarperCollins Publishers", contactPerson: "Tom Brown", email: "tom@harpercollins.com", phone: "+1 212 207 7000", city: "New York", country: "United States", priority: "low", isActive: true, totalOrders: 15, totalRevenue: 7600000, createdAt: "2024-04-15T08:00:00Z", updatedAt: "2024-04-15T08:00:00Z", gstNumber: "", address: "", state: "", pincode: "" },
-  { id: "mock-6", code: "WIL-006", name: "John Wiley & Sons", contactPerson: "Anna White", email: "anna@wiley.com", phone: "+1 201 748 6000", city: "Hoboken", country: "United States", priority: "low", isActive: false, totalOrders: 5, totalRevenue: 1600000, createdAt: "2024-06-01T10:00:00Z", updatedAt: "2024-06-01T10:00:00Z", gstNumber: "", address: "", state: "", pincode: "" },
+  { id: "mock-1", code: "OUP-001", name: "Oxford University Press", contactPerson: "James Smith", email: "james@oup.com", phone: "+44 1865 556767", alternatePhone: "", city: "Oxford", country: "United Kingdom", priority: "high", isActive: true, totalOrders: 45, totalRevenue: 28500000, createdAt: "2024-01-15T10:00:00Z", updatedAt: "2024-01-15T10:00:00Z", gstNumber: "", panNumber: "", address: "", state: "", pincode: "", category: "", creditLimit: 0, paymentTerms: "", notes: "" },
+  { id: "mock-2", code: "CUP-002", name: "Cambridge University Press", contactPerson: "Sarah Johnson", email: "sarah@cup.org", phone: "+44 1223 358331", alternatePhone: "", city: "Cambridge", country: "United Kingdom", priority: "high", isActive: true, totalOrders: 38, totalRevenue: 19200000, createdAt: "2024-02-20T09:00:00Z", updatedAt: "2024-02-20T09:00:00Z", gstNumber: "", panNumber: "", address: "", state: "", pincode: "", category: "", creditLimit: 0, paymentTerms: "", notes: "" },
+  { id: "mock-3", code: "PEN-003", name: "Penguin Random House", contactPerson: "Mike Wilson", email: "mike@penguin.com", phone: "+1 212 782 9000", alternatePhone: "", city: "New York", country: "United States", priority: "medium", isActive: true, totalOrders: 22, totalRevenue: 12800000, createdAt: "2024-03-10T11:00:00Z", updatedAt: "2024-03-10T11:00:00Z", gstNumber: "", panNumber: "", address: "", state: "", pincode: "", category: "", creditLimit: 0, paymentTerms: "", notes: "" },
+  { id: "mock-4", code: "NGS-004", name: "National Geographic Society", contactPerson: "Emily Davis", email: "emily@natgeo.com", phone: "+1 202 857 7000", alternatePhone: "", city: "Washington DC", country: "United States", priority: "medium", isActive: true, totalOrders: 8, totalRevenue: 8900000, createdAt: "2024-05-01T14:00:00Z", updatedAt: "2024-05-01T14:00:00Z", gstNumber: "", panNumber: "", address: "", state: "", pincode: "", category: "", creditLimit: 0, paymentTerms: "", notes: "" },
+  { id: "mock-5", code: "HAR-005", name: "HarperCollins Publishers", contactPerson: "Tom Brown", email: "tom@harpercollins.com", phone: "+1 212 207 7000", alternatePhone: "", city: "New York", country: "United States", priority: "low", isActive: true, totalOrders: 15, totalRevenue: 7600000, createdAt: "2024-04-15T08:00:00Z", updatedAt: "2024-04-15T08:00:00Z", gstNumber: "", panNumber: "", address: "", state: "", pincode: "", category: "", creditLimit: 0, paymentTerms: "", notes: "" },
+  { id: "mock-6", code: "WIL-006", name: "John Wiley & Sons", contactPerson: "Anna White", email: "anna@wiley.com", phone: "+1 201 748 6000", alternatePhone: "", city: "Hoboken", country: "United States", priority: "low", isActive: false, totalOrders: 5, totalRevenue: 1600000, createdAt: "2024-06-01T10:00:00Z", updatedAt: "2024-06-01T10:00:00Z", gstNumber: "", panNumber: "", address: "", state: "", pincode: "", category: "", creditLimit: 0, paymentTerms: "", notes: "" },
 ];
 
 type CustomerFormData = {
@@ -81,6 +81,7 @@ export function Customers() {
       contactPerson: formData.contactPerson.trim(),
       email: formData.email.trim(),
       phone: formData.phone.trim(),
+      alternatePhone: "",
       city: formData.city.trim(),
       country: formData.country.trim(),
       priority: formData.priority,
@@ -88,6 +89,11 @@ export function Customers() {
       state: formData.state.trim(),
       pincode: formData.pincode.trim(),
       gstNumber: formData.gstNumber.trim(),
+      panNumber: "",
+      category: "",
+      creditLimit: 0,
+      paymentTerms: "",
+      notes: "",
       isActive: true,
     });
     addNotification({ type: "success", title: "Customer Added", message: `${newCustomer.name} (${newCustomer.code}) has been added successfully.`, category: "customer" });

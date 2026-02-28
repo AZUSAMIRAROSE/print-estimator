@@ -3,8 +3,8 @@ import { useAppStore } from "@/stores/appStore";
 import { cn } from "@/utils/cn";
 import { formatCurrency, formatNumber, generateId } from "@/utils/format";
 import {
-  Warehouse, Search, Plus, Filter, Edit3, Trash2, Save, X,
-  AlertTriangle, Check, Package, BarChart3, Download
+  Warehouse, Search, Plus, Edit3, Trash2,
+  AlertTriangle, BarChart3, Download
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { downloadTextFile } from "@/utils/export";

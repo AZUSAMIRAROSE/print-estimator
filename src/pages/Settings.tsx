@@ -2,13 +2,12 @@ import { useState, useRef } from "react";
 import { useAppStore } from "@/stores/appStore";
 import { useDataStore } from "@/stores/dataStore";
 import { cn } from "@/utils/cn";
-import { formatDate, formatNumber } from "@/utils/format";
 import { downloadTextFile } from "@/utils/export";
-import { DEFAULT_CURRENCIES, APP_VERSION, APP_BUILD, APP_NAME } from "@/constants";
+import { APP_VERSION, APP_BUILD, APP_NAME } from "@/constants";
 import {
   Settings as SettingsIcon, Building, Palette, Bell, Database,
-  Shield, Save, RotateCcw, Download, Upload, Trash2,
-  Sun, Moon, Info, Activity, Globe, ChevronRight, Check, AlertTriangle
+  Save, Download, Upload, Trash2,
+  Sun, Moon, Info, Activity, Globe, ChevronRight, Check
 } from "lucide-react";
 
 type SettingsTab = "company" | "appearance" | "notifications" | "currency" | "database" | "activity" | "about";
