@@ -15,6 +15,9 @@ import emailRoutes from "./routes/email.js";
 import fileRoutes from "./routes/files.js";
 import paymentRoutes from "./routes/payments.js";
 import systemRoutes from "./routes/system.js";
+import customerRoutes from "./routes/customers.js";
+import jobRoutes from "./routes/jobs.js";
+import inventoryRoutes from "./routes/inventory.js";
 
 const app = express();
 const port = Number(process.env.PORT || 4000);
@@ -60,6 +63,9 @@ app.use("/api/v1/rates", rateRoutes);
 app.use("/api/v1/email", emailRoutes);
 app.use("/api/v1/files", fileRoutes);
 app.use("/api/v1/payments", paymentRoutes);
+app.use("/api/v1/customers", customerRoutes);
+app.use("/api/v1/jobs", jobRoutes);
+app.use("/api/v1/inventory", inventoryRoutes);
 
 app.use((err, _req, res, _next) => {
   const isValidation = err?.name === "ZodError";

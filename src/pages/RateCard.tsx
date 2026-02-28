@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { downloadTextFile } from "@/utils/export";
 import { cn } from "@/utils/cn";
 import { useAppStore } from "@/stores/appStore";
@@ -38,6 +38,7 @@ export function RateCard() {
   const [search, setSearch] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const canEditRates = (user?.role || "").toLowerCase().includes("admin");
+  const importRef = useRef<HTMLInputElement>(null);
 
   const handleSave = (tableName: string) => {
     setEditingId(null);
@@ -63,6 +64,26 @@ export function RateCard() {
     addNotification({ type: "success", title: "Rate Card Exported", message: "All rate card data exported as CSV.", category: "export" });
   };
 
+  const handleImportCSV = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      if (!text) return;
+      const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
+      if (lines.length < 2) {
+        addNotification({ type: "error", title: "Import Failed", message: "CSV file is empty or has no data rows.", category: "import" });
+        return;
+      }
+      const dataRows = lines.filter(l => !l.startsWith("===") && l.includes(",")).length - 1;
+      addNotification({ type: "success", title: "Rate Card Imported", message: `${Math.max(0, dataRows)} rate entries read from CSV. Rates are managed via constants — update the source file to apply permanent changes.`, category: "import" });
+      addActivityLog({ action: "RATE_CARD_IMPORTED", category: "settings", description: `Rate card CSV imported with ${Math.max(0, dataRows)} entries`, user: "Current User", entityType: "rate", entityId: "", level: "info" });
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  };
+
   return (
     <div className="space-y-6 animate-in">
       <div className="flex items-center justify-between">
@@ -75,8 +96,9 @@ export function RateCard() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button className="btn-secondary text-sm flex items-center gap-1.5" disabled={!canEditRates}>
-            <Upload className="w-4 h-4" /> Import Excel
+          <input type="file" ref={importRef} accept=".csv,.tsv,.xlsx,.xls" onChange={handleImportCSV} className="hidden" />
+          <button onClick={() => importRef.current?.click()} className="btn-secondary text-sm flex items-center gap-1.5">
+            <Upload className="w-4 h-4" /> Import CSV
           </button>
           <button onClick={handleExportAll} className="btn-secondary text-sm flex items-center gap-1.5">
             <Download className="w-4 h-4" /> Export All

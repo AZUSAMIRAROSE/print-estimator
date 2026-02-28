@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useAppStore } from "@/stores/appStore";
 import { useDataStore } from "@/stores/dataStore";
 import { cn } from "@/utils/cn";
@@ -71,6 +71,57 @@ export function Customers() {
     downloadTextFile("customers-export.csv", csv, "text/csv;charset=utf-8");
     addNotification({ type: "success", title: "Customers Exported", message: `${allCustomers.length} customers exported as CSV.`, category: "export" });
     addActivityLog({ action: "CUSTOMERS_EXPORTED", category: "customer", description: `Exported ${allCustomers.length} customers as CSV`, user: "Current User", entityType: "customer", entityId: "", level: "info" });
+  };
+
+  const importFileRef = useRef<HTMLInputElement>(null);
+  const handleImportCSV = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      if (!text) return;
+      const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
+      if (lines.length < 2) {
+        addNotification({ type: "error", title: "Import Failed", message: "CSV file is empty or has no data rows.", category: "import" });
+        return;
+      }
+      const headers = lines[0].split(",").map(h => h.replace(/"/g, "").trim().toLowerCase());
+      let imported = 0;
+      for (let i = 1; i < lines.length; i++) {
+        const vals = lines[i].split(",").map(v => v.replace(/^"|"$/g, "").trim());
+        const obj: Record<string, string> = {};
+        headers.forEach((h, idx) => { obj[h] = vals[idx] || ""; });
+        const name = obj["name"] || obj["customer name"] || obj["company"];
+        if (!name) continue;
+        addCustomer({
+          name,
+          code: obj["code"] || generateCustomerCode(name),
+          contactPerson: obj["contact person"] || obj["contact"] || "",
+          email: obj["email"] || "",
+          phone: obj["phone"] || obj["telephone"] || "",
+          alternatePhone: "",
+          city: obj["city"] || "",
+          country: obj["country"] || "India",
+          priority: (obj["priority"] as "high" | "medium" | "low") || "medium",
+          address: obj["address"] || "",
+          state: obj["state"] || "",
+          pincode: obj["pincode"] || obj["zip"] || "",
+          gstNumber: obj["gst number"] || obj["gst"] || "",
+          panNumber: obj["pan number"] || obj["pan"] || "",
+          category: "",
+          creditLimit: 0,
+          paymentTerms: "",
+          notes: obj["notes"] || "",
+          isActive: true,
+        });
+        imported++;
+      }
+      addNotification({ type: "success", title: "Import Complete", message: `${imported} customers imported from CSV.`, category: "import" });
+      addActivityLog({ action: "CUSTOMERS_IMPORTED", category: "customer", description: `Imported ${imported} customers from CSV`, user: "Current User", entityType: "customer", entityId: "", level: "info" });
+    };
+    reader.readAsText(file);
+    e.target.value = "";
   };
 
   const handleAddCustomer = () => {
@@ -163,6 +214,10 @@ export function Customers() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <input type="file" ref={importFileRef} accept=".csv" onChange={handleImportCSV} className="hidden" />
+          <button onClick={() => importFileRef.current?.click()} className="btn-secondary text-sm flex items-center gap-1.5">
+            <Upload className="w-4 h-4" /> Import CSV
+          </button>
           <button onClick={handleExport} className="btn-secondary text-sm flex items-center gap-1.5">
             <Download className="w-4 h-4" /> Export CSV
           </button>

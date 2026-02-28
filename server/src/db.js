@@ -69,5 +69,59 @@ export function runMigrations() {
       created_at TEXT NOT NULL,
       FOREIGN KEY(user_id) REFERENCES users(id)
     );
+
+    CREATE TABLE IF NOT EXISTS customers (
+      id TEXT PRIMARY KEY,
+      code TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      contact_person TEXT DEFAULT '',
+      email TEXT DEFAULT '',
+      phone TEXT DEFAULT '',
+      address TEXT DEFAULT '',
+      city TEXT DEFAULT '',
+      state TEXT DEFAULT '',
+      country TEXT DEFAULT 'India',
+      gst_number TEXT DEFAULT '',
+      pan_number TEXT DEFAULT '',
+      priority TEXT DEFAULT 'medium',
+      status TEXT DEFAULT 'active',
+      notes TEXT DEFAULT '',
+      total_orders INTEGER DEFAULT 0,
+      total_revenue REAL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS jobs (
+      id TEXT PRIMARY KEY,
+      job_number TEXT NOT NULL UNIQUE,
+      title TEXT NOT NULL,
+      customer_id TEXT,
+      customer_name TEXT DEFAULT '',
+      status TEXT DEFAULT 'draft',
+      quantities TEXT DEFAULT '[]',
+      paper_type TEXT DEFAULT '',
+      binding_type TEXT DEFAULT '',
+      total_value REAL DEFAULT 0,
+      currency TEXT DEFAULT 'INR',
+      priority TEXT DEFAULT 'medium',
+      notes TEXT DEFAULT '',
+      payload_json TEXT DEFAULT '{}',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS inventory (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      sku TEXT DEFAULT '',
+      category TEXT DEFAULT 'other',
+      unit TEXT DEFAULT 'Pieces',
+      stock REAL DEFAULT 0,
+      min_level REAL DEFAULT 0,
+      cost_per_unit REAL DEFAULT 0,
+      supplier TEXT DEFAULT '',
+      last_updated TEXT NOT NULL
+    );
   `);
 }
