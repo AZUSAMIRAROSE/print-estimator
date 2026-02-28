@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useDataStore } from "@/stores/dataStore";
+import { useAppStore } from "@/stores/appStore";
 import { cn } from "@/utils/cn";
 import { formatCurrency, formatDate, getRelativeTime, formatNumber } from "@/utils/format";
 import {
@@ -21,15 +22,16 @@ interface JobEntry {
   binding: string;
   createdAt: string;
   updatedAt: string;
+  isMock?: boolean;
 }
 
 const MOCK_JOBS: JobEntry[] = [
-  { id: "1", jobNumber: "JOB-2507-0001", title: "Oxford English Dictionary 14th Ed", customerName: "Oxford University Press", status: "in_production", quantities: [5000, 10000], totalValue: 2850000, currency: "GBP", binding: "section_sewn_hardcase", createdAt: "2025-07-01T10:30:00Z", updatedAt: "2025-07-10T14:20:00Z" },
-  { id: "2", jobNumber: "JOB-2507-0002", title: "Cambridge Mathematics Grade 10", customerName: "Cambridge University Press", status: "quoted", quantities: [8000], totalValue: 1420000, currency: "GBP", binding: "perfect_binding", createdAt: "2025-07-03T09:00:00Z", updatedAt: "2025-07-08T11:00:00Z" },
-  { id: "3", jobNumber: "JOB-2507-0003", title: "Penguin Classics — Wuthering Heights", customerName: "Penguin Random House", status: "estimated", quantities: [3000, 5000, 10000], totalValue: 980000, currency: "USD", binding: "perfect_binding", createdAt: "2025-07-05T15:00:00Z", updatedAt: "2025-07-05T15:00:00Z" },
-  { id: "4", jobNumber: "JOB-2506-0045", title: "National Geographic World Atlas", customerName: "National Geographic", status: "completed", quantities: [15000], totalValue: 8900000, currency: "USD", binding: "section_sewn_hardcase", createdAt: "2025-06-15T08:00:00Z", updatedAt: "2025-07-01T16:00:00Z" },
-  { id: "5", jobNumber: "JOB-2507-0004", title: "Harper Collins Children's Collection", customerName: "HarperCollins", status: "draft", quantities: [2000], totalValue: 560000, currency: "GBP", binding: "saddle_stitching", createdAt: "2025-07-10T12:00:00Z", updatedAt: "2025-07-10T12:00:00Z" },
-  { id: "6", jobNumber: "JOB-2507-0005", title: "Wiley Professional Handbook", customerName: "John Wiley & Sons", status: "cancelled", quantities: [1000], totalValue: 320000, currency: "USD", binding: "wire_o", createdAt: "2025-07-02T07:00:00Z", updatedAt: "2025-07-06T09:30:00Z" },
+  { id: "mock-1", jobNumber: "JOB-2507-0001", title: "Oxford English Dictionary 14th Ed", customerName: "Oxford University Press", status: "in_production", quantities: [5000, 10000], totalValue: 2850000, currency: "GBP", binding: "section_sewn_hardcase", createdAt: "2025-07-01T10:30:00Z", updatedAt: "2025-07-10T14:20:00Z", isMock: true },
+  { id: "mock-2", jobNumber: "JOB-2507-0002", title: "Cambridge Mathematics Grade 10", customerName: "Cambridge University Press", status: "quoted", quantities: [8000], totalValue: 1420000, currency: "GBP", binding: "perfect_binding", createdAt: "2025-07-03T09:00:00Z", updatedAt: "2025-07-08T11:00:00Z", isMock: true },
+  { id: "mock-3", jobNumber: "JOB-2507-0003", title: "Penguin Classics — Wuthering Heights", customerName: "Penguin Random House", status: "estimated", quantities: [3000, 5000, 10000], totalValue: 980000, currency: "USD", binding: "perfect_binding", createdAt: "2025-07-05T15:00:00Z", updatedAt: "2025-07-05T15:00:00Z", isMock: true },
+  { id: "mock-4", jobNumber: "JOB-2506-0045", title: "National Geographic World Atlas", customerName: "National Geographic", status: "completed", quantities: [15000], totalValue: 8900000, currency: "USD", binding: "section_sewn_hardcase", createdAt: "2025-06-15T08:00:00Z", updatedAt: "2025-07-01T16:00:00Z", isMock: true },
+  { id: "mock-5", jobNumber: "JOB-2507-0004", title: "Harper Collins Children's Collection", customerName: "HarperCollins", status: "draft", quantities: [2000], totalValue: 560000, currency: "GBP", binding: "saddle_stitching", createdAt: "2025-07-10T12:00:00Z", updatedAt: "2025-07-10T12:00:00Z", isMock: true },
+  { id: "mock-6", jobNumber: "JOB-2507-0005", title: "Wiley Professional Handbook", customerName: "John Wiley & Sons", status: "cancelled", quantities: [1000], totalValue: 320000, currency: "USD", binding: "wire_o", createdAt: "2025-07-02T07:00:00Z", updatedAt: "2025-07-06T09:30:00Z", isMock: true },
 ];
 
 const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
@@ -43,30 +45,36 @@ const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
 
 export function Jobs() {
   const navigate = useNavigate();
-  const { jobs } = useDataStore();
+  const { jobs, duplicateJob, deleteJob } = useDataStore();
+  const { addNotification, addActivityLog } = useAppStore();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [sortField, setSortField] = useState<"createdAt" | "title" | "totalValue">("createdAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
+
+  const allJobEntries: JobEntry[] = useMemo(() => {
+    if (jobs.length > 0) {
+      return jobs.map((j) => ({
+        id: j.id,
+        jobNumber: j.jobNumber,
+        title: j.title,
+        customerName: j.customerName,
+        status: j.status,
+        quantities: j.quantities,
+        totalValue: j.totalValue,
+        currency: j.currency,
+        binding: "saved",
+        createdAt: j.createdAt,
+        updatedAt: j.updatedAt,
+        isMock: false,
+      }));
+    }
+    return MOCK_JOBS;
+  }, [jobs]);
 
   const filtered = useMemo(() => {
-    const source = jobs.length > 0
-      ? jobs.map((j) => ({
-          id: j.id,
-          jobNumber: j.jobNumber,
-          title: j.title,
-          customerName: j.customerName,
-          status: j.status,
-          quantities: j.quantities,
-          totalValue: j.totalValue,
-          currency: j.currency,
-          binding: "saved",
-          createdAt: j.createdAt,
-          updatedAt: j.updatedAt,
-        }))
-      : MOCK_JOBS;
-
-    let items = [...source];
+    let items = [...allJobEntries];
 
     if (search) {
       const q = search.toLowerCase();
@@ -90,11 +98,35 @@ export function Jobs() {
     });
 
     return items;
-  }, [search, statusFilter, sortField, sortDir, jobs]);
+  }, [search, statusFilter, sortField, sortDir, allJobEntries]);
 
   const toggleSort = (field: typeof sortField) => {
     if (sortField === field) setSortDir(d => d === "asc" ? "desc" : "asc");
     else { setSortField(field); setSortDir("desc"); }
+  };
+
+  const handleDuplicate = (job: JobEntry) => {
+    if (job.isMock) {
+      addNotification({ type: "info", title: "Demo Data", message: "Cannot duplicate demo data. Create a real estimate first.", category: "job" });
+      return;
+    }
+    const dup = duplicateJob(job.id);
+    if (dup) {
+      addNotification({ type: "success", title: "Job Duplicated", message: `"${dup.title}" created as ${dup.jobNumber}`, category: "job" });
+      addActivityLog({ action: "JOB_DUPLICATED", category: "job", description: `Duplicated job: ${job.title} → ${dup.jobNumber}`, user: "Current User", entityType: "job", entityId: dup.id, level: "info" });
+    }
+  };
+
+  const handleDelete = (job: JobEntry) => {
+    if (job.isMock) {
+      addNotification({ type: "info", title: "Demo Data", message: "Cannot delete demo data.", category: "job" });
+      setShowDeleteConfirm(null);
+      return;
+    }
+    deleteJob(job.id);
+    addNotification({ type: "warning", title: "Job Deleted", message: `"${job.title}" has been removed.`, category: "job" });
+    addActivityLog({ action: "JOB_DELETED", category: "job", description: `Deleted job: ${job.title} (${job.jobNumber})`, user: "Current User", entityType: "job", entityId: job.id, level: "warning" });
+    setShowDeleteConfirm(null);
   };
 
   return (
@@ -105,7 +137,7 @@ export function Jobs() {
             <Briefcase className="w-6 h-6" /> Jobs
           </h1>
           <p className="text-sm text-text-light-secondary dark:text-text-dark-secondary mt-1">
-            {(jobs.length > 0 ? jobs.length : MOCK_JOBS.length)} total jobs • {(jobs.length > 0 ? jobs.filter(j => j.status === "in_production").length : MOCK_JOBS.filter(j => j.status === "in_production").length)} in production
+            {allJobEntries.length} total jobs • {allJobEntries.filter(j => j.status === "in_production").length} in production
           </p>
         </div>
         <button onClick={() => navigate("/estimate/new")} className="btn-primary flex items-center gap-1.5">
@@ -179,7 +211,7 @@ export function Jobs() {
             <div
               key={job.id}
               className="card p-4 hover:shadow-elevated-light dark:hover:shadow-elevated-dark transition-shadow cursor-pointer group"
-              onClick={() => navigate(`/estimate/${job.id}`)}
+              onClick={() => !job.isMock && navigate(`/estimate/${job.id}`)}
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4 flex-1 min-w-0">
@@ -187,6 +219,7 @@ export function Jobs() {
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-mono text-text-light-tertiary dark:text-text-dark-tertiary">{job.jobNumber}</span>
                       <span className={cn("badge text-[10px]", STATUS_CONFIG[job.status]?.color)}>{STATUS_CONFIG[job.status]?.label}</span>
+                      {job.isMock && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-surface-light-tertiary dark:bg-surface-dark-tertiary text-text-light-tertiary dark:text-text-dark-tertiary">Demo</span>}
                     </div>
                     <h3 className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary mt-1 truncate">{job.title}</h3>
                     <p className="text-xs text-text-light-secondary dark:text-text-dark-secondary mt-0.5">
@@ -205,13 +238,25 @@ export function Jobs() {
                     </p>
                   </div>
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
-                    <button className="p-1.5 rounded-lg hover:bg-surface-light-tertiary dark:hover:bg-surface-dark-tertiary" title="View">
+                    <button
+                      onClick={() => !job.isMock && navigate(`/estimate/${job.id}`)}
+                      className="p-1.5 rounded-lg hover:bg-surface-light-tertiary dark:hover:bg-surface-dark-tertiary"
+                      title="View"
+                    >
                       <Eye className="w-4 h-4 text-text-light-tertiary dark:text-text-dark-tertiary" />
                     </button>
-                    <button className="p-1.5 rounded-lg hover:bg-surface-light-tertiary dark:hover:bg-surface-dark-tertiary" title="Duplicate">
+                    <button
+                      onClick={() => handleDuplicate(job)}
+                      className="p-1.5 rounded-lg hover:bg-surface-light-tertiary dark:hover:bg-surface-dark-tertiary"
+                      title="Duplicate"
+                    >
                       <Copy className="w-4 h-4 text-text-light-tertiary dark:text-text-dark-tertiary" />
                     </button>
-                    <button className="p-1.5 rounded-lg hover:bg-danger-50 dark:hover:bg-danger-500/10" title="Delete">
+                    <button
+                      onClick={() => setShowDeleteConfirm(job.id)}
+                      className="p-1.5 rounded-lg hover:bg-danger-50 dark:hover:bg-danger-500/10"
+                      title="Delete"
+                    >
                       <Trash2 className="w-4 h-4 text-danger-500" />
                     </button>
                   </div>
@@ -223,8 +268,34 @@ export function Jobs() {
       </div>
 
       <p className="text-xs text-text-light-tertiary dark:text-text-dark-tertiary text-center">
-        Showing {filtered.length} of {(jobs.length > 0 ? jobs.length : MOCK_JOBS.length)} jobs
+        Showing {filtered.length} of {allJobEntries.length} jobs
       </p>
+
+      {/* Delete Confirmation */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setShowDeleteConfirm(null)} />
+          <div className="relative card p-6 w-full max-w-sm animate-scale-in text-center">
+            <Trash2 className="w-12 h-12 text-danger-500 mx-auto mb-3" />
+            <h3 className="text-lg font-bold text-text-light-primary dark:text-text-dark-primary">Delete Job?</h3>
+            <p className="text-sm text-text-light-secondary dark:text-text-dark-secondary mt-2">
+              This will permanently remove this job and all associated data.
+            </p>
+            <div className="flex justify-center gap-3 mt-5">
+              <button onClick={() => setShowDeleteConfirm(null)} className="btn-secondary">Cancel</button>
+              <button
+                onClick={() => {
+                  const job = allJobEntries.find(j => j.id === showDeleteConfirm);
+                  if (job) handleDelete(job);
+                }}
+                className="btn-danger flex items-center gap-1.5"
+              >
+                <Trash2 className="w-4 h-4" /> Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

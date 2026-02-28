@@ -1,5 +1,7 @@
+import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppStore } from "@/stores/appStore";
+import { useDataStore } from "@/stores/dataStore";
 import { cn } from "@/utils/cn";
 import { formatCurrency, formatNumber, getRelativeTime } from "@/utils/format";
 import {
@@ -12,22 +14,6 @@ import {
   ResponsiveContainer, PieChart as RechartsPie, Pie, Cell,
   LineChart, Line, Legend, AreaChart, Area
 } from "recharts";
-
-// Mock dashboard data (in production this would come from the database)
-const MOCK_STATS = {
-  totalJobs: 147,
-  totalJobsChange: 12.5,
-  activeQuotations: 23,
-  activeQuotationsChange: -3.2,
-  totalCustomers: 89,
-  totalCustomersChange: 8.1,
-  monthlyRevenue: 4850000,
-  monthlyRevenueChange: 15.7,
-  avgJobValue: 325000,
-  conversionRate: 67.3,
-  pendingApprovals: 8,
-  overdueJobs: 2,
-};
 
 const MONTHLY_DATA = [
   { month: "Jan", jobs: 12, revenue: 3200000, quotations: 18 },
@@ -46,7 +32,7 @@ const BINDING_DISTRIBUTION = [
   { name: "Others", value: 7, color: "#64748b" },
 ];
 
-const RECENT_JOBS = [
+const MOCK_RECENT_JOBS = [
   { id: "1", title: "Oxford English Dictionary", customer: "OUP", status: "in_production", value: 850000, date: new Date(Date.now() - 3600000).toISOString() },
   { id: "2", title: "Cambridge Mathematics", customer: "CUP", status: "quoted", value: 420000, date: new Date(Date.now() - 7200000).toISOString() },
   { id: "3", title: "Penguin Classics Collection", customer: "Penguin", status: "estimated", value: 1200000, date: new Date(Date.now() - 86400000).toISOString() },
@@ -65,6 +51,41 @@ const STATUS_COLORS: Record<string, string> = {
 export function Dashboard() {
   const navigate = useNavigate();
   const { user, theme } = useAppStore();
+  const { jobs, quotations, customers } = useDataStore();
+
+  // Compute real stats, fallback to mock
+  const stats = useMemo(() => {
+    const totalJobs = jobs.length || 147;
+    const activeQuotations = quotations.filter(q => q.status === "sent" || q.status === "draft").length || 23;
+    const totalCustomers = customers.length || 89;
+    const totalRevenue = jobs.reduce((s, j) => s + (j.totalValue || 0), 0);
+    const monthlyRevenue = totalRevenue > 0 ? totalRevenue / 6 : 4850000;
+    const avgJobValue = jobs.length > 0 ? totalRevenue / jobs.length : 325000;
+    const accepted = quotations.filter(q => q.status === "accepted").length;
+    const conversionRate = quotations.length > 0 ? (accepted / quotations.length) * 100 : 67.3;
+    const pendingApprovals = quotations.filter(q => q.status === "sent").length || 8;
+    const overdueJobs = 2;
+    return { totalJobs, activeQuotations, totalCustomers, monthlyRevenue, avgJobValue, conversionRate, pendingApprovals, overdueJobs };
+  }, [jobs, quotations, customers]);
+
+  // Recent jobs from real data or mock
+  const recentJobs = useMemo(() => {
+    if (jobs.length > 0) {
+      return jobs
+        .slice()
+        .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+        .slice(0, 5)
+        .map(j => ({
+          id: j.id,
+          title: j.title,
+          customer: j.customerName,
+          status: j.status,
+          value: j.totalValue,
+          date: j.updatedAt,
+        }));
+    }
+    return MOCK_RECENT_JOBS;
+  }, [jobs]);
 
   const StatCard = ({ title, value, change, icon, color, onClick }: {
     title: string; value: string; change: number; icon: React.ReactNode;
@@ -104,7 +125,6 @@ export function Dashboard() {
 
   return (
     <div className="space-y-6 animate-in">
-      {/* Welcome Bar */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-text-light-primary dark:text-text-dark-primary">
@@ -127,32 +147,32 @@ export function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="Total Jobs"
-          value={formatNumber(MOCK_STATS.totalJobs)}
-          change={MOCK_STATS.totalJobsChange}
+          value={formatNumber(stats.totalJobs)}
+          change={12.5}
           icon={<Briefcase className="w-5 h-5 text-blue-600 dark:text-blue-400" />}
           color="bg-blue-50 dark:bg-blue-500/10"
           onClick={() => navigate("/jobs")}
         />
         <StatCard
           title="Active Quotations"
-          value={formatNumber(MOCK_STATS.activeQuotations)}
-          change={MOCK_STATS.activeQuotationsChange}
+          value={formatNumber(stats.activeQuotations)}
+          change={-3.2}
           icon={<FileCheck className="w-5 h-5 text-amber-600 dark:text-amber-400" />}
           color="bg-amber-50 dark:bg-amber-500/10"
           onClick={() => navigate("/quotations")}
         />
         <StatCard
           title="Customers"
-          value={formatNumber(MOCK_STATS.totalCustomers)}
-          change={MOCK_STATS.totalCustomersChange}
+          value={formatNumber(stats.totalCustomers)}
+          change={8.1}
           icon={<Users className="w-5 h-5 text-green-600 dark:text-green-400" />}
           color="bg-green-50 dark:bg-green-500/10"
           onClick={() => navigate("/customers")}
         />
         <StatCard
           title="Monthly Revenue"
-          value={formatCurrency(MOCK_STATS.monthlyRevenue)}
-          change={MOCK_STATS.monthlyRevenueChange}
+          value={formatCurrency(stats.monthlyRevenue)}
+          change={15.7}
           icon={<DollarSign className="w-5 h-5 text-purple-600 dark:text-purple-400" />}
           color="bg-purple-50 dark:bg-purple-500/10"
           onClick={() => navigate("/reports")}
@@ -294,7 +314,7 @@ export function Dashboard() {
             </button>
           </div>
           <div className="space-y-3">
-            {RECENT_JOBS.map((job) => (
+            {recentJobs.map((job) => (
               <div key={job.id} className="flex items-center justify-between p-3 rounded-lg bg-surface-light-secondary dark:bg-surface-dark-tertiary">
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium text-text-light-primary dark:text-text-dark-primary truncate">
@@ -329,10 +349,10 @@ export function Dashboard() {
                 <span className="text-xs text-text-light-secondary dark:text-text-dark-secondary">Conversion Rate</span>
               </div>
               <p className="text-2xl font-bold text-text-light-primary dark:text-text-dark-primary">
-                {MOCK_STATS.conversionRate}%
+                {stats.conversionRate.toFixed(1)}%
               </p>
               <div className="w-full h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full mt-2">
-                <div className="h-full bg-green-500 rounded-full" style={{ width: `${MOCK_STATS.conversionRate}%` }} />
+                <div className="h-full bg-green-500 rounded-full" style={{ width: `${stats.conversionRate}%` }} />
               </div>
             </div>
 
@@ -342,7 +362,7 @@ export function Dashboard() {
                 <span className="text-xs text-text-light-secondary dark:text-text-dark-secondary">Avg Job Value</span>
               </div>
               <p className="text-2xl font-bold text-text-light-primary dark:text-text-dark-primary">
-                {formatCurrency(MOCK_STATS.avgJobValue)}
+                {formatCurrency(stats.avgJobValue)}
               </p>
             </div>
 
@@ -352,7 +372,7 @@ export function Dashboard() {
                 <span className="text-xs text-text-light-secondary dark:text-text-dark-secondary">Pending Approvals</span>
               </div>
               <p className="text-2xl font-bold text-text-light-primary dark:text-text-dark-primary">
-                {MOCK_STATS.pendingApprovals}
+                {stats.pendingApprovals}
               </p>
             </div>
 
@@ -363,11 +383,11 @@ export function Dashboard() {
               </div>
               <p className={cn(
                 "text-2xl font-bold",
-                MOCK_STATS.overdueJobs > 0
+                stats.overdueJobs > 0
                   ? "text-danger-600 dark:text-danger-400"
                   : "text-text-light-primary dark:text-text-dark-primary"
               )}>
-                {MOCK_STATS.overdueJobs}
+                {stats.overdueJobs}
               </p>
             </div>
           </div>
@@ -376,4 +396,3 @@ export function Dashboard() {
     </div>
   );
 }
-

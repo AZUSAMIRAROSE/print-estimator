@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { downloadTextFile } from "@/utils/export";
 import { cn } from "@/utils/cn";
 import { useAppStore } from "@/stores/appStore";
 import { formatCurrency, formatNumber } from "@/utils/format";
@@ -44,6 +45,24 @@ export function RateCard() {
     addActivityLog({ action: "RATE_UPDATED", category: "settings", description: `${tableName} rate updated`, user: "Current User", entityType: "rate", entityId: "", level: "info" });
   };
 
+  const handleExportAll = () => {
+    const lines = [
+      "=== PAPER RATES ===",
+      "Paper Type,Code,GSM,Size,Landed Cost,Charge Rate,Rate/Kg",
+      ...DEFAULT_PAPER_RATES.map(r => `"${r.paperType}","${r.code}",${r.gsm},"${r.size}",${r.landedCost},${r.chargeRate},${r.ratePerKg}`),
+      "",
+      "=== MACHINES ===",
+      "Machine,Max Sheet,Colors,Speed SPH,Make Ready,CTP Rate,Hourly Rate",
+      ...DEFAULT_MACHINES.map(m => `"${m.name}","${m.maxSheetWidth}x${m.maxSheetHeight}",${m.maxColors},${m.speedSPH},${m.makeReadyCost},${m.ctpRate},${m.hourlyRate}`),
+      "",
+      "=== DESTINATIONS ===",
+      "Destination,Country,Type,Sea/Container,Sea/Pallet,Surface/Pallet,Air/Kg,Clearance",
+      ...DEFAULT_DESTINATIONS.map(d => `"${d.name}","${d.country}","${d.isOverseas ? 'Overseas' : 'Domestic'}",${d.seaFreightPerContainer20},${d.seaFreightPerPallet},${d.surfacePerPallet},${d.airFreightPerKg},${d.clearanceCharges}`),
+    ];
+    downloadTextFile("rate-card-export.csv", lines.join("\n"), "text/csv;charset=utf-8");
+    addNotification({ type: "success", title: "Rate Card Exported", message: "All rate card data exported as CSV.", category: "export" });
+  };
+
   return (
     <div className="space-y-6 animate-in">
       <div className="flex items-center justify-between">
@@ -59,7 +78,7 @@ export function RateCard() {
           <button className="btn-secondary text-sm flex items-center gap-1.5" disabled={!canEditRates}>
             <Upload className="w-4 h-4" /> Import Excel
           </button>
-          <button className="btn-secondary text-sm flex items-center gap-1.5">
+          <button onClick={handleExportAll} className="btn-secondary text-sm flex items-center gap-1.5">
             <Download className="w-4 h-4" /> Export All
           </button>
         </div>

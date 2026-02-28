@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { cn } from "@/utils/cn";
 import { useAppStore } from "@/stores/appStore";
-import { formatCurrency, formatNumber, formatPercent } from "@/utils/format";
-import { BarChart3, Download, Calendar, TrendingUp, Users, FileCheck, Briefcase, Printer, Layers, PieChart as PieIcon, Target, DollarSign } from "lucide-react";
+import { useDataStore } from "@/stores/dataStore";
+import { formatCurrency, formatNumber } from "@/utils/format";
+import { downloadTextFile } from "@/utils/export";
+import { BarChart3, Download, Calendar, TrendingUp, TrendingDown, Users, FileCheck, Briefcase, Printer, Layers, PieChart as PieIcon, Target, DollarSign } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, AreaChart, Area, Legend } from "recharts";
 
 const MONTHLY = [
@@ -48,12 +50,94 @@ const BINDING_DATA = [
 type ReportTab = "overview" | "revenue" | "jobs" | "quotations" | "customers" | "machines" | "paper";
 
 export function Reports() {
-  const { theme } = useAppStore();
+  const { theme, addNotification } = useAppStore();
+  const { jobs, quotations, customers } = useDataStore();
   const [tab, setTab] = useState<ReportTab>("overview");
+  const [dateRange, setDateRange] = useState("6m");
 
   const chartStyle = { backgroundColor: theme === "dark" ? "#1e293b" : "#fff", border: `1px solid ${theme === "dark" ? "#475569" : "#e2e8f0"}`, borderRadius: "8px", fontSize: "12px" };
   const tickFill = theme === "dark" ? "#94a3b8" : "#64748b";
   const gridStroke = theme === "dark" ? "#334155" : "#e2e8f0";
+
+  // Compute real stats
+  const realJobCount = jobs.length;
+  const realQuotationCount = quotations.length;
+  const realCustomerCount = customers.length;
+  const realRevenue = jobs.reduce((s, j) => s + (j.totalValue || 0), 0);
+  const acceptedQuotations = quotations.filter(q => q.status === "accepted").length;
+  const sentQuotations = quotations.filter(q => q.status === "sent").length;
+  const conversionRate = realQuotationCount > 0 ? (acceptedQuotations / realQuotationCount) * 100 : 67.3;
+
+  // Revenue by month from real jobs
+  const revenueByMonth = useMemo(() => {
+    if (jobs.length === 0) return MONTHLY;
+    const monthMap: Record<string, { jobs: number; revenue: number; quotations: number; accepted: number }> = {};
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    jobs.forEach(j => {
+      const d = new Date(j.createdAt);
+      const key = months[d.getMonth()];
+      if (!monthMap[key]) monthMap[key] = { jobs: 0, revenue: 0, quotations: 0, accepted: 0 };
+      monthMap[key].jobs++;
+      monthMap[key].revenue += j.totalValue || 0;
+    });
+    quotations.forEach(q => {
+      const d = new Date(q.createdAt);
+      const key = months[d.getMonth()];
+      if (!monthMap[key]) monthMap[key] = { jobs: 0, revenue: 0, quotations: 0, accepted: 0 };
+      monthMap[key].quotations++;
+      if (q.status === "accepted") monthMap[key].accepted++;
+    });
+    const result = Object.entries(monthMap).map(([month, data]) => ({ month, ...data }));
+    return result.length > 0 ? result : MONTHLY;
+  }, [jobs, quotations]);
+
+  // Customer revenue from real data
+  const customerRevenue = useMemo(() => {
+    if (customers.length === 0) return TOP_CUSTOMERS;
+    const cMap: Record<string, { name: string; revenue: number; jobs: number }> = {};
+    jobs.forEach(j => {
+      const key = j.customerName || "Unknown";
+      if (!cMap[key]) cMap[key] = { name: key, revenue: 0, jobs: 0 };
+      cMap[key].revenue += j.totalValue || 0;
+      cMap[key].jobs++;
+    });
+    const sorted = Object.values(cMap).sort((a, b) => b.revenue - a.revenue).slice(0, 5);
+    return sorted.length > 0 ? sorted : TOP_CUSTOMERS;
+  }, [jobs, customers]);
+
+  // Quotation status breakdown
+  const quotationBreakdown = useMemo(() => {
+    if (quotations.length === 0) {
+      return [
+        { name: "Draft", value: 1, color: "#94a3b8" },
+        { name: "Sent", value: 2, color: "#3b82f6" },
+        { name: "Accepted", value: 2, color: "#22c55e" },
+        { name: "Rejected", value: 1, color: "#ef4444" },
+      ];
+    }
+    const counts: Record<string, number> = {};
+    quotations.forEach(q => { counts[q.status] = (counts[q.status] || 0) + 1; });
+    const colors: Record<string, string> = { draft: "#94a3b8", sent: "#3b82f6", accepted: "#22c55e", rejected: "#ef4444", expired: "#f59e0b", revised: "#8b5cf6" };
+    return Object.entries(counts).map(([status, count]) => ({
+      name: status.charAt(0).toUpperCase() + status.slice(1),
+      value: count,
+      color: colors[status] || "#64748b",
+    }));
+  }, [quotations]);
+
+  const handleExport = () => {
+    const lines = [
+      "Report Type,Category,Value",
+      `Total Jobs,Overview,${realJobCount || 97}`,
+      `Total Revenue,Overview,${realRevenue || 24450000}`,
+      `Conversion Rate,Overview,${conversionRate.toFixed(1)}%`,
+      `Total Customers,Overview,${realCustomerCount || 89}`,
+      ...revenueByMonth.map(m => `${m.month},Monthly Revenue,${m.revenue}`),
+      ...customerRevenue.map(c => `${c.name},Customer Revenue,${c.revenue}`),
+    ];
+    downloadTextFile("reports-export.csv", lines.join("\n"), "text/csv;charset=utf-8");
+    addNotification({ type: "success", title: "Report Exported", message: "Report data exported as CSV.", category: "export" });
+  };
 
   return (
     <div className="space-y-6 animate-in">
@@ -63,8 +147,14 @@ export function Reports() {
           <p className="text-sm text-text-light-secondary dark:text-text-dark-secondary mt-1">Comprehensive analytics and business intelligence</p>
         </div>
         <div className="flex items-center gap-2">
-          <button className="btn-secondary text-sm flex items-center gap-1.5"><Calendar className="w-4 h-4" /> Last 6 Months</button>
-          <button className="btn-secondary text-sm flex items-center gap-1.5"><Download className="w-4 h-4" /> Export</button>
+          <div className="flex items-center gap-1 p-1 bg-surface-light-tertiary dark:bg-surface-dark-tertiary rounded-lg">
+            {[{ key: "3m", label: "3 Months" }, { key: "6m", label: "6 Months" }, { key: "1y", label: "1 Year" }].map(r => (
+              <button key={r.key} onClick={() => setDateRange(r.key)} className={cn("px-3 py-1.5 rounded-md text-xs font-medium transition-all", dateRange === r.key ? "bg-white dark:bg-surface-dark-secondary shadow-sm" : "text-text-light-secondary dark:text-text-dark-secondary")}>
+                {r.label}
+              </button>
+            ))}
+          </div>
+          <button onClick={handleExport} className="btn-secondary text-sm flex items-center gap-1.5"><Download className="w-4 h-4" /> Export</button>
         </div>
       </div>
 
@@ -87,10 +177,10 @@ export function Reports() {
       {tab === "overview" && (
         <div className="space-y-6 animate-in">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <StatBox icon={<Briefcase className="w-5 h-5 text-blue-500" />} label="Total Jobs" value="97" change={12.5} />
-            <StatBox icon={<DollarSign className="w-5 h-5 text-green-500" />} label="Total Revenue" value={formatCurrency(24450000)} change={15.7} />
-            <StatBox icon={<FileCheck className="w-5 h-5 text-amber-500" />} label="Conversion Rate" value="67.3%" change={3.2} />
-            <StatBox icon={<Target className="w-5 h-5 text-purple-500" />} label="Avg Job Value" value={formatCurrency(252000)} change={8.1} />
+            <StatBox icon={<Briefcase className="w-5 h-5 text-blue-500" />} label="Total Jobs" value={formatNumber(realJobCount || 97)} change={12.5} />
+            <StatBox icon={<DollarSign className="w-5 h-5 text-green-500" />} label="Total Revenue" value={formatCurrency(realRevenue || 24450000)} change={15.7} />
+            <StatBox icon={<FileCheck className="w-5 h-5 text-amber-500" />} label="Conversion Rate" value={`${conversionRate.toFixed(1)}%`} change={3.2} />
+            <StatBox icon={<Target className="w-5 h-5 text-purple-500" />} label="Avg Job Value" value={formatCurrency(realJobCount > 0 ? realRevenue / realJobCount : 252000)} change={8.1} />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -98,7 +188,7 @@ export function Reports() {
               <h3 className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary mb-4">Revenue Trend</h3>
               <div className="h-64 min-w-0">
                 <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={1}>
-                  <AreaChart data={MONTHLY}>
+                  <AreaChart data={revenueByMonth}>
                     <defs><linearGradient id="rg" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#3b82f6" stopOpacity={0.15} /><stop offset="95%" stopColor="#3b82f6" stopOpacity={0} /></linearGradient></defs>
                     <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
                     <XAxis dataKey="month" tick={{ fontSize: 12, fill: tickFill }} />
@@ -126,13 +216,135 @@ export function Reports() {
           <div className="card p-5">
             <h3 className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary mb-4">Top Customers by Revenue</h3>
             <div className="space-y-3">
-              {TOP_CUSTOMERS.map((c, i) => (
+              {customerRevenue.map((c, i) => (
                 <div key={c.name} className="flex items-center gap-4">
                   <span className="text-xs font-bold text-text-light-tertiary dark:text-text-dark-tertiary w-6">#{i + 1}</span>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-text-light-primary dark:text-text-dark-primary truncate">{c.name}</p>
                     <div className="w-full h-2 bg-surface-light-tertiary dark:bg-surface-dark-tertiary rounded-full mt-1">
-                      <div className="h-full bg-primary-500 rounded-full" style={{ width: `${(c.revenue / TOP_CUSTOMERS[0].revenue) * 100}%` }} />
+                      <div className="h-full bg-primary-500 rounded-full" style={{ width: `${(c.revenue / (customerRevenue[0]?.revenue || 1)) * 100}%` }} />
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-sm font-bold text-text-light-primary dark:text-text-dark-primary">{formatCurrency(c.revenue)}</p>
+                    <p className="text-[10px] text-text-light-tertiary dark:text-text-dark-tertiary">{c.jobs} jobs</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tab === "revenue" && (
+        <div className="space-y-6 animate-in">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <StatBox icon={<DollarSign className="w-5 h-5 text-green-500" />} label="Total Revenue" value={formatCurrency(realRevenue || 24450000)} change={15.7} />
+            <StatBox icon={<TrendingUp className="w-5 h-5 text-blue-500" />} label="Avg Monthly" value={formatCurrency((realRevenue || 24450000) / 6)} change={8.3} />
+            <StatBox icon={<Target className="w-5 h-5 text-purple-500" />} label="Best Month" value="May" change={22.1} />
+            <StatBox icon={<DollarSign className="w-5 h-5 text-amber-500" />} label="Avg per Job" value={formatCurrency(realJobCount > 0 ? realRevenue / realJobCount : 252000)} change={5.4} />
+          </div>
+          <div className="card p-5 min-w-0">
+            <h3 className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary mb-4">Revenue & Jobs Trend</h3>
+            <div className="h-72 min-w-0">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={1}>
+                <AreaChart data={revenueByMonth}>
+                  <defs><linearGradient id="rg2" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#3b82f6" stopOpacity={0.15} /><stop offset="95%" stopColor="#3b82f6" stopOpacity={0} /></linearGradient></defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                  <XAxis dataKey="month" tick={{ fontSize: 12, fill: tickFill }} />
+                  <YAxis tick={{ fontSize: 12, fill: tickFill }} tickFormatter={v => `₹${(v / 100000).toFixed(0)}L`} />
+                  <Tooltip contentStyle={chartStyle} />
+                  <Area type="monotone" dataKey="revenue" stroke="#3b82f6" strokeWidth={2} fill="url(#rg2)" name="Revenue" />
+                  <Line type="monotone" dataKey="jobs" stroke="#f59e0b" strokeWidth={2} dot={{ r: 4 }} yAxisId={0} name="Jobs" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tab === "jobs" && (
+        <div className="space-y-6 animate-in">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <StatBox icon={<Briefcase className="w-5 h-5 text-blue-500" />} label="Total Jobs" value={formatNumber(realJobCount || 97)} change={12.5} />
+            <StatBox icon={<Briefcase className="w-5 h-5 text-purple-500" />} label="In Production" value={formatNumber(jobs.filter(j => j.status === "in_production").length || 3)} change={5.0} />
+            <StatBox icon={<Briefcase className="w-5 h-5 text-green-500" />} label="Completed" value={formatNumber(jobs.filter(j => j.status === "completed").length || 45)} change={18.2} />
+            <StatBox icon={<Briefcase className="w-5 h-5 text-amber-500" />} label="Draft" value={formatNumber(jobs.filter(j => j.status === "draft").length || 12)} change={-2.1} />
+          </div>
+          <div className="card p-5 min-w-0">
+            <h3 className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary mb-4">Jobs by Month</h3>
+            <div className="h-64 min-w-0">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={1}>
+                <BarChart data={revenueByMonth}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                  <XAxis dataKey="month" tick={{ fontSize: 12, fill: tickFill }} />
+                  <YAxis tick={{ fontSize: 12, fill: tickFill }} />
+                  <Tooltip contentStyle={chartStyle} />
+                  <Bar dataKey="jobs" name="Jobs" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tab === "quotations" && (
+        <div className="space-y-6 animate-in">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <StatBox icon={<FileCheck className="w-5 h-5 text-blue-500" />} label="Total Quotes" value={formatNumber(realQuotationCount || 134)} change={9.8} />
+            <StatBox icon={<FileCheck className="w-5 h-5 text-green-500" />} label="Accepted" value={formatNumber(acceptedQuotations || 71)} change={12.4} />
+            <StatBox icon={<FileCheck className="w-5 h-5 text-amber-500" />} label="Pending" value={formatNumber(sentQuotations || 23)} change={-5.2} />
+            <StatBox icon={<Target className="w-5 h-5 text-purple-500" />} label="Conversion" value={`${conversionRate.toFixed(1)}%`} change={3.2} />
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="card p-5 min-w-0">
+              <h3 className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary mb-4">Quotation Status Distribution</h3>
+              <div className="h-52 min-w-0">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={1}>
+                  <PieChart><Pie data={quotationBreakdown} cx="50%" cy="50%" innerRadius={45} outerRadius={75} paddingAngle={3} dataKey="value">{quotationBreakdown.map((e, i) => <Cell key={i} fill={e.color} />)}</Pie><Tooltip contentStyle={chartStyle} /></PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="flex flex-wrap gap-3 justify-center mt-2">
+                {quotationBreakdown.map(b => (<div key={b.name} className="flex items-center gap-1.5 text-xs"><div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: b.color }} />{b.name} ({b.value})</div>))}
+              </div>
+            </div>
+            <div className="card p-5 min-w-0">
+              <h3 className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary mb-4">Quotations vs Accepted Trend</h3>
+              <div className="h-64 min-w-0">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={1}>
+                  <BarChart data={revenueByMonth}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                    <XAxis dataKey="month" tick={{ fontSize: 12, fill: tickFill }} />
+                    <YAxis tick={{ fontSize: 12, fill: tickFill }} />
+                    <Tooltip contentStyle={chartStyle} />
+                    <Bar dataKey="quotations" name="Sent" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="accepted" name="Accepted" fill="#22c55e" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tab === "customers" && (
+        <div className="space-y-6 animate-in">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <StatBox icon={<Users className="w-5 h-5 text-blue-500" />} label="Total Customers" value={formatNumber(realCustomerCount || 89)} change={8.1} />
+            <StatBox icon={<Users className="w-5 h-5 text-green-500" />} label="Active" value={formatNumber(customers.filter(c => c.isActive).length || 78)} change={6.3} />
+            <StatBox icon={<DollarSign className="w-5 h-5 text-purple-500" />} label="Avg Revenue/Customer" value={formatCurrency(realCustomerCount > 0 ? realRevenue / realCustomerCount : 274720)} change={11.2} />
+            <StatBox icon={<Target className="w-5 h-5 text-amber-500" />} label="High Priority" value={formatNumber(customers.filter(c => c.priority === "high").length || 12)} change={2.0} />
+          </div>
+          <div className="card p-5">
+            <h3 className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary mb-4">Customer Revenue Ranking</h3>
+            <div className="space-y-3">
+              {customerRevenue.map((c, i) => (
+                <div key={c.name} className="flex items-center gap-4">
+                  <span className="text-xs font-bold text-text-light-tertiary dark:text-text-dark-tertiary w-6">#{i + 1}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-text-light-primary dark:text-text-dark-primary truncate">{c.name}</p>
+                    <div className="w-full h-2 bg-surface-light-tertiary dark:bg-surface-dark-tertiary rounded-full mt-1">
+                      <div className="h-full bg-primary-500 rounded-full transition-all" style={{ width: `${(c.revenue / (customerRevenue[0]?.revenue || 1)) * 100}%` }} />
                     </div>
                   </div>
                   <div className="text-right shrink-0">
@@ -184,18 +396,6 @@ export function Reports() {
           </table>
         </div>
       )}
-
-      {(tab === "revenue" || tab === "jobs" || tab === "quotations" || tab === "customers") && (
-        <div className="card p-12 text-center animate-in">
-          <BarChart3 className="w-16 h-16 text-text-light-tertiary dark:text-text-dark-tertiary mx-auto mb-4" />
-          <h3 className="text-xl font-bold text-text-light-primary dark:text-text-dark-primary">
-            {tab.charAt(0).toUpperCase() + tab.slice(1)} Report
-          </h3>
-          <p className="text-sm text-text-light-secondary dark:text-text-dark-secondary mt-2 max-w-md mx-auto">
-            Detailed {tab} analytics with interactive charts, trend analysis, and downloadable reports. Connect to a live database for real-time data.
-          </p>
-        </div>
-      )}
     </div>
   );
 }
@@ -205,8 +405,10 @@ function StatBox({ icon, label, value, change }: { icon: React.ReactNode; label:
     <div className="card p-4">
       <div className="flex items-center gap-2 text-sm text-text-light-secondary dark:text-text-dark-secondary mb-1">{icon}{label}</div>
       <p className="text-2xl font-bold text-text-light-primary dark:text-text-dark-primary">{value}</p>
-      <div className="flex items-center gap-1 mt-1"><TrendingUp className={cn("w-3.5 h-3.5", change >= 0 ? "text-success-500" : "text-danger-500")} /><span className={cn("text-xs font-medium", change >= 0 ? "text-success-600" : "text-danger-600")}>{change >= 0 ? "+" : ""}{change}%</span></div>
+      <div className="flex items-center gap-1 mt-1">
+        {change >= 0 ? <TrendingUp className="w-3.5 h-3.5 text-success-500" /> : <TrendingDown className="w-3.5 h-3.5 text-danger-500" />}
+        <span className={cn("text-xs font-medium", change >= 0 ? "text-success-600" : "text-danger-600")}>{change >= 0 ? "+" : ""}{change}%</span>
+      </div>
     </div>
   );
 }
-

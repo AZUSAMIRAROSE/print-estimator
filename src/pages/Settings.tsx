@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useAppStore } from "@/stores/appStore";
+import { useDataStore } from "@/stores/dataStore";
 import { cn } from "@/utils/cn";
 import { formatDate, formatNumber } from "@/utils/format";
+import { downloadTextFile } from "@/utils/export";
 import { DEFAULT_CURRENCIES, APP_VERSION, APP_BUILD, APP_NAME } from "@/constants";
 import {
   Settings as SettingsIcon, Building, Palette, Bell, Database,
@@ -18,9 +20,17 @@ export function Settings() {
     activityLog, clearActivityLog,
     addNotification, addActivityLog,
   } = useAppStore();
+  const { customers, jobs, quotations, resetAllData } = useDataStore();
   const [activeTab, setActiveTab] = useState<SettingsTab>("company");
   const [companyForm, setCompanyForm] = useState({ ...settings.company });
   const [saved, setSaved] = useState(false);
+  const [notifPrefs, setNotifPrefs] = useState({
+    estimateCompleted: true,
+    quotationStatusChange: true,
+    exportCompleted: true,
+    systemAlerts: true,
+  });
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSaveCompany = () => {
     updateSettings({ company: companyForm } as any);
@@ -31,21 +41,78 @@ export function Settings() {
   };
 
   const handleBackup = () => {
-    addNotification({ type: "success", title: "Backup Created", message: "Database backup created successfully.", category: "system" });
+    // Actually export all data from localStorage as a JSON file
+    const backupData: Record<string, string | null> = {};
+    const keys = ["print-estimator-app", "print-estimator-data", "print-estimator-estimation"];
+    keys.forEach(key => {
+      const val = localStorage.getItem(key);
+      if (val) backupData[key] = val;
+    });
+    const jsonStr = JSON.stringify(backupData, null, 2);
+    const date = new Date().toISOString().split("T")[0];
+    downloadTextFile(`print-estimator-backup-${date}.json`, jsonStr, "application/json");
+    addNotification({ type: "success", title: "Backup Created", message: `Database backup exported with ${Object.keys(backupData).length} data stores.`, category: "system" });
+    addActivityLog({ action: "BACKUP_CREATED", category: "settings", description: `Backup exported: ${customers.length} customers, ${jobs.length} jobs, ${quotations.length} quotations`, user: "Current User", entityType: "settings", entityId: "", level: "info" });
   };
 
   const handleRestore = () => {
-    if (window.confirm("Are you sure? This will replace all current data.")) {
-      addNotification({ type: "warning", title: "Restore", message: "Database restored from backup.", category: "system" });
-    }
+    fileInputRef.current?.click();
+  };
+
+  const handleRestoreFile = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target?.result as string);
+        if (!data || typeof data !== "object") throw new Error("Invalid backup format");
+
+        if (window.confirm("Are you sure? This will replace all current data with the backup.")) {
+          Object.entries(data).forEach(([key, value]) => {
+            if (typeof value === "string") {
+              localStorage.setItem(key, value);
+            }
+          });
+          addNotification({ type: "success", title: "Restore Complete", message: "Database restored from backup. Please refresh the page.", category: "system" });
+          addActivityLog({ action: "BACKUP_RESTORED", category: "settings", description: "Database restored from backup file", user: "Current User", entityType: "settings", entityId: "", level: "warning" });
+          setTimeout(() => window.location.reload(), 1500);
+        }
+      } catch {
+        addNotification({ type: "error", title: "Restore Failed", message: "Invalid backup file format.", category: "system" });
+      }
+    };
+    reader.readAsText(file);
+    // Reset the input so the same file can be re-selected
+    event.target.value = "";
   };
 
   const handleReset = () => {
     if (window.confirm("⚠️ This will DELETE ALL DATA and reset the application. Are you absolutely sure?")) {
-      if (window.confirm("This action cannot be undone. Type RESET to confirm.")) {
-        addNotification({ type: "error", title: "Application Reset", message: "All data has been cleared.", category: "system" });
+      const confirmText = window.prompt("Type RESET to confirm:");
+      if (confirmText === "RESET") {
+        resetAllData();
+        localStorage.removeItem("print-estimator-app");
+        localStorage.removeItem("print-estimator-data");
+        localStorage.removeItem("print-estimator-estimation");
+        addNotification({ type: "error", title: "Application Reset", message: "All data has been cleared. Reloading...", category: "system" });
+        setTimeout(() => window.location.reload(), 1500);
+      } else {
+        addNotification({ type: "info", title: "Reset Cancelled", message: "Reset was not confirmed.", category: "system" });
       }
     }
+  };
+
+  const handleExportActivityLog = () => {
+    const csv = [
+      "Timestamp,Action,Category,Description,User,Level",
+      ...activityLog.map(l =>
+        `"${new Date(l.timestamp).toISOString()}","${l.action}","${l.category}","${l.description.replace(/"/g, '""')}","${l.user}","${l.level}"`
+      )
+    ].join("\n");
+    downloadTextFile("activity-log.csv", csv, "text/csv;charset=utf-8");
+    addNotification({ type: "success", title: "Activity Log Exported", message: `${activityLog.length} entries exported.`, category: "export" });
   };
 
   const TABS: { key: SettingsTab; label: string; icon: React.ReactNode }[] = [
@@ -60,6 +127,7 @@ export function Settings() {
 
   return (
     <div className="space-y-6 animate-in">
+      <input type="file" ref={fileInputRef} accept=".json" onChange={handleRestoreFile} className="hidden" />
       <div>
         <h1 className="text-2xl font-bold text-text-light-primary dark:text-text-dark-primary flex items-center gap-2">
           <SettingsIcon className="w-6 h-6" /> Settings
@@ -128,14 +196,27 @@ export function Settings() {
             <div className="card p-6 space-y-4 animate-in">
               <h3 className="text-lg font-semibold text-text-light-primary dark:text-text-dark-primary">Notification Preferences</h3>
               {[
-                { key: "estimateCompleted", label: "Estimation Completed" },
-                { key: "quotationStatusChange", label: "Quotation Status Changes" },
-                { key: "exportCompleted", label: "Export/PDF Generated" },
-                { key: "systemAlerts", label: "System Alerts" },
+                { key: "estimateCompleted" as const, label: "Estimation Completed" },
+                { key: "quotationStatusChange" as const, label: "Quotation Status Changes" },
+                { key: "exportCompleted" as const, label: "Export/PDF Generated" },
+                { key: "systemAlerts" as const, label: "System Alerts" },
               ].map(item => (
                 <label key={item.key} className="flex items-center justify-between p-3 rounded-lg bg-surface-light-secondary dark:bg-surface-dark-tertiary cursor-pointer">
                   <span className="text-sm text-text-light-primary dark:text-text-dark-primary">{item.label}</span>
-                  <input type="checkbox" defaultChecked className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+                  <input
+                    type="checkbox"
+                    checked={notifPrefs[item.key]}
+                    onChange={(e) => {
+                      setNotifPrefs(prev => ({ ...prev, [item.key]: e.target.checked }));
+                      addNotification({
+                        type: "info",
+                        title: "Notification Preference",
+                        message: `${item.label}: ${e.target.checked ? "enabled" : "disabled"}`,
+                        category: "system",
+                      });
+                    }}
+                    className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  />
                 </label>
               ))}
             </div>
@@ -165,18 +246,37 @@ export function Settings() {
 
           {activeTab === "database" && (
             <div className="space-y-4 animate-in">
+              {/* Data Summary */}
+              <div className="card p-6 space-y-4">
+                <h3 className="text-lg font-semibold text-text-light-primary dark:text-text-dark-primary">Data Summary</h3>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="p-4 rounded-xl bg-surface-light-secondary dark:bg-surface-dark-tertiary text-center">
+                    <p className="text-2xl font-bold text-text-light-primary dark:text-text-dark-primary">{customers.length}</p>
+                    <p className="text-xs text-text-light-tertiary dark:text-text-dark-tertiary mt-1">Customers</p>
+                  </div>
+                  <div className="p-4 rounded-xl bg-surface-light-secondary dark:bg-surface-dark-tertiary text-center">
+                    <p className="text-2xl font-bold text-text-light-primary dark:text-text-dark-primary">{jobs.length}</p>
+                    <p className="text-xs text-text-light-tertiary dark:text-text-dark-tertiary mt-1">Jobs</p>
+                  </div>
+                  <div className="p-4 rounded-xl bg-surface-light-secondary dark:bg-surface-dark-tertiary text-center">
+                    <p className="text-2xl font-bold text-text-light-primary dark:text-text-dark-primary">{quotations.length}</p>
+                    <p className="text-xs text-text-light-tertiary dark:text-text-dark-tertiary mt-1">Quotations</p>
+                  </div>
+                </div>
+              </div>
+
               <div className="card p-6 space-y-4">
                 <h3 className="text-lg font-semibold text-text-light-primary dark:text-text-dark-primary">Data Management</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <button onClick={handleBackup} className="p-4 rounded-xl border-2 border-surface-light-border dark:border-surface-dark-border hover:border-primary-500 transition-all text-center">
                     <Download className="w-8 h-8 mx-auto mb-2 text-blue-500" />
                     <p className="text-sm font-semibold">Backup Data</p>
-                    <p className="text-xs text-text-light-tertiary dark:text-text-dark-tertiary mt-1">Export all data</p>
+                    <p className="text-xs text-text-light-tertiary dark:text-text-dark-tertiary mt-1">Export all data as JSON</p>
                   </button>
                   <button onClick={handleRestore} className="p-4 rounded-xl border-2 border-surface-light-border dark:border-surface-dark-border hover:border-amber-500 transition-all text-center">
                     <Upload className="w-8 h-8 mx-auto mb-2 text-amber-500" />
                     <p className="text-sm font-semibold">Restore Data</p>
-                    <p className="text-xs text-text-light-tertiary dark:text-text-dark-tertiary mt-1">Import from backup</p>
+                    <p className="text-xs text-text-light-tertiary dark:text-text-dark-tertiary mt-1">Import from backup JSON</p>
                   </button>
                   <button onClick={handleReset} className="p-4 rounded-xl border-2 border-danger-300 dark:border-danger-500/30 hover:border-danger-500 transition-all text-center">
                     <Trash2 className="w-8 h-8 mx-auto mb-2 text-danger-500" />
@@ -194,7 +294,7 @@ export function Settings() {
                 <h3 className="text-lg font-semibold text-text-light-primary dark:text-text-dark-primary">Activity Log</h3>
                 <div className="flex gap-2">
                   <button onClick={clearActivityLog} className="btn-ghost text-xs text-danger-500">Clear Log</button>
-                  <button className="btn-secondary text-xs flex items-center gap-1"><Download className="w-3.5 h-3.5" /> Export</button>
+                  <button onClick={handleExportActivityLog} className="btn-secondary text-xs flex items-center gap-1"><Download className="w-3.5 h-3.5" /> Export</button>
                 </div>
               </div>
               {activityLog.length === 0 ? (
