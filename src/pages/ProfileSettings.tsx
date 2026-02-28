@@ -113,6 +113,28 @@ export function ProfileSettings() {
     }
   };
 
+  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 2 * 1024 * 1024) {
+        addNotification({ type: "error", title: "File too large", message: "Avatar image must be less than 2MB.", category: "system" });
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        updateUser({ avatar: reader.result as string });
+        addNotification({ type: "success", title: "Avatar Updated", message: "Your profile picture has been updated.", category: "system" });
+        addActivityLog({ action: "AVATAR_UPDATED", category: "settings", description: "User avatar updated", user: user?.name || "User", entityType: "settings", entityId: "", level: "info" });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleRemoveAvatar = () => {
+    updateUser({ avatar: undefined });
+    addNotification({ type: "success", title: "Avatar Removed", message: "Your profile picture has been removed.", category: "system" });
+  };
+
   const TABS: { key: ProfileTab; label: string; icon: React.ReactNode }[] = [
     { key: "personal", label: "Personal Info", icon: <User className="w-4 h-4" /> },
     { key: "avatar", label: "Avatar & Display", icon: <Camera className="w-4 h-4" /> },
@@ -134,8 +156,12 @@ export function ProfileSettings() {
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary-600 via-primary-500 to-indigo-500 p-6 shadow-lg">
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmZmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PHBhdGggZD0iTTM2IDM0djZoLTZWMzRoNnptMC0zMHY2aC02VjRoNnptMCAxMHY2aC02VjE0aDZ6bTAgMTB2Nmg2djZoLTZWMjR6bS0xMCAwdjZoLTZ2LTZoNnptLTEwIDB2NmgtNnYtNmg2em0yMCAwdjZoNnY2aC02VjI0eiIvPjwvZz48L2c+PC9zdmc+')] opacity-30"></div>
         <div className="relative flex items-center gap-5">
-          <div className="w-20 h-20 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center text-white text-2xl font-bold shadow-lg border border-white/20">
-            {user.initials || "U"}
+          <div className="w-20 h-20 shrink-0 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center text-white text-2xl font-bold shadow-lg border border-white/20 overflow-hidden">
+            {user.avatar ? (
+              <img src={user.avatar} alt="Avatar" className="w-full h-full object-cover" />
+            ) : (
+              user.initials || "U"
+            )}
           </div>
           <div className="flex-1 min-w-0">
             <h1 className="text-2xl font-bold text-white truncate">{user.name}</h1>
@@ -285,8 +311,21 @@ export function ProfileSettings() {
                 </div>
 
                 <div className="flex items-center gap-6 p-6 rounded-xl bg-gradient-to-r from-surface-light-secondary to-surface-light-tertiary dark:from-surface-dark-tertiary dark:to-surface-dark-secondary">
-                  <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-white text-3xl font-bold shadow-lg">
-                    {user.initials || "U"}
+                  <div className="relative group w-24 h-24 shrink-0 rounded-2xl bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-white text-3xl font-bold shadow-lg overflow-hidden">
+                    {user.avatar ? (
+                      <img src={user.avatar} alt="Avatar" className="w-full h-full object-cover" />
+                    ) : (
+                      user.initials || "U"
+                    )}
+                    <label className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center cursor-pointer transition-opacity">
+                      <Camera className="w-6 h-6 text-white" />
+                      <input
+                        type="file"
+                        className="hidden"
+                        accept="image/*"
+                        onChange={handleAvatarUpload}
+                      />
+                    </label>
                   </div>
                   <div className="space-y-2">
                     <h4 className="text-lg font-semibold text-text-light-primary dark:text-text-dark-primary">{user.name}</h4>
@@ -304,9 +343,16 @@ export function ProfileSettings() {
                   </div>
                 </div>
 
-                <p className="text-xs text-text-light-tertiary dark:text-text-dark-tertiary">
-                  Your avatar initials are auto-generated from your name. Update your name in the Personal Info tab to change them.
-                </p>
+                <div className="flex items-center justify-between text-xs text-text-light-tertiary dark:text-text-dark-tertiary">
+                  <p>
+                    Click on your avatar to upload a custom image (max 2MB), or let it auto-generate from your initials.
+                  </p>
+                  {user.avatar && (
+                    <button onClick={handleRemoveAvatar} className="text-danger-500 hover:text-danger-600 font-medium whitespace-nowrap">
+                      Remove Avatar
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Profile Details */}
