@@ -3,6 +3,7 @@ import { cn } from "@/utils/cn";
 import { formatCurrency, formatNumber } from "@/utils/format";
 import { calculateSpineThickness } from "@/utils/calculations/spine";
 import { calculateBookWeight } from "@/utils/calculations/weight";
+import { useDataStore } from "@/stores/dataStore";
 import {
   Calculator as CalcIcon, Book, Layers, DollarSign, RefreshCcw, AlertTriangle,
   ChevronDown, ChevronRight, Printer, Settings2, Sparkles, BarChart3,
@@ -39,6 +40,7 @@ const BINDING_TYPES = Object.keys(BINDING_LABELS) as BindingType[];
 // ── Component ────────────────────────────────────────────────────────────────
 
 export function Calculator() {
+  const { customers } = useDataStore();
   const [form, setForm] = useState<QuickCalcForm>(ADVANCED_DEFAULT_FORM);
   const [activeSection, setActiveSection] = useState(0);
   const [showAudit, setShowAudit] = useState(false);
@@ -340,6 +342,33 @@ export function Calculator() {
           {activeSection === 3 && (
             <div className="card p-4 space-y-4">
               <SectionTitle icon={<DollarSign className="w-4 h-4 text-green-500" />} title="Pricing & Delivery" />
+
+              <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 mb-2">
+                <label className="label text-[10px] text-blue-800 dark:text-blue-300 mb-1">Link to Customer (Auto-fills defaults)</label>
+                <select
+                  value={form.customerId}
+                  onChange={e => {
+                    const cid = e.target.value;
+                    const cust = customers.find(c => c.id === cid);
+                    if (cust) {
+                      updateForm({
+                        customerId: cid,
+                        customerDiscount: String(cust.defaultDiscount || 0),
+                        pricingPercent: String(cust.defaultMargin || form.pricingPercent),
+                        taxRate: String(cust.defaultTaxRate || form.taxRate),
+                        pricingMode: "margin"
+                      });
+                    } else {
+                      updateForm({ customerId: "none", customerDiscount: "0" });
+                    }
+                  }}
+                  className="input-field text-sm font-medium border-blue-300 focus:ring-blue-500 bg-white dark:bg-surface-dark-primary"
+                >
+                  <option value="none">-- No Customer Selected --</option>
+                  {customers.map(c => <option key={c.id} value={c.id}>{c.name} ({c.code})</option>)}
+                </select>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <SelectField
                   label="Pricing Mode"
@@ -354,6 +383,7 @@ export function Calculator() {
                   onChange={v => updateForm({ pricingPercent: v })}
                 />
                 <Field label="Tax (%)" value={form.taxRate} onChange={v => updateForm({ taxRate: v })} />
+                <Field label="Customer Discount (%)" value={form.customerDiscount} onChange={v => updateForm({ customerDiscount: v })} />
                 <SelectField
                   label="Turnaround"
                   value={form.turnaround}
@@ -459,6 +489,7 @@ export function Calculator() {
                 </div>
                 {result.rushSurcharge > 0 && <CostRow label="Rush Surcharge" value={result.rushSurcharge} accent />}
                 {result.volumeDiscountAmount > 0 && <CostRow label={`Volume Discount (${result.volumeDiscountPercent}%)`} value={-result.volumeDiscountAmount} dimmed />}
+                {result.customerDiscountAmount > 0 && <CostRow label={`Customer Discount (${result.customerDiscountPercent}%)`} value={-result.customerDiscountAmount} dimmed />}
                 {result.minimumOrderAdjustment > 0 && <CostRow label="Min Order Adj." value={result.minimumOrderAdjustment} />}
                 <CostRow label="Selling (before tax)" value={result.sellingBeforeTax} bold />
                 {result.taxAmount > 0 && <CostRow label="Tax" value={result.taxAmount} />}

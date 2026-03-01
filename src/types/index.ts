@@ -46,6 +46,7 @@ export interface CurrencyRate {
 }
 
 // ── Customer ─────────────────────────────────────────────────────────────────
+// ── Customer ─────────────────────────────────────────────────────────────────
 export interface Customer {
   id: string;
   code: string;
@@ -54,6 +55,25 @@ export interface Customer {
   email: string;
   phone: string;
   alternatePhone: string;
+
+  // ── Company & Social ──
+  website: string;
+  industry: string;
+  companyRegNumber: string;
+  leadSource: string;
+  socialLinks: { platform: string; url: string }[];
+
+  // ── Financials & Preferences ──
+  defaultDiscount: number;
+  defaultMargin: number;
+  defaultTaxRate: number;
+  preferredCurrency: CurrencyCode | string;
+  preferredBank: string;
+  accountManager: string;
+  creditLimit: number;
+  paymentTerms: string;
+
+  // ── Billing Address ──
   address: string;
   city: string;
   state: string;
@@ -61,12 +81,22 @@ export interface Customer {
   pincode: string;
   gstNumber: string;
   panNumber: string;
+
+  // ── Shipping Address ──
+  shippingAddress: {
+    address: string;
+    city: string;
+    state: string;
+    country: string;
+    pincode: string;
+  };
+
+  // ── Metadata ──
   priority: "high" | "medium" | "low";
   category: string;
-  creditLimit: number;
-  paymentTerms: string;
   notes: string;
-  isActive: boolean;
+  status: "active" | "inactive" | "draft" | "lead";
+
   totalOrders: number;
   totalRevenue: number;
   createdAt: string;

@@ -55,6 +55,8 @@ export interface QuickCalcForm {
   includeFinishing: boolean;
   includePacking: boolean;
   includeFreight: boolean;
+  customerId: string;
+  customerDiscount: string;
 }
 
 export interface ParsedQuickCalcInput {
@@ -92,6 +94,8 @@ export interface ParsedQuickCalcInput {
   includeFinishing: boolean;
   includePacking: boolean;
   includeFreight: boolean;
+  customerId: string;
+  customerDiscount: number;
 }
 
 /** Full-detail result for a single quantity variant */
@@ -131,6 +135,8 @@ export interface AdvancedCostResult {
   rushSurcharge: number;
   volumeDiscountPercent: number;
   volumeDiscountAmount: number;
+  customerDiscountPercent: number;
+  customerDiscountAmount: number;
   minimumOrderAdjustment: number;
 
   // Selling price
@@ -176,6 +182,7 @@ export interface CostResult {
   discountedSubtotal: number;
   volumeDiscountAmount: number;
   minimumOrderAdjustment: number;
+  customerDiscountAmount: number;
   sellingBeforeTax: number;
   taxAmount: number;
   grandTotal: number;
@@ -224,6 +231,8 @@ export const ADVANCED_DEFAULT_FORM: QuickCalcForm = {
   includeFinishing: true,
   includePacking: false,
   includeFreight: false,
+  customerId: "none",
+  customerDiscount: "0",
 };
 
 // ── Validation ───────────────────────────────────────────────────────────────
@@ -256,6 +265,7 @@ export function validateAndParseQuickCalc(form: QuickCalcForm): { parsed?: Parse
     const coverColorsBack = parseFinite("Cover back colors", form.coverColorsBack);
     const pricingPercent = parseFinite("Pricing percent", form.pricingPercent);
     const taxRate = parseFinite("Tax rate", form.taxRate);
+    const customerDiscount = parseFinite("Customer discount", form.customerDiscount || "0");
     const boardThickness = parseFinite("Board thickness", form.boardThickness);
 
     if (bookHeight <= 0 || bookWidth <= 0) errors.push("Book width and height must be greater than 0.");
@@ -322,6 +332,8 @@ export function validateAndParseQuickCalc(form: QuickCalcForm): { parsed?: Parse
       includeFinishing: form.includeFinishing,
       includePacking: form.includePacking,
       includeFreight: form.includeFreight,
+      customerId: form.customerId || "none",
+      customerDiscount,
     };
   } catch (err) {
     errors.push((err as Error).message);
@@ -553,10 +565,15 @@ export function calculateAdvancedCosts(input: ParsedQuickCalcInput, quantity?: n
   const rushedCost = productionCost * rushMultiplier;
   const rushSurcharge = rushedCost - productionCost;
 
+  // Customer discount
+  const customerDiscountPercent = input.customerDiscount;
+  const customerDiscountAmount = rushedCost * (customerDiscountPercent / 100);
+
   // Volume discount
   const volumeDiscountPercent = calcVolumeDiscountPercent(qty);
   const volumeDiscountAmount = rushedCost * (volumeDiscountPercent / 100);
-  const discountedCost = rushedCost - volumeDiscountAmount;
+
+  const discountedCost = rushedCost - volumeDiscountAmount - customerDiscountAmount;
 
   // Minimum order
   const minimumOrderValue = 25000;
@@ -598,6 +615,8 @@ export function calculateAdvancedCosts(input: ParsedQuickCalcInput, quantity?: n
     rushSurcharge: round2(rushSurcharge),
     volumeDiscountPercent,
     volumeDiscountAmount: round2(volumeDiscountAmount),
+    customerDiscountPercent,
+    customerDiscountAmount: round2(customerDiscountAmount),
     minimumOrderAdjustment: round2(minimumOrderAdjustment),
     sellingBeforeTax: round2(sellingBeforeTax),
     taxAmount: round2(taxAmount),
@@ -641,9 +660,10 @@ export function calculateQuickCosts(input: ParsedQuickCalcInput): CostResult {
     laminationCost: result.laminationCost,
     subtotal: result.productionCost,
     rushSurcharge: result.rushSurcharge,
-    discountedSubtotal: result.productionCost - result.volumeDiscountAmount,
+    discountedSubtotal: result.productionCost - result.volumeDiscountAmount - result.customerDiscountAmount,
     volumeDiscountAmount: result.volumeDiscountAmount,
     minimumOrderAdjustment: result.minimumOrderAdjustment,
+    customerDiscountAmount: result.customerDiscountAmount,
     sellingBeforeTax: result.sellingBeforeTax,
     taxAmount: result.taxAmount,
     grandTotal: result.grandTotal,
