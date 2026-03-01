@@ -100,10 +100,10 @@ export function JobDetailsSlider({ jobId, isOpen, onClose, onEditJob }: JobDetai
                                     placeholder="Job Title"
                                 />
                             ) : (
-                                <p className="text-sm font-medium text-text-light-secondary dark:text-text-dark-secondary mt-0.5 flex items-center gap-1.5">
+                                <div className="text-sm font-medium text-text-light-secondary dark:text-text-dark-secondary mt-0.5 flex items-center gap-1.5">
                                     {job.title}
                                     <span className="text-[10px] opacity-40">System Currency: {settings.estimation.defaultCurrency}</span>
-                                </p>
+                                </div>
                             )}
                         </div>
                     </div>
@@ -249,18 +249,18 @@ export function JobDetailsSlider({ jobId, isOpen, onClose, onEditJob }: JobDetai
                         )}
 
                         {!editMode && job.tags && job.tags.length > 0 && (
-                            <div className="flex gap-2 mt-4 px-1">
+                            <div className="flex flex-wrap gap-2 mt-4 px-1">
                                 {job.tags.map(tag => (
-                                    <span key={tag} className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-400 px-2 py-1 rounded-md">
+                                    <div key={tag} className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-400 px-2 py-1 rounded-md">
                                         <Tag className="w-3 h-3" /> {tag}
-                                    </span>
+                                    </div>
                                 ))}
                             </div>
                         )}
 
                         {!editMode && job.notes && (
                             <div className="p-4 bg-yellow-50 dark:bg-yellow-500/10 border border-yellow-200 dark:border-yellow-500/20 rounded-lg mt-4 text-sm text-yellow-800 dark:text-yellow-200">
-                                <span className="font-bold flex items-center gap-1.5 mb-1"><FileText className="w-4 h-4" /> Notes:</span>
+                                <div className="font-bold flex items-center gap-1.5 mb-1"><FileText className="w-4 h-4" /> Notes:</div>
                                 {job.notes}
                             </div>
                         )}
@@ -277,21 +277,21 @@ export function JobDetailsSlider({ jobId, isOpen, onClose, onEditJob }: JobDetai
                             <div className="grid grid-cols-3 gap-3">
                                 <div className="p-3 rounded-lg bg-surface-light-tertiary dark:bg-surface-dark-tertiary border border-border-light dark:border-border-dark">
                                     <span className="block text-[10px] font-bold text-text-light-tertiary dark:text-text-dark-tertiary uppercase mb-0.5">Trim Size</span>
-                                    <span className="text-sm font-medium text-text-light-primary dark:text-text-dark-primary">
+                                    <div className="text-sm font-medium text-text-light-primary dark:text-text-dark-primary">
                                         {job.bookSpec.widthMM} × {job.bookSpec.heightMM} mm
-                                    </span>
+                                    </div>
                                 </div>
                                 <div className="p-3 rounded-lg bg-surface-light-tertiary dark:bg-surface-dark-tertiary border border-border-light dark:border-border-dark">
                                     <span className="block text-[10px] font-bold text-text-light-tertiary dark:text-text-dark-tertiary uppercase mb-0.5">Total Pages</span>
-                                    <span className="text-sm font-medium text-text-light-primary dark:text-text-dark-primary">
+                                    <div className="text-sm font-medium text-text-light-primary dark:text-text-dark-primary">
                                         {job.bookSpec.totalPages}
-                                    </span>
+                                    </div>
                                 </div>
                                 <div className="p-3 rounded-lg bg-surface-light-tertiary dark:bg-surface-dark-tertiary border border-border-light dark:border-border-dark">
                                     <span className="block text-[10px] font-bold text-text-light-tertiary dark:text-text-dark-tertiary uppercase mb-0.5">Spine Thickness</span>
-                                    <span className="text-sm font-medium text-text-light-primary dark:text-text-dark-primary">
+                                    <div className="text-sm font-medium text-text-light-primary dark:text-text-dark-primary">
                                         {job.bookSpec.spineThickness?.toFixed(1) || 0} mm
-                                    </span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -347,9 +347,9 @@ export function JobDetailsSlider({ jobId, isOpen, onClose, onEditJob }: JobDetai
                                         <Clock className="w-4 h-4" />
                                         <span className="text-xs font-bold uppercase">Prod. Time</span>
                                     </div>
-                                    <p className="text-2xl font-black text-indigo-900 dark:text-indigo-100">
+                                    <div className="text-2xl font-black text-indigo-900 dark:text-indigo-100">
                                         {result.totalMachineHours?.toFixed(1) || 0} <span className="text-sm font-medium text-indigo-600/70 dark:text-indigo-400/70">hrs</span>
-                                    </p>
+                                    </div>
                                     <p className="text-xs text-indigo-600/80 dark:text-indigo-400/80 mt-1">Total machine hours</p>
                                 </div>
 
@@ -358,9 +358,9 @@ export function JobDetailsSlider({ jobId, isOpen, onClose, onEditJob }: JobDetai
                                         <Truck className="w-4 h-4" />
                                         <span className="text-xs font-bold uppercase">Total Weight</span>
                                     </div>
-                                    <p className="text-2xl font-black text-purple-900 dark:text-purple-100">
+                                    <div className="text-2xl font-black text-purple-900 dark:text-purple-100">
                                         {formatNumber(result.totalWeight || 0)} <span className="text-sm font-medium text-purple-600/70 dark:text-purple-400/70">kg</span>
-                                    </p>
+                                    </div>
                                     <p className="text-xs text-purple-600/80 dark:text-purple-400/80 mt-1">Approximate shipment weight</p>
                                 </div>
                             </div>

@@ -7,7 +7,7 @@ import { useDataStore } from "@/stores/dataStore";
 import {
   Calculator as CalcIcon, Book, DollarSign, RefreshCcw, AlertTriangle,
   Printer, Settings2, Sparkles, BarChart3,
-  Copy, TrendingDown, TrendingUp, Info, Zap, Weight, Ruler,
+  Copy, Weight, Ruler,
   Palette, Grid3X3, FileText, Eye, EyeOff, ArrowRight, CheckCircle2,
   Maximize2, Minimize2
 } from "lucide-react";
@@ -162,7 +162,7 @@ export function Calculator() {
             onClick={() => setShowMultiQty(!showMultiQty)}
             className={cn("btn-secondary flex items-center gap-1.5 text-xs", showMultiQty && "bg-primary-50 dark:bg-primary-500/10 border-primary-300 dark:border-primary-500/40")}
           >
-            <Zap className="w-3.5 h-3.5" />
+            <BarChart3 className="w-3.5 h-3.5" />
             Multi-Qty
           </button>
           <button onClick={handleReset} className="btn-secondary flex items-center gap-1.5 text-xs">
@@ -224,7 +224,7 @@ export function Calculator() {
               <SectionTitle icon={<Book className="w-4 h-4 text-purple-500" />} title="Book Specification" />
               {liveSpine > 0 && (
                 <div className="flex items-center gap-2 text-xs bg-primary-50 dark:bg-primary-500/10 text-primary-700 dark:text-primary-400 p-2 rounded-lg border border-primary-200 dark:border-primary-500/20 shadow-sm animate-in fade-in zoom-in duration-300">
-                  <Info className="w-4 h-4 text-primary-500" />
+                  <div className="w-4 h-4 flex items-center justify-center rounded-full bg-primary-500 text-white shrink-0">i</div>
                   <span>Estimated Spine: <strong>{liveSpine.toFixed(2)} mm</strong> {liveWeight ? `• Est. Weight: ${(liveWeight.totalWeight / 1000).toFixed(2)} kg` : ''}</span>
                 </div>
               )}
@@ -691,9 +691,7 @@ export function Calculator() {
   );
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// SUB-COMPONENTS
-// ══════════════════════════════════════════════════════════════════════════════
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
 function SectionTitle({ icon, title }: { icon: React.ReactNode; title: string }) {
   return (
@@ -703,12 +701,12 @@ function SectionTitle({ icon, title }: { icon: React.ReactNode; title: string })
   );
 }
 
-function Field({ label, value, onChange, hint }: { label: string; value: string; onChange: (v: string) => void; hint?: string }) {
+function Field({ label, value, onChange, hint }: { label: string; value: string; onChange: (v: string) => void; hint?: string | React.ReactNode }) {
   return (
     <div>
       <label className="label text-[10px]">{label}</label>
       <input type="text" inputMode="decimal" value={value} onChange={e => onChange(e.target.value)} className="input-field text-sm" />
-      {hint && <p className="text-[9px] text-text-light-tertiary dark:text-text-dark-tertiary mt-0.5">{hint}</p>}
+      {hint && <div className="text-[9px] text-text-light-tertiary dark:text-text-dark-tertiary mt-0.5">{hint}</div>}
     </div>
   );
 }
@@ -794,54 +792,50 @@ function HeroCard({ label, value, icon, color, subtitle }: {
     emerald: "text-emerald-600 dark:text-emerald-400",
   };
   return (
-    <div className={cn("card p-3 bg-gradient-to-br border", colorMap[color])}>
+    <div className={cn("card p-3 bg-gradient-to-br border shadow-none", colorMap[color])}>
       <div className="flex items-center gap-1.5 mb-1">
         <span className={iconColor[color]}>{icon}</span>
         <span className="text-[10px] font-medium text-text-light-tertiary dark:text-text-dark-tertiary uppercase tracking-wider">{label}</span>
       </div>
-      <p className="text-lg font-bold text-text-light-primary dark:text-text-dark-primary leading-tight">{value}</p>
-      {subtitle && <p className="text-[10px] text-text-light-tertiary dark:text-text-dark-tertiary mt-0.5">{subtitle}</p>}
+      <div className="text-lg font-bold text-text-light-primary dark:text-text-dark-primary">{value}</div>
+      {subtitle && <div className="text-[10px] text-text-light-tertiary dark:text-text-dark-tertiary mt-0.5">{subtitle}</div>}
     </div>
   );
 }
 
 function MetricBadge({ label, value }: { label: string; value: string }) {
   return (
-    <div className="text-center p-2 rounded-lg bg-surface-light-secondary dark:bg-surface-dark-secondary">
-      <p className="text-[10px] text-text-light-tertiary dark:text-text-dark-tertiary">{label}</p>
-      <p className="text-sm font-bold text-text-light-primary dark:text-text-dark-primary leading-tight mt-0.5">{value}</p>
+    <div className="bg-surface-light-secondary dark:bg-surface-dark-secondary p-2 rounded-lg border border-border-light dark:border-border-dark text-center">
+      <div className="text-[9px] font-bold text-text-light-tertiary dark:text-text-dark-tertiary uppercase mb-0.5">{label}</div>
+      <div className="text-xs font-bold text-text-light-primary dark:text-text-dark-primary truncate">{value}</div>
     </div>
   );
 }
 
 function CostRow({ label, value, detail, bold, accent, dimmed }: {
-  label: string;
-  value: number;
-  detail?: string;
-  bold?: boolean;
-  accent?: boolean;
-  dimmed?: boolean;
+  label: string; value: number; detail?: string;
+  bold?: boolean; accent?: boolean; dimmed?: boolean;
 }) {
+  if (value === 0 && !bold) return null;
   return (
-    <div className="flex items-center justify-between py-1">
-      <div className="min-w-0 flex-1">
-        <span className={cn(
+    <div className="flex justify-between items-start">
+      <div className="min-w-0">
+        <div className={cn(
           "text-xs",
-          bold ? "font-semibold text-text-light-primary dark:text-text-dark-primary" :
-            accent ? "font-medium text-amber-600 dark:text-amber-400" :
-              dimmed ? "text-success-600 dark:text-success-400" :
-                "text-text-light-secondary dark:text-text-dark-secondary"
-        )}>{label}</span>
-        {detail && <p className="text-[9px] text-text-light-tertiary dark:text-text-dark-tertiary mt-0">{detail}</p>}
+          bold ? "font-bold text-text-light-primary dark:text-text-dark-primary" : "text-text-light-secondary dark:text-text-dark-secondary",
+          dimmed && "opacity-60"
+        )}>
+          {label}
+        </div>
+        {detail && <div className="text-[9px] text-text-light-tertiary dark:text-text-dark-tertiary truncate">{detail}</div>}
       </div>
-      <span className={cn(
-        "font-medium text-xs tabular-nums ml-3 shrink-0",
-        bold ? "font-bold text-text-light-primary dark:text-text-dark-primary" :
-          value < 0 ? "text-success-600 dark:text-success-400" :
-            "text-text-light-primary dark:text-text-dark-primary"
+      <div className={cn(
+        "text-xs font-bold ml-2",
+        accent ? "text-primary-600 dark:text-primary-400" : "text-text-light-primary dark:text-text-dark-primary",
+        dimmed && "text-text-light-tertiary"
       )}>
-        {value < 0 ? `−${formatCurrency(Math.abs(value))}` : formatCurrency(value)}
-      </span>
+        {formatCurrency(value)}
+      </div>
     </div>
   );
 }
@@ -849,35 +843,23 @@ function CostRow({ label, value, detail, bold, accent, dimmed }: {
 function WeightItem({ label, value, highlight }: { label: string; value: number; highlight?: boolean }) {
   return (
     <div className={cn(
-      "p-2 rounded-lg",
-      highlight ? "bg-primary-50 dark:bg-primary-500/10" : "bg-surface-light-secondary dark:bg-surface-dark-secondary"
+      "p-1.5 rounded-lg",
+      highlight ? "bg-primary-50 dark:bg-primary-500/10 border border-primary-200 dark:border-primary-500/20" : "bg-surface-light-tertiary dark:bg-surface-dark-tertiary border border-border-light dark:border-border-dark"
     )}>
-      <p className="text-[10px] text-text-light-tertiary dark:text-text-dark-tertiary">{label}</p>
-      <p className={cn(
-        "text-xs font-bold mt-0.5",
-        highlight ? "text-primary-600 dark:text-primary-400" : "text-text-light-primary dark:text-text-dark-primary"
-      )}>{value.toFixed(1)}g</p>
+      <div className="text-[8px] font-bold text-text-light-tertiary dark:text-text-dark-tertiary uppercase mb-0.5">{label}</div>
+      <div className={cn("text-[10px] font-bold", highlight ? "text-primary-600 dark:text-primary-400" : "text-text-light-primary dark:text-text-dark-primary")}>
+        {value.toFixed(1)}g
+      </div>
     </div>
   );
 }
 
 function CompRow({ label, values, bold }: { label: string; values: string[]; bold?: boolean }) {
-  // Check trend if numeric array and > 1 item
-  const nums = values.map(v => Number(v.replace(/[^0-9.-]+/g, "")));
-  const isDecreasing = nums.length > 1 && nums.every((n, i) => i === 0 || n <= nums[i - 1]) && nums[0] > nums[nums.length - 1];
-  const isIncreasing = nums.length > 1 && nums.every((n, i) => i === 0 || n >= nums[i - 1]) && nums[0] < nums[nums.length - 1];
-
   return (
     <tr>
-      <td className={cn("py-1.5 pr-3", bold ? "font-semibold text-text-light-primary dark:text-text-dark-primary" : "text-text-light-secondary dark:text-text-dark-secondary")}>
-        <div className="flex items-center gap-1">
-          {label}
-          {isDecreasing && <TrendingDown className="w-3 h-3 text-success-500" />}
-          {isIncreasing && <TrendingUp className="w-3 h-3 text-danger-500" />}
-        </div>
-      </td>
+      <td className={cn("py-2 pr-3 text-text-light-secondary dark:text-text-dark-secondary font-medium", bold && "font-bold text-text-light-primary dark:text-text-dark-primary")}>{label}</td>
       {values.map((v, i) => (
-        <td key={i} className={cn("text-right py-1.5 px-2 tabular-nums", bold ? "font-bold text-primary-600 dark:text-primary-400" : "text-text-light-primary dark:text-text-dark-primary")}>{v}</td>
+        <td key={i} className={cn("py-2 px-2 text-right text-text-light-primary dark:text-text-dark-primary", bold && "font-bold color-primary-600")}>{v}</td>
       ))}
     </tr>
   );
@@ -885,9 +867,9 @@ function CompRow({ label, values, bold }: { label: string; values: string[]; bol
 
 function AuditGroup({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div>
-      <p className="text-[10px] font-bold text-primary-600 dark:text-primary-400 uppercase tracking-wider mb-1">{title}</p>
-      <div className="space-y-0.5 pl-2 border-l-2 border-primary-200 dark:border-primary-500/30">
+    <div className="space-y-1">
+      <h4 className="font-bold text-primary-600 dark:text-primary-400 text-[10px] uppercase border-b border-primary-500/20 pb-0.5 mb-1">{title}</h4>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1">
         {children}
       </div>
     </div>
@@ -896,9 +878,9 @@ function AuditGroup({ title, children }: { title: string; children: React.ReactN
 
 function AuditLine({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between py-0.5">
-      <span className="text-text-light-tertiary dark:text-text-dark-tertiary">{label}</span>
-      <span className="font-mono font-medium text-text-light-primary dark:text-text-dark-primary">{value}</span>
+    <div className="flex justify-between items-center opacity-80 hover:opacity-100 transition-opacity">
+      <span className="text-text-light-tertiary dark:text-text-dark-tertiary font-medium">{label}</span>
+      <span className="text-text-light-primary dark:text-text-dark-primary font-bold">{value}</span>
     </div>
   );
 }

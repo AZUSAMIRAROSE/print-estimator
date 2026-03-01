@@ -12,7 +12,7 @@ import { normalizeEstimationForCalculation, validateEstimation } from "@/utils/v
 import { useDataStore } from "@/stores/dataStore";
 import {
   ChevronLeft, ChevronRight, RotateCcw, Calculator, Save,
-  FileText, CheckCircle, AlertCircle, BookOpen, Layers,
+  FileText, CheckCircle, BookOpen, Layers,
   Type, Square, BookMarked, Sparkles, Package, Truck,
   Printer, DollarSign, Plus, MessageSquare
 } from "lucide-react";
@@ -369,8 +369,8 @@ export function NewEstimate() {
                 }}
               >
                 <div className="text-white text-center px-2">
-                  <p className="text-[9px] font-medium opacity-80">{estimation.bookSpec.widthMM}×{estimation.bookSpec.heightMM}</p>
-                  <p className="text-[8px] opacity-60">mm</p>
+                  <div className="text-[9px] font-medium opacity-80">{estimation.bookSpec.widthMM}×{estimation.bookSpec.heightMM}</div>
+                  <div className="text-[8px] opacity-60">mm</div>
                 </div>
               </div>
               {/* Spine */}
