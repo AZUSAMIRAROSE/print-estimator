@@ -7,12 +7,12 @@ import { formatCurrency, formatNumber, getRelativeTime } from "@/utils/format";
 import {
   FilePlus, Briefcase, FileCheck, Users, TrendingUp, TrendingDown,
   ArrowRight, BarChart3, DollarSign, Package, Clock, Printer,
-  Target, Layers, PieChart
+  Target
 } from "lucide-react";
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+  XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, PieChart as RechartsPie, Pie, Cell,
-  LineChart, Line, Legend, AreaChart, Area
+  Line, AreaChart, Area
 } from "recharts";
 
 const MONTHLY_DATA = [
@@ -98,9 +98,9 @@ export function Dashboard() {
       <div className="flex items-start justify-between">
         <div>
           <p className="text-sm text-text-light-secondary dark:text-text-dark-secondary">{title}</p>
-          <p className="text-2xl font-bold text-text-light-primary dark:text-text-dark-primary mt-1">
+          <div className="text-2xl font-bold text-text-light-primary dark:text-text-dark-primary mt-1">
             {value}
-          </p>
+          </div>
         </div>
         <div className={cn("p-2.5 rounded-xl", color)}>
           {icon}
@@ -328,9 +328,9 @@ export function Dashboard() {
                   <span className={cn("badge text-[10px]", STATUS_COLORS[job.status] || STATUS_COLORS.draft)}>
                     {job.status.replace(/_/g, " ")}
                   </span>
-                  <span className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary whitespace-nowrap">
+                  <div className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary whitespace-nowrap">
                     {formatCurrency(job.value)}
-                  </span>
+                  </div>
                 </div>
               </div>
             ))}
@@ -348,9 +348,9 @@ export function Dashboard() {
                 <Target className="w-4 h-4 text-green-500" />
                 <span className="text-xs text-text-light-secondary dark:text-text-dark-secondary">Conversion Rate</span>
               </div>
-              <p className="text-2xl font-bold text-text-light-primary dark:text-text-dark-primary">
+              <div className="text-2xl font-bold text-text-light-primary dark:text-text-dark-primary">
                 {stats.conversionRate.toFixed(1)}%
-              </p>
+              </div>
               <div className="w-full h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full mt-2">
                 <div className="h-full bg-green-500 rounded-full" style={{ width: `${stats.conversionRate}%` }} />
               </div>
@@ -361,9 +361,9 @@ export function Dashboard() {
                 <DollarSign className="w-4 h-4 text-blue-500" />
                 <span className="text-xs text-text-light-secondary dark:text-text-dark-secondary">Avg Job Value</span>
               </div>
-              <p className="text-2xl font-bold text-text-light-primary dark:text-text-dark-primary">
+              <div className="text-2xl font-bold text-text-light-primary dark:text-text-dark-primary">
                 {formatCurrency(stats.avgJobValue)}
-              </p>
+              </div>
             </div>
 
             <div className="p-4 rounded-xl bg-surface-light-secondary dark:bg-surface-dark-tertiary">
@@ -371,9 +371,9 @@ export function Dashboard() {
                 <Clock className="w-4 h-4 text-amber-500" />
                 <span className="text-xs text-text-light-secondary dark:text-text-dark-secondary">Pending Approvals</span>
               </div>
-              <p className="text-2xl font-bold text-text-light-primary dark:text-text-dark-primary">
+              <div className="text-2xl font-bold text-text-light-primary dark:text-text-dark-primary">
                 {stats.pendingApprovals}
-              </p>
+              </div>
             </div>
 
             <div className="p-4 rounded-xl bg-surface-light-secondary dark:bg-surface-dark-tertiary">
@@ -381,14 +381,14 @@ export function Dashboard() {
                 <Package className="w-4 h-4 text-red-500" />
                 <span className="text-xs text-text-light-secondary dark:text-text-dark-secondary">Overdue Jobs</span>
               </div>
-              <p className={cn(
+              <div className={cn(
                 "text-2xl font-bold",
                 stats.overdueJobs > 0
                   ? "text-danger-600 dark:text-danger-400"
                   : "text-text-light-primary dark:text-text-dark-primary"
               )}>
                 {stats.overdueJobs}
-              </p>
+              </div>
             </div>
           </div>
         </div>
