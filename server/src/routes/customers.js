@@ -7,7 +7,10 @@ import { writeAudit } from "../services/audit.js";
 
 const router = Router();
 
+const customerStatusSchema = z.enum(["active", "inactive", "draft", "lead"]);
+
 const customerSchema = z.object({
+    id: z.string().optional(),
     code: z.string().optional(),
     name: z.string().min(1),
     contactPerson: z.string().default(""),
@@ -20,7 +23,7 @@ const customerSchema = z.object({
     gstNumber: z.string().default(""),
     panNumber: z.string().default(""),
     priority: z.enum(["high", "medium", "low"]).default("medium"),
-    status: z.enum(["active", "inactive"]).default("active"),
+    status: customerStatusSchema.default("active"),
     notes: z.string().default(""),
 });
 
@@ -48,9 +51,9 @@ router.post("/", requireAuth, (req, res) => {
     const parsed = customerSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
-    const id = randomUUID();
-    const now = new Date().toISOString();
     const d = parsed.data;
+    const id = d.id || randomUUID();
+    const now = new Date().toISOString();
     const code = d.code || genCode(d.name);
 
     db.prepare(
@@ -137,7 +140,8 @@ router.post("/import/csv", requireAuth, (req, res) => {
             if (!r.name) continue;
             const id = randomUUID();
             const code = r.code || genCode(r.name);
-            insert.run(id, code, r.name, r.contactPerson || "", r.email || "", r.phone || "", r.city || "", r.country || "India", r.priority || "medium", "active", now, now);
+            const status = customerStatusSchema.safeParse(r.status).success ? r.status : "active";
+            insert.run(id, code, r.name, r.contactPerson || "", r.email || "", r.phone || "", r.city || "", r.country || "India", r.priority || "medium", status, now, now);
             imported++;
         }
     });

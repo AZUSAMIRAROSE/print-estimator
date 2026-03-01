@@ -1,8 +1,9 @@
+import React from "react";
 import { useEstimationStore } from "@/stores/estimationStore";
 import { useAppStore } from "@/stores/appStore";
 import { cn } from "@/utils/cn";
 import { Info, DollarSign, Percent, Receipt, Globe } from "lucide-react";
-import { DEFAULT_CURRENCIES, TAX_RATES } from "@/constants";
+import { TAX_RATES } from "@/constants";
 
 export function StepPricing() {
   const { estimation, updatePricing } = useEstimationStore();
@@ -127,7 +128,7 @@ export function StepPricing() {
           <div>
             <label className="label">Round To (decimal)</label>
             <select
-              value={3}
+              defaultValue={3}
               className="input-field"
             >
               <option value={0}>Whole number</option>
@@ -167,7 +168,7 @@ export function StepPricing() {
                       : "border-surface-light-border dark:border-surface-dark-border bg-white dark:bg-surface-dark-secondary"
                   )}
                 >
-                  <p className="font-medium">{label}</p>
+                  <p className="font-medium text-text-light-primary dark:text-text-dark-primary">{label}</p>
                   <p className="text-xs text-text-light-tertiary dark:text-text-dark-tertiary">{rate}%</p>
                 </button>
               ))}
@@ -192,8 +193,8 @@ export function StepPricing() {
               className={cn(
                 "w-full p-2 rounded-lg border-2 text-sm transition-all",
                 p.includesTax
-                  ? "border-primary-500 bg-primary-50 dark:bg-primary-500/10 text-primary-700"
-                  : "border-surface-light-border dark:border-surface-dark-border bg-white dark:bg-surface-dark-secondary"
+                  ? "border-primary-500 bg-primary-50 dark:bg-primary-500/10 text-primary-700 dark:text-primary-400"
+                  : "border-surface-light-border dark:border-surface-dark-border bg-white dark:bg-surface-dark-secondary text-text-light-secondary dark:text-text-dark-secondary"
               )}
             >
               {p.includesTax ? "Yes, Inclusive" : "No, Exclusive"}

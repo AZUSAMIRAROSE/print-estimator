@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import { performance } from "node:perf_hooks";
 import { calculateQuickCosts, validateAndParseQuickCalc, type QuickCalcForm } from "../src/utils/calculations/quickQuote.ts";
 
@@ -7,21 +8,44 @@ const sample: QuickCalcForm = {
   pages: "256",
   gsm: "130",
   paperType: "Matt Art Paper",
+  paperSize: "23x36",
   quantity: "10000",
+  quantities: ["10000", "", "", "", ""],
   colorsFront: "4",
   colorsBack: "4",
   coverGSM: "300",
   coverPaper: "Art Card",
+  coverColorsFront: "4",
+  coverColorsBack: "0",
+  machineId: "rmgt",
+  coverMachineId: "rmgt",
+  printingMethod: "sheetwise",
   bindingType: "perfect_binding",
+  boardThickness: "2.5",
+  boardOrigin: "imported",
   laminationType: "matt",
+  spotUV: false,
+  embossing: false,
+  foilBlocking: false,
+  dieCutting: false,
   pricingMode: "margin",
   pricingPercent: "25",
   taxRate: "5",
   turnaround: "standard",
+  destinationId: "ex",
+  freightMode: "none",
+  includeFinishing: true,
+  includePacking: false,
+  includeFreight: false,
+  customerId: "none",
+  customerDiscount: "0",
 };
 
-const parsed = validateAndParseQuickCalc(sample).parsed;
+const validateResult = validateAndParseQuickCalc(sample);
+const parsed = validateResult.parsed;
+
 if (!parsed) {
+  console.error("Validation errors:", validateResult.errors);
   throw new Error("Sample benchmark input failed validation.");
 }
 

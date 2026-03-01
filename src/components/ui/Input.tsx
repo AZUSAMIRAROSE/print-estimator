@@ -1,19 +1,29 @@
-import { forwardRef } from "react";
+import React, { forwardRef } from "react";
 import { cn } from "@/utils/cn";
-import { AlertCircle, Info } from "lucide-react";
+import { AlertCircle, Info, type LucideIcon } from "lucide-react";
 
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   error?: string;
   tip?: string;
-  icon?: React.ReactNode;
-  suffix?: React.ReactNode;
+  icon?: React.ReactNode | LucideIcon;
+  suffix?: React.ReactNode | LucideIcon;
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
   ({ label, error, tip, icon, suffix, className, ...props }, ref) => {
     const inputId = props.id ?? props.name;
     const errorId = inputId ? `${inputId}-error` : undefined;
+
+    const renderIcon = (InputIcon: React.ReactNode | LucideIcon) => {
+      if (!InputIcon) return null;
+      if (typeof InputIcon === 'function') {
+        const Comp = InputIcon as LucideIcon;
+        return <Comp className="w-4 h-4" />;
+      }
+      return InputIcon as React.ReactNode;
+    };
+
     return (
       <div className={className}>
         {label && (
@@ -31,7 +41,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         <div className="relative">
           {icon && (
             <div className="absolute left-3 top-1/2 -translate-y-1/2 text-text-light-tertiary dark:text-text-dark-tertiary">
-              {icon}
+              {renderIcon(icon)}
             </div>
           )}
           <input
@@ -49,7 +59,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           />
           {suffix && (
             <div className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-text-light-tertiary dark:text-text-dark-tertiary">
-              {suffix}
+              {renderIcon(suffix)}
             </div>
           )}
         </div>

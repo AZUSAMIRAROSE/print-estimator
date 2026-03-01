@@ -1,3 +1,4 @@
+import React from "react";
 import { useEstimationStore } from "@/stores/estimationStore";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
@@ -34,7 +35,7 @@ export function StepJacket() {
               <Input label="Colors (B)" type="number" min={0} max={6} value={jacket.colorsBack} onChange={(e) => updateJacket({ colorsBack: parseInt(e.target.value) || 0 })} />
             </div>
             <Select label="Paper Type" value={jacket.paperTypeName} onChange={(v) => updateJacket({ paperTypeName: v })} options={paperTypes} />
-            <Select label="GSM" value={String(jacket.gsm)} onChange={(v) => updateJacket({ gsm: parseInt(v) })} options={[100,115,130,150,170].map(g => ({ value: String(g), label: `${g} GSM` }))} />
+            <Select label="GSM" value={String(jacket.gsm)} onChange={(v) => updateJacket({ gsm: parseInt(v) })} options={[100, 115, 130, 150, 170].map(g => ({ value: String(g), label: `${g} GSM` }))} />
             <Select label="Paper Size" value={jacket.paperSizeLabel} onChange={(v) => updateJacket({ paperSizeLabel: v })} options={sizeOptions} />
             <Select label="Machine" value={jacket.machineId} onChange={(v) => { const m = DEFAULT_MACHINES.find(m => m.id === v); updateJacket({ machineId: v, machineName: m?.name || v }); }} options={machineOptions} />
             <Input label="Flap Width (mm)" type="number" value={jacket.flapWidth} onChange={(e) => updateJacket({ flapWidth: parseInt(e.target.value) || 90 })} suffix="mm" />

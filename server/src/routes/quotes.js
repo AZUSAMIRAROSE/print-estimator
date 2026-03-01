@@ -7,13 +7,16 @@ import { writeAudit } from "../services/audit.js";
 
 const router = Router();
 
+const quoteStatusSchema = z.enum(["draft", "sent", "accepted", "rejected", "expired", "revised"]);
+
 const quoteSchema = z.object({
+  id: z.string().optional(),
   quoteNumber: z.string().min(1),
   customerName: z.string().min(1),
   customerEmail: z.string().email().optional().nullable(),
   payload: z.record(z.any()),
   totalAmount: z.number().nonnegative(),
-  status: z.enum(["draft", "sent", "accepted", "rejected", "expired"]).default("draft"),
+  status: quoteStatusSchema.default("draft"),
 });
 
 router.get("/", requireAuth, (req, res) => {
@@ -28,7 +31,8 @@ router.post("/", requireAuth, (req, res) => {
   const parsed = quoteSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
-  const id = randomUUID();
+  const actorId = req.user?.sub || "system-local";
+  const id = parsed.data.id || randomUUID();
   const now = new Date().toISOString();
   const q = parsed.data;
 
@@ -43,18 +47,19 @@ router.post("/", requireAuth, (req, res) => {
     JSON.stringify(q.payload),
     q.totalAmount,
     q.status,
-    req.user.sub,
+    actorId,
     now,
     now
   );
 
-  writeAudit(req.user.sub, "quote.create", "quote", id, { quoteNumber: q.quoteNumber, totalAmount: q.totalAmount });
+  writeAudit(actorId, "quote.create", "quote", id, { quoteNumber: q.quoteNumber, totalAmount: q.totalAmount });
 
-  res.status(201).json({ id, ...q, createdBy: req.user.sub, createdAt: now, updatedAt: now });
+  res.status(201).json({ id, ...q, createdBy: actorId, createdAt: now, updatedAt: now });
 });
 
 router.patch("/:id/status", requireAuth, (req, res) => {
-  const status = z.enum(["draft", "sent", "accepted", "rejected", "expired"]).safeParse(req.body?.status);
+  const actorId = req.user?.sub || "system-local";
+  const status = quoteStatusSchema.safeParse(req.body?.status);
   if (!status.success) return res.status(400).json({ error: "Invalid status" });
 
   const now = new Date().toISOString();
@@ -64,7 +69,7 @@ router.patch("/:id/status", requireAuth, (req, res) => {
 
   if (!result.changes) return res.status(404).json({ error: "Quote not found" });
 
-  writeAudit(req.user.sub, "quote.status", "quote", req.params.id, { status: status.data });
+  writeAudit(actorId, "quote.status", "quote", req.params.id, { status: status.data });
 
   res.json({ id: req.params.id, status: status.data, updatedAt: now });
 });

@@ -7,12 +7,19 @@ import { writeAudit } from "../services/audit.js";
 
 const router = Router();
 
+function normalizeQuantities(value) {
+    if (Array.isArray(value)) return JSON.stringify(value);
+    if (typeof value === "string" && value.trim()) return value;
+    return "[]";
+}
+
 const jobSchema = z.object({
+    id: z.string().optional(),
     title: z.string().min(1),
     customerId: z.string().optional().default(""),
     customerName: z.string().optional().default(""),
     status: z.enum(["draft", "estimated", "quoted", "in_production", "completed", "cancelled"]).default("draft"),
-    quantities: z.string().optional().default("[]"),
+    quantities: z.union([z.string(), z.array(z.number())]).optional().default("[]"),
     paperType: z.string().optional().default(""),
     bindingType: z.string().optional().default(""),
     totalValue: z.number().optional().default(0),
@@ -49,17 +56,18 @@ router.post("/", requireAuth, (req, res) => {
     const parsed = jobSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
-    const id = randomUUID();
-    const now = new Date().toISOString();
+    const actorId = req.user?.sub || "system-local";
     const d = parsed.data;
+    const id = d.id || randomUUID();
+    const now = new Date().toISOString();
     const jobNumber = genJobNumber();
 
     db.prepare(
         `INSERT INTO jobs (id, job_number, title, customer_id, customer_name, status, quantities, paper_type, binding_type, total_value, currency, priority, notes, payload_json, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(id, jobNumber, d.title, d.customerId, d.customerName, d.status, d.quantities, d.paperType, d.bindingType, d.totalValue, d.currency, d.priority, d.notes, JSON.stringify(d.payload || {}), now, now);
+    ).run(id, jobNumber, d.title, d.customerId, d.customerName, d.status, normalizeQuantities(d.quantities), d.paperType, d.bindingType, d.totalValue, d.currency, d.priority, d.notes, JSON.stringify(d.payload || {}), now, now);
 
-    writeAudit(req.user.sub, "job.create", "job", id, { title: d.title, jobNumber });
+    writeAudit(actorId, "job.create", "job", id, { title: d.title, jobNumber });
     res.status(201).json({ id, jobNumber, ...d, created_at: now, updated_at: now });
 });
 
@@ -77,6 +85,9 @@ router.put("/:id", requireAuth, (req, res) => {
     if (d.customerName !== undefined) { sets.push("customer_name = ?"); vals.push(d.customerName); }
     if (d.customerId !== undefined) { sets.push("customer_id = ?"); vals.push(d.customerId); }
     if (d.status !== undefined) { sets.push("status = ?"); vals.push(d.status); }
+    if (d.quantities !== undefined) { sets.push("quantities = ?"); vals.push(normalizeQuantities(d.quantities)); }
+    if (d.paperType !== undefined) { sets.push("paper_type = ?"); vals.push(d.paperType); }
+    if (d.bindingType !== undefined) { sets.push("binding_type = ?"); vals.push(d.bindingType); }
     if (d.totalValue !== undefined) { sets.push("total_value = ?"); vals.push(d.totalValue); }
     if (d.currency !== undefined) { sets.push("currency = ?"); vals.push(d.currency); }
     if (d.priority !== undefined) { sets.push("priority = ?"); vals.push(d.priority); }
@@ -91,7 +102,7 @@ router.put("/:id", requireAuth, (req, res) => {
     const result = db.prepare(`UPDATE jobs SET ${sets.join(", ")} WHERE id = ?`).run(...vals);
     if (!result.changes) return res.status(404).json({ error: "Job not found" });
 
-    writeAudit(req.user.sub, "job.update", "job", req.params.id, d);
+    writeAudit(req.user?.sub || "system-local", "job.update", "job", req.params.id, d);
     res.json({ id: req.params.id, ...d, updated_at: now });
 });
 
@@ -99,7 +110,7 @@ router.put("/:id", requireAuth, (req, res) => {
 router.delete("/:id", requireAuth, (req, res) => {
     const result = db.prepare("DELETE FROM jobs WHERE id = ?").run(req.params.id);
     if (!result.changes) return res.status(404).json({ error: "Job not found" });
-    writeAudit(req.user.sub, "job.delete", "job", req.params.id, {});
+    writeAudit(req.user?.sub || "system-local", "job.delete", "job", req.params.id, {});
     res.json({ ok: true });
 });
 
@@ -117,7 +128,7 @@ router.post("/:id/duplicate", requireAuth, (req, res) => {
      VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(id, jobNumber, `${original.title} (Copy)`, original.customer_id, original.customer_name, original.quantities, original.paper_type, original.binding_type, original.total_value, original.currency, original.priority, original.notes, original.payload_json, now, now);
 
-    writeAudit(req.user.sub, "job.duplicate", "job", id, { originalId: req.params.id });
+    writeAudit(req.user?.sub || "system-local", "job.duplicate", "job", id, { originalId: req.params.id });
     res.status(201).json({ id, jobNumber, title: `${original.title} (Copy)`, created_at: now });
 });
 

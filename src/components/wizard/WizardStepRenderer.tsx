@@ -1,3 +1,4 @@
+import React from "react";
 import { StepBasicInfo } from "./StepBasicInfo";
 import { StepBookSpec } from "./StepBookSpec";
 import { StepTextSections } from "./StepTextSections";

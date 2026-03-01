@@ -900,6 +900,7 @@ export interface SectionPaperCost {
 export interface SectionPrintingCost {
   sectionName: string;
   sectionType: string;
+  machineId: string;
   machineName: string;
   totalPlates: number;
   impressionsPerForm: number;
@@ -907,6 +908,8 @@ export interface SectionPrintingCost {
   ratePer1000: number;
   printingCost: number;
   makeReadyCost: number;
+  runningHours: number;
+  makereadyHours: number;
   totalCost: number;
 }
 

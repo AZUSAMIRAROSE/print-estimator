@@ -1,3 +1,4 @@
+import React from "react";
 import { useEstimationStore } from "@/stores/estimationStore";
 import { Info, MessageSquare, Lock } from "lucide-react";
 

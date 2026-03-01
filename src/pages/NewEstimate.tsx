@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from "react";
+import React, { useState, useCallback, useMemo, useEffect } from "react";
 import { useEstimationStore } from "@/stores/estimationStore";
 import { useAppStore } from "@/stores/appStore";
 import { cn } from "@/utils/cn";
@@ -14,7 +14,7 @@ import {
   ChevronLeft, ChevronRight, RotateCcw, Calculator, Save,
   FileText, CheckCircle, AlertCircle, BookOpen, Layers,
   Type, Square, BookMarked, Sparkles, Package, Truck,
-  Printer, DollarSign, Plus, MessageSquare, Eye
+  Printer, DollarSign, Plus, MessageSquare
 } from "lucide-react";
 
 const STEP_ICON_MAP: Record<string, React.ReactNode> = {
@@ -133,7 +133,7 @@ export function NewEstimate() {
         });
       }
     }, 100);
-  }, [estimation, setResults, setShowResults, setIsCalculating, addNotification, addActivityLog, activeQuantities, validationErrors]);
+  }, [estimation, setResults, setShowResults, setIsCalculating, addNotification, addActivityLog, activeQuantities, validationErrors, results.length]);
 
   const handleSaveDraft = useCallback(() => {
     setSavingDraft(true);
@@ -290,7 +290,7 @@ export function NewEstimate() {
         </div>
 
         {/* Step Content */}
-        <div className="flex-1 overflow-y-auto pb-4 pr-1">
+        <div className="flex-1 overflow-y-auto pb-4 pr-1 text-text-light-primary dark:text-text-dark-primary">
           <WizardStepRenderer step={currentStep} />
         </div>
 
@@ -409,33 +409,33 @@ export function NewEstimate() {
             <div className="space-y-1.5 text-xs">
               <div className="flex justify-between">
                 <span className="text-text-light-secondary dark:text-text-dark-secondary">Text Paper</span>
-                <span className="font-medium text-text-light-primary dark:text-text-dark-primary">
+                <span className="font-medium text-text-light-primary dark:text-text-dark-primary text-right truncate ml-2">
                   {estimation.textSections[0]?.gsm || "—"}gsm {estimation.textSections[0]?.paperTypeName?.split(" ")[0] || ""}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-text-light-secondary dark:text-text-dark-secondary">Cover</span>
-                <span className="font-medium text-text-light-primary dark:text-text-dark-primary">
+                <span className="font-medium text-text-light-primary dark:text-text-dark-primary text-right truncate ml-2">
                   {estimation.cover.gsm}gsm {estimation.cover.paperTypeName?.split(" ")[0] || ""}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-text-light-secondary dark:text-text-dark-secondary">Machine</span>
-                <span className="font-medium text-text-light-primary dark:text-text-dark-primary">
+                <span className="font-medium text-text-light-primary dark:text-text-dark-primary text-right truncate ml-2">
                   {estimation.textSections[0]?.machineName || "—"}
                 </span>
               </div>
               {estimation.finishing.coverLamination.enabled && (
                 <div className="flex justify-between">
                   <span className="text-text-light-secondary dark:text-text-dark-secondary">Lamination</span>
-                  <span className="font-medium text-text-light-primary dark:text-text-dark-primary capitalize">
+                  <span className="font-medium text-text-light-primary dark:text-text-dark-primary capitalize text-right truncate ml-2">
                     {estimation.finishing.coverLamination.type}
                   </span>
                 </div>
               )}
               <div className="flex justify-between">
                 <span className="text-text-light-secondary dark:text-text-dark-secondary">Destination</span>
-                <span className="font-medium text-text-light-primary dark:text-text-dark-primary">
+                <span className="font-medium text-text-light-primary dark:text-text-dark-primary text-right truncate ml-2">
                   {estimation.delivery.destinationName || "—"}
                 </span>
               </div>
@@ -471,7 +471,7 @@ export function NewEstimate() {
                   </span>
                 </div>
                 {sec.active && sec.detail && (
-                  <span className="text-text-light-tertiary dark:text-text-dark-tertiary">{sec.detail}</span>
+                  <span className="text-text-light-tertiary dark:text-text-dark-tertiary text-right truncate ml-2">{sec.detail}</span>
                 )}
               </div>
             ))}

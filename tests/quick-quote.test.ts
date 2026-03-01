@@ -8,17 +8,37 @@ const baseForm: QuickCalcForm = {
   pages: "256",
   gsm: "130",
   paperType: "Matt Art Paper",
+  paperSize: "23x36",
   quantity: "5000",
+  quantities: ["5000", "", "", "", ""],
   colorsFront: "4",
   colorsBack: "4",
   coverGSM: "300",
   coverPaper: "Art Card",
+  coverColorsFront: "4",
+  coverColorsBack: "0",
+  machineId: "rmgt",
+  coverMachineId: "rmgt",
+  printingMethod: "sheetwise",
   bindingType: "perfect_binding",
+  boardThickness: "2.5",
+  boardOrigin: "imported",
   laminationType: "gloss",
+  spotUV: false,
+  embossing: false,
+  foilBlocking: false,
+  dieCutting: false,
   pricingMode: "margin",
   pricingPercent: "20",
   taxRate: "0",
   turnaround: "standard",
+  destinationId: "ex",
+  freightMode: "none",
+  includeFinishing: true,
+  includePacking: false,
+  includeFreight: false,
+  customerId: "none",
+  customerDiscount: "0",
 };
 
 test("quick calc rejects decimal quantities", () => {
@@ -40,3 +60,6 @@ test("volume discount tiers are applied", () => {
   assert.equal(calcVolumeDiscountPercent(10000), 3);
   assert.equal(calcVolumeDiscountPercent(50000), 7);
 });
+
+
+

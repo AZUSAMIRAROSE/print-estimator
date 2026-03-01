@@ -1,3 +1,4 @@
+/* global process */
 import Database from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
@@ -124,4 +125,16 @@ export function runMigrations() {
       last_updated TEXT NOT NULL
     );
   `);
+
+  db.prepare(
+    `INSERT OR IGNORE INTO users (id, name, email, password_hash, role, created_at)
+     VALUES (?, ?, ?, ?, ?, ?)`
+  ).run(
+    "system-local",
+    "Local System",
+    "local-system@print-estimator",
+    "!",
+    "admin",
+    new Date().toISOString()
+  );
 }

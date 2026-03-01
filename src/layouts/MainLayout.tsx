@@ -3,6 +3,7 @@ import { useAppStore } from "@/stores/appStore";
 import { cn } from "@/utils/cn";
 import { SIDEBAR_ITEMS, APP_NAME, APP_VERSION } from "@/constants";
 import { Header } from "@/components/layout/Header";
+import { SearchOverlay } from "@/components/layout/SearchOverlay";
 import {
   LayoutDashboard, FilePlus, Briefcase, FileCheck, Users,
   CreditCard, Calculator, Warehouse, BarChart3, Settings,
@@ -124,7 +125,7 @@ export function Sidebar() {
 }
 
 export function MainLayout() {
-  const { sidebarCollapsed } = useAppStore();
+  const { sidebarCollapsed, searchOpen } = useAppStore();
 
   return (
     <div className="min-h-screen bg-surface-light-primary dark:bg-surface-dark-primary">
@@ -140,6 +141,7 @@ export function MainLayout() {
           <Outlet />
         </main>
       </div>
+      {searchOpen && <SearchOverlay />}
     </div>
   );
 }

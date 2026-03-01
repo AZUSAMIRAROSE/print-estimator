@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useMemo } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/utils/cn";
 
@@ -13,17 +13,20 @@ interface ModalProps {
   showClose?: boolean;
 }
 
-const sizeClasses = {
-  sm: "max-w-md",
-  md: "max-w-lg",
-  lg: "max-w-2xl",
-  xl: "max-w-4xl",
-  "2xl": "max-w-6xl",
-  full: "max-w-[95vw]",
-};
-
 export function Modal({ isOpen, onClose, title, subtitle, size = "md", children, footer, showClose = true }: ModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
+
+  const sizeClass = useMemo(() => {
+    const sizeClasses = {
+      sm: "max-w-md",
+      md: "max-w-lg",
+      lg: "max-w-2xl",
+      xl: "max-w-4xl",
+      "2xl": "max-w-6xl",
+      full: "max-w-[95vw]",
+    };
+    return sizeClasses[size];
+  }, [size]);
 
   useEffect(() => {
     if (isOpen) {
@@ -49,10 +52,12 @@ export function Modal({ isOpen, onClose, title, subtitle, size = "md", children,
   return (
     <div
       ref={overlayRef}
+      role="dialog"
+      aria-modal="true"
       onClick={(e) => { if (e.target === overlayRef.current) onClose(); }}
       className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/40 dark:bg-black/60 backdrop-blur-sm animate-fade-in"
     >
-      <div className={cn("w-full rounded-2xl bg-white dark:bg-surface-dark-secondary border border-surface-light-border dark:border-surface-dark-border shadow-2xl animate-scale-in flex flex-col max-h-[90vh]", sizeClasses[size])}>
+      <div className={cn("w-full rounded-2xl bg-white dark:bg-surface-dark-secondary border border-surface-light-border dark:border-surface-dark-border shadow-2xl animate-scale-in flex flex-col max-h-[90vh]", sizeClass)}>
         {/* Header */}
         {(title || showClose) && (
           <div className="flex items-center justify-between px-6 py-4 border-b border-surface-light-border dark:border-surface-dark-border flex-shrink-0">

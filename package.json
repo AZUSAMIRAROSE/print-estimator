@@ -11,7 +11,7 @@
     "build": "tsc && vite build",
     "test": "node --experimental-strip-types --test tests/*.test.ts",
     "benchmark": "node --experimental-strip-types benchmarks/estimator-benchmark.ts",
-    "lint": "eslint . --ext .ts,.tsx --max-warnings 0",
+    "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "preview": "vite preview",

@@ -43,13 +43,20 @@ const STATUS_CONFIG: Record<MachineStatus, { label: string; className: string }>
 export function MachineTable({
     machines, onEdit, onDuplicate, onDelete, onArchive, onRestore
 }: MachineTableProps) {
+    const [hoveredEntity, setHoveredEntity] = useState<string | null>(null);
+
     return (
         <div className="card overflow-hidden">
+            <div className="bg-surface-light-tertiary px-4 py-2 text-[10px] font-bold text-text-light-tertiary dark:bg-surface-dark-tertiary dark:text-text-dark-tertiary flex justify-between">
+                <span>Total Registered: {formatNumber(machines.length)}</span>
+                <span className="flex items-center gap-1"><Activity className="w-3 h-3" /> Real-time Telemetry Active</span>
+            </div>
             <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                     <thead>
                         <tr className="bg-surface-light-tertiary dark:bg-surface-dark-tertiary border-b border-surface-light-border dark:border-surface-dark-border">
                             <th className="py-2.5 px-3 text-left font-semibold text-xs">Machine</th>
+                            <th className="py-2.5 px-3 text-left font-semibold text-xs text-center"><Activity className="w-3 h-3 mx-auto" /></th>
                             <th className="py-2.5 px-3 text-left font-semibold text-xs">Specs</th>
                             <th className="py-2.5 px-3 text-left font-semibold text-xs">Status</th>
                             <th className="py-2.5 px-3 text-right font-semibold text-xs">Financials</th>
@@ -60,7 +67,12 @@ export function MachineTable({
                         {machines.map((m) => (
                             <tr
                                 key={m.id}
-                                className="border-b border-surface-light-border/50 dark:border-surface-dark-border/50 hover:bg-surface-light-secondary dark:hover:bg-surface-dark-tertiary transition-colors"
+                                onMouseEnter={() => setHoveredEntity(m.id)}
+                                onMouseLeave={() => setHoveredEntity(null)}
+                                className={cn(
+                                    "border-b border-surface-light-border/50 dark:border-surface-dark-border/50 hover:bg-surface-light-secondary dark:hover:bg-surface-dark-tertiary transition-colors",
+                                    hoveredEntity === m.id && "bg-surface-light-secondary/50"
+                                )}
                             >
                                 {/* Identity */}
                                 <td className="py-2.5 px-3" onClick={() => onEdit(m)}>
@@ -84,11 +96,16 @@ export function MachineTable({
                                     </div>
                                 </td>
 
+                                {/* Telemetry Spark */}
+                                <td className="py-2.5 px-3 text-center">
+                                    <Activity className={cn("w-3.5 h-3.5 mx-auto", m.status === MachineStatus.ACTIVE ? "text-success-500 animate-pulse" : "text-text-light-tertiary/20")} />
+                                </td>
+
                                 {/* Specs */}
                                 <td className="py-2.5 px-3 text-xs" onClick={() => onEdit(m)}>
                                     <div className="flex flex-col gap-0.5">
                                         <span className="text-text-light-secondary dark:text-text-dark-secondary">
-                                            {m.maxSheetWidth_mm}×{m.maxSheetHeight_mm}mm
+                                            {formatNumber(m.maxSheetWidth_mm)}×{formatNumber(m.maxSheetHeight_mm)}mm
                                         </span>
                                         <div className="flex items-center gap-1.5 text-[10px] text-text-light-tertiary dark:text-text-dark-tertiary">
                                             <span className="font-medium">{m.maxColorsPerPass} Colors</span>
@@ -133,7 +150,7 @@ export function MachineTable({
 
                                 {/* Actions */}
                                 <td className="py-2.5 px-3 text-center">
-                                    <div className="flex items-center justify-center gap-0.5">
+                                    <div className="flex items-center justify-center gap-0.5 relative">
                                         <button onClick={(e) => { e.stopPropagation(); onEdit(m); }} className="p-1.5 rounded-lg hover:bg-surface-light-tertiary dark:hover:bg-surface-dark-tertiary group" title="Edit">
                                             <Edit3 className="w-3.5 h-3.5 text-text-light-tertiary group-hover:text-primary-600 transition-colors" />
                                         </button>
@@ -152,6 +169,9 @@ export function MachineTable({
                                         )}
                                         <button onClick={(e) => { e.stopPropagation(); onDelete(m.id); }} className="p-1.5 rounded-lg hover:bg-danger-50 dark:hover:bg-danger-500/10 group" title="Delete">
                                             <Trash2 className="w-3.5 h-3.5 text-danger-400 group-hover:text-danger-600 transition-colors" />
+                                        </button>
+                                        <button className="p-1 rounded-full hover:bg-black/5 dark:hover:bg-white/5 opacity-40 hover:opacity-100 transition-opacity ml-1">
+                                            <MoreVertical className="w-3 h-3" />
                                         </button>
                                     </div>
                                 </td>

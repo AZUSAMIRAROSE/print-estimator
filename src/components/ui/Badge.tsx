@@ -1,3 +1,5 @@
+import React from "react";
+import { type LucideIcon } from "lucide-react";
 import { cn } from "@/utils/cn";
 
 type BadgeVariant = "success" | "warning" | "danger" | "info" | "default" | "primary";
@@ -7,6 +9,7 @@ interface BadgeProps {
   variant?: BadgeVariant;
   size?: "sm" | "md";
   dot?: boolean;
+  icon?: LucideIcon;
   className?: string;
 }
 
@@ -28,7 +31,7 @@ const dotColors: Record<BadgeVariant, string> = {
   default: "bg-gray-500",
 };
 
-export function Badge({ children, variant = "default", size = "sm", dot, className }: BadgeProps) {
+export function Badge({ children, variant = "default", size = "sm", dot, icon: Icon, className }: BadgeProps) {
   return (
     <span
       className={cn(
@@ -39,6 +42,7 @@ export function Badge({ children, variant = "default", size = "sm", dot, classNa
       )}
     >
       {dot && <span className={cn("w-1.5 h-1.5 rounded-full", dotColors[variant])} />}
+      {Icon && <Icon className={cn(size === "sm" ? "w-3 h-3" : "w-3.5 h-3.5", "opacity-80")} />}
       {children}
     </span>
   );

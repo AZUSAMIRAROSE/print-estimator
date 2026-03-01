@@ -1,9 +1,11 @@
+import React from "react";
 import { cn } from "@/utils/cn";
+import { type LucideIcon } from "lucide-react";
 
 interface Tab {
   id: string;
   label: string;
-  icon?: React.ReactNode;
+  icon?: React.ReactNode | LucideIcon;
   count?: number;
 }
 
@@ -15,6 +17,15 @@ interface TabsProps {
 }
 
 export function Tabs({ tabs, activeTab, onChange, variant = "default" }: TabsProps) {
+  const renderIcon = (InputIcon: React.ReactNode | LucideIcon) => {
+    if (!InputIcon) return null;
+    if (typeof InputIcon === 'function') {
+      const Comp = InputIcon as LucideIcon;
+      return <Comp className="w-4 h-4" />;
+    }
+    return InputIcon as React.ReactNode;
+  };
+
   return (
     <div
       className={cn(
@@ -48,7 +59,7 @@ export function Tabs({ tabs, activeTab, onChange, variant = "default" }: TabsPro
             ]
           )}
         >
-          {tab.icon}
+          {renderIcon(tab.icon)}
           {tab.label}
           {tab.count !== undefined && (
             <span

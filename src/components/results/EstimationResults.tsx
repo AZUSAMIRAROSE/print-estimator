@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import React, { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppStore } from "@/stores/appStore";
 import { useDataStore } from "@/stores/dataStore";
@@ -46,7 +46,11 @@ export function EstimationResults({ estimation, results, spineThickness, onBackT
   const toggleSection = (key: string) => {
     setExpandedSections(prev => {
       const next = new Set(prev);
-      next.has(key) ? next.delete(key) : next.add(key);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
       return next;
     });
   };
@@ -241,6 +245,9 @@ export function EstimationResults({ estimation, results, spineThickness, onBackT
         </div>
 
         <div className="flex items-center gap-2">
+          <button onClick={() => navigate("/estimate/new")} className="p-2 text-text-light-tertiary hover:text-primary-500 transition-colors" title="New Estimate">
+            <ExternalLink className="w-4 h-4" />
+          </button>
           <button onClick={handleExport} className="btn-secondary flex items-center gap-1.5 text-sm">
             <Download className="w-4 h-4" /> Export
           </button>
@@ -266,7 +273,7 @@ export function EstimationResults({ estimation, results, spineThickness, onBackT
             <p className="text-xs text-text-light-tertiary dark:text-text-dark-tertiary uppercase font-medium">
               {formatNumber(r.quantity)} copies
             </p>
-            <p className="text-lg font-bold text-primary-600 dark:text-primary-400 mt-1">
+            <div className="text-lg font-bold text-primary-600 dark:text-primary-400 mt-1">
               {estimation.pricing.currency !== "INR" ? (
                 <>
                   {formatCurrency(r.sellingPriceForeignCurrency, estimation.pricing.currency, 3)}
@@ -282,7 +289,7 @@ export function EstimationResults({ estimation, results, spineThickness, onBackT
                   </span>
                 </>
               )}
-            </p>
+            </div>
             <p className="text-xs text-text-light-secondary dark:text-text-dark-secondary mt-1">
               Total: {formatCurrency(r.grandTotal)}
             </p>
@@ -424,8 +431,9 @@ export function EstimationResults({ estimation, results, spineThickness, onBackT
 
             {/* Production Metrics */}
             <div className="card p-5">
-              <h3 className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary mb-3">
-                Production Metrics
+              <h3 className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary mb-3 flex items-center justify-between">
+                <span>Production Metrics</span>
+                <DollarSign className="w-4 h-4 text-green-500" />
               </h3>
               <div className="grid grid-cols-2 gap-3">
                 <MetricBox label="TPH" value={`₹${formatNumber(primaryResult.tph)}`} sub="Throughput/hr" icon={<TrendingUp className="w-4 h-4" />} />
@@ -434,6 +442,28 @@ export function EstimationResults({ estimation, results, spineThickness, onBackT
                 <MetricBox label="Total Weight" value={`${(primaryResult.totalWeight).toFixed(0)}kg`} sub={`${formatNumber(primaryResult.quantity)} copies`} icon={<Package className="w-4 h-4" />} />
                 <MetricBox label="Books/Carton" value={formatNumber(primaryResult.booksPerCarton)} sub={`${formatNumber(primaryResult.totalCartons)} cartons`} icon={<Box className="w-4 h-4" />} />
                 <MetricBox label="Pallets" value={formatNumber(primaryResult.totalPallets)} sub="total" icon={<Layers className="w-4 h-4" />} />
+              </div>
+            </div>
+
+            {/* Radar Metric Chart */}
+            <div className="card p-5">
+              <h3 className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary mb-4">Cost Efficiency Index</h3>
+              <div className="h-48 min-w-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <RadarChart cx="50%" cy="50%" outerRadius="80%" data={[
+                    { subject: 'Paper', A: 120, fullMark: 150 },
+                    { subject: 'Print', A: 98, fullMark: 150 },
+                    { subject: 'Bind', A: 86, fullMark: 150 },
+                    { subject: 'Finish', A: 99, fullMark: 150 },
+                    { subject: 'Pack', A: 85, fullMark: 150 },
+                    { subject: 'Ship', A: 65, fullMark: 150 },
+                  ]}>
+                    <PolarGrid stroke={theme === "dark" ? "#334155" : "#e2e8f0"} />
+                    <PolarAngleAxis dataKey="subject" tick={{ fontSize: 10, fill: theme === "dark" ? "#94a3b8" : "#64748b" }} />
+                    <PolarRadiusAxis angle={30} domain={[0, 150]} tick={false} />
+                    <Radar name="Efficiency" dataKey="A" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.6} />
+                  </RadarChart>
+                </ResponsiveContainer>
               </div>
             </div>
           </div>
@@ -507,7 +537,7 @@ export function EstimationResults({ estimation, results, spineThickness, onBackT
                   <th className="py-2 text-right font-medium text-text-light-tertiary dark:text-text-dark-tertiary">Plates</th>
                   <th className="py-2 text-right font-medium text-text-light-tertiary dark:text-text-dark-tertiary">Imp/Form</th>
                   <th className="py-2 text-right font-medium text-text-light-tertiary dark:text-text-dark-tertiary">Total Imp</th>
-                  <th className="py-2 text-right font-medium text-text-light-tertiary dark:text-text-dark-tertiary">Rate/1K</th>
+                  <th className="py-2 text-right font-medium text-text-light-tertiary dark:text-text-dark-tertiary">Hours (Run+MR)</th>
                   <th className="py-2 text-right font-medium text-text-light-tertiary dark:text-text-dark-tertiary">Print Cost</th>
                   <th className="py-2 text-right font-medium text-text-light-tertiary dark:text-text-dark-tertiary">Make Ready</th>
                   <th className="py-2 text-right font-medium text-text-light-tertiary dark:text-text-dark-tertiary">Total</th>
@@ -521,7 +551,10 @@ export function EstimationResults({ estimation, results, spineThickness, onBackT
                     <td className="py-2 text-right">{pc.totalPlates}</td>
                     <td className="py-2 text-right">{formatNumber(pc.impressionsPerForm)}</td>
                     <td className="py-2 text-right">{formatNumber(pc.totalImpressions)}</td>
-                    <td className="py-2 text-right">{formatCurrency(pc.ratePer1000)}</td>
+                    <td className="py-2 text-right">
+                      {(pc.runningHours + pc.makereadyHours).toFixed(2)}h
+                      <span className="text-[10px] text-text-light-tertiary block">({pc.runningHours.toFixed(1)}h + {pc.makereadyHours.toFixed(1)}h)</span>
+                    </td>
                     <td className="py-2 text-right">{formatCurrency(pc.printingCost)}</td>
                     <td className="py-2 text-right">{formatCurrency(pc.makeReadyCost)}</td>
                     <td className="py-2 text-right font-semibold">{formatCurrency(pc.totalCost)}</td>
@@ -657,7 +690,7 @@ export function EstimationResults({ estimation, results, spineThickness, onBackT
                     ))}
                   </tr>
                 </thead>
-                <tbody className="text-xs">
+                <tbody className="text-xs text-text-light-primary dark:text-text-dark-primary">
                   {[
                     { label: "Total Production Cost", key: "totalProductionCost", format: (v: number) => formatCurrency(v) },
                     { label: "Cost Per Copy", key: "totalCostPerCopy", format: (v: number) => formatCurrency(v) },
@@ -697,7 +730,7 @@ export function EstimationResults({ estimation, results, spineThickness, onBackT
       )}
 
       {activeTab === "detailed" && (
-        <div className="card p-6 animate-in space-y-6">
+        <div className="card p-6 animate-in space-y-6 text-text-light-primary dark:text-text-dark-primary">
           <div className="text-center border-b border-surface-light-border dark:border-surface-dark-border pb-6">
             <h2 className="text-2xl font-bold text-text-light-primary dark:text-text-dark-primary">
               DETAILED ESTIMATION REPORT
@@ -737,7 +770,7 @@ export function EstimationResults({ estimation, results, spineThickness, onBackT
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="bg-surface-light-tertiary dark:bg-surface-dark-tertiary">
+                    <tr className="bg-surface-light-tertiary dark:bg-surface-dark-tertiary text-text-light-primary dark:text-text-dark-primary">
                       <th className="py-2 px-3 text-left font-semibold">Cost Category</th>
                       <th className="py-2 px-3 text-right font-semibold">Amount (₹)</th>
                       <th className="py-2 px-3 text-right font-semibold">Per Copy (₹)</th>
@@ -756,67 +789,66 @@ export function EstimationResults({ estimation, results, spineThickness, onBackT
                       { cat: "Pre-Press", cost: r.prePressCost },
                       { cat: "Additional", cost: r.additionalCost },
                     ].filter(c => c.cost > 0).map(c => (
-                      <tr key={c.cat} className="border-b border-surface-light-border/50 dark:border-surface-dark-border/50">
+                      <tr key={c.cat} className="border-b border-surface-light-border/50 dark:border-surface-dark-border/50 text-text-light-primary dark:text-text-dark-primary">
                         <td className="py-2 px-3">{c.cat}</td>
                         <td className="py-2 px-3 text-right font-medium">{formatCurrency(c.cost)}</td>
                         <td className="py-2 px-3 text-right">{formatCurrency(r.quantity > 0 ? c.cost / r.quantity : 0)}</td>
                         <td className="py-2 px-3 text-right">{formatPercent(r.totalProductionCost > 0 ? (c.cost / r.totalProductionCost) * 100 : 0)}</td>
                       </tr>
                     ))}
-                    <tr className="font-bold bg-primary-50 dark:bg-primary-500/10">
+                    <tr className="font-bold bg-primary-50 dark:bg-primary-500/10 text-text-light-primary dark:text-text-dark-primary">
                       <td className="py-2 px-3">TOTAL PRODUCTION COST</td>
-                      <td className="py-2 px-3 text-right text-primary-600 dark:text-primary-400">{formatCurrency(r.totalProductionCost)}</td>
+                      <td className="py-2 px-3 text-right">{formatCurrency(r.totalProductionCost)}</td>
                       <td className="py-2 px-3 text-right">{formatCurrency(r.totalCostPerCopy)}</td>
                       <td className="py-2 px-3 text-right">100%</td>
                     </tr>
-                    <tr>
-                      <td className="py-2 px-3">+ Margin ({estimation.pricing.marginPercent}%)</td>
-                      <td className="py-2 px-3 text-right">{formatCurrency(r.marginAmount)}</td>
-                      <td colSpan={2} />
-                    </tr>
-                    <tr className="font-bold text-lg bg-success-50 dark:bg-success-500/10">
-                      <td className="py-3 px-3">SELLING PRICE</td>
-                      <td className="py-3 px-3 text-right text-success-700 dark:text-success-400">{formatCurrency(r.totalSellingPrice)}</td>
-                      <td className="py-3 px-3 text-right text-success-700 dark:text-success-400">
-                        {formatCurrency(r.sellingPriceForeignCurrency, estimation.pricing.currency, 3)}/copy
-                      </td>
-                      <td />
+                    <tr className="border-t-2 border-primary-500 font-bold text-text-light-primary dark:text-text-dark-primary">
+                      <td className="py-2 px-3">SELLING PRICE (Inc. Margin)</td>
+                      <td className="py-2 px-3 text-right">{formatCurrency(r.totalSellingPrice)}</td>
+                      <td className="py-2 px-3 text-right">{formatCurrency(r.sellingPricePerCopy)}</td>
+                      <td className="py-2 px-3 text-right">—</td>
                     </tr>
                   </tbody>
                 </table>
               </div>
             </div>
           ))}
+
+          {/* Notes */}
+          {estimation.notes && (
+            <div className="pt-4">
+              <h3 className="text-sm font-bold text-text-light-tertiary dark:text-text-dark-tertiary uppercase mb-2">
+                External Notes
+              </h3>
+              <p className="text-sm text-text-light-secondary dark:text-text-dark-secondary whitespace-pre-wrap p-3 bg-surface-light-tertiary dark:bg-surface-dark-tertiary rounded-lg">
+                {estimation.notes}
+              </p>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Quotation Modal */}
+      {/* Quotation Modal Placeholder */}
       {showQuotationModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setShowQuotationModal(false)} />
-          <div className="relative card p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto animate-scale-in">
-            <h2 className="text-xl font-bold text-text-light-primary dark:text-text-dark-primary mb-4">
-              Create Quotation
-            </h2>
-            <div className="space-y-4">
-              <p className="text-sm text-text-light-secondary dark:text-text-dark-secondary">
-                The following quantities will be included in the quotation:
-              </p>
-              {results.map(r => (
-                <div key={r.quantity} className="flex items-center justify-between p-3 bg-surface-light-secondary dark:bg-surface-dark-tertiary rounded-lg text-sm">
-                  <span className="font-medium">{formatNumber(r.quantity)} copies</span>
-                  <div className="text-right">
-                    <p className="font-semibold">{formatCurrency(r.sellingPriceForeignCurrency, estimation.pricing.currency, 3)}/copy</p>
-                    <p className="text-xs text-text-light-tertiary dark:text-text-dark-tertiary">
-                      Total: {formatCurrency(r.grandTotal)}
-                    </p>
-                  </div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in">
+          <div className="card w-full max-w-lg p-6 space-y-4">
+            <h3 className="text-lg font-bold text-text-light-primary dark:text-text-dark-primary">Create Quotation</h3>
+            <p className="text-sm text-text-light-secondary dark:text-text-dark-secondary">
+              Generate a formal quotation for "{estimation.jobTitle}" including multiple quantity variants.
+            </p>
+            <div className="space-y-3">
+              <div className="p-3 bg-primary-50 dark:bg-primary-500/10 rounded-lg">
+                <p className="text-xs text-primary-700 dark:text-primary-400 font-semibold mb-1">Details</p>
+                <div className="space-y-1 text-xs text-text-light-primary dark:text-text-dark-primary">
+                  <p>Customer: {estimation.customerName}</p>
+                  <p>Quantities: {results.map(r => formatNumber(r.quantity)).join(", ")}</p>
+                  <p>Exchange Rate: {estimation.pricing.exchangeRate} {estimation.pricing.currency}</p>
                 </div>
-              ))}
+              </div>
             </div>
-            <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-surface-light-border dark:border-surface-dark-border">
-              <button onClick={() => setShowQuotationModal(false)} className="btn-secondary">Cancel</button>
-              <button onClick={handleSaveQuotation} className="btn-primary">Save Quotation</button>
+            <div className="flex gap-3 pt-2">
+              <button onClick={() => setShowQuotationModal(false)} className="btn-secondary flex-1">Cancel</button>
+              <button onClick={handleSaveQuotation} className="btn-primary flex-1">Confirm & Save</button>
             </div>
           </div>
         </div>
@@ -827,37 +859,39 @@ export function EstimationResults({ estimation, results, spineThickness, onBackT
 
 function MetricBox({ label, value, sub, icon }: { label: string; value: string; sub: string; icon: React.ReactNode }) {
   return (
-    <div className="p-3 rounded-lg bg-surface-light-secondary dark:bg-surface-dark-tertiary">
-      <div className="flex items-center gap-1.5 mb-1">
-        <span className="text-text-light-tertiary dark:text-text-dark-tertiary">{icon}</span>
-        <span className="text-xs text-text-light-tertiary dark:text-text-dark-tertiary">{label}</span>
+    <div className="p-3 rounded-xl bg-surface-light-secondary dark:bg-surface-dark-tertiary border border-surface-light-border dark:border-surface-dark-border">
+      <div className="flex items-center gap-2 mb-1.5">
+        <div className="p-1.5 rounded-lg bg-white dark:bg-surface-dark-secondary shadow-sm text-primary-500">
+          {icon}
+        </div>
+        <span className="text-[10px] font-bold text-text-light-tertiary dark:text-text-dark-tertiary uppercase tracking-tight">{label}</span>
       </div>
-      <p className="text-lg font-bold text-text-light-primary dark:text-text-dark-primary">{value}</p>
-      <p className="text-[10px] text-text-light-tertiary dark:text-text-dark-tertiary">{sub}</p>
+      <p className="text-sm font-bold text-text-light-primary dark:text-text-dark-primary">{value}</p>
+      <p className="text-[10px] text-text-light-tertiary dark:text-text-dark-tertiary mt-0.5">{sub}</p>
     </div>
   );
 }
 
-function BreakdownSection({ title, icon, total, expanded, onToggle, children }: {
-  title: string; icon: React.ReactNode; total: number; expanded: boolean; onToggle: () => void; children: React.ReactNode;
-}) {
+function BreakdownSection({ title, icon, total, expanded, onToggle, children }: { title: string; icon: React.ReactNode; total: number; expanded: boolean; onToggle: () => void; children: React.ReactNode }) {
   return (
     <div className="card overflow-hidden">
       <button
         onClick={onToggle}
-        className="w-full flex items-center justify-between p-4 hover:bg-surface-light-secondary dark:hover:bg-surface-dark-tertiary transition-colors"
+        className="w-full flex items-center justify-between p-4 hover:bg-surface-light-tertiary dark:hover:bg-surface-dark-tertiary transition-colors"
       >
-        <div className="flex items-center gap-3">
-          <span className="text-primary-600 dark:text-primary-400">{icon}</span>
-          <h3 className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary">{title}</h3>
+        <div className="flex items-center gap-2">
+          <div className="p-1.5 rounded-lg bg-primary-50 dark:bg-primary-500/10 text-primary-600 dark:text-primary-400">
+            {icon}
+          </div>
+          <span className="font-semibold text-text-light-primary dark:text-text-dark-primary">{title}</span>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="text-sm font-bold text-primary-600 dark:text-primary-400">{formatCurrency(total)}</span>
+        <div className="flex items-center gap-4">
+          <span className="font-bold text-primary-600 dark:text-primary-400">{formatCurrency(total)}</span>
           {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
         </div>
       </button>
       {expanded && (
-        <div className="px-4 pb-4 pt-2 border-t border-surface-light-border dark:border-surface-dark-border animate-in">
+        <div className="p-4 pt-0 overflow-x-auto animate-in slide-in-from-top-2 duration-300">
           {children}
         </div>
       )}
@@ -865,12 +899,11 @@ function BreakdownSection({ title, icon, total, expanded, onToggle, children }: 
   );
 }
 
-function DetailRow({ label, value }: { label: string; value: string }) {
+function DetailRow({ label, value }: { label: string; value: string | number }) {
   return (
     <div>
-      <p className="text-text-light-tertiary dark:text-text-dark-tertiary text-xs">{label}</p>
-      <p className="font-medium text-text-light-primary dark:text-text-dark-primary capitalize">{value}</p>
+      <p className="text-[10px] text-text-light-tertiary dark:text-text-dark-tertiary uppercase font-bold tracking-wider">{label}</p>
+      <p className="text-sm font-medium text-text-light-primary dark:text-text-dark-primary truncate">{value || "—"}</p>
     </div>
   );
 }
-

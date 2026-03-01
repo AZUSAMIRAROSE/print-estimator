@@ -1,7 +1,8 @@
+import React from "react";
 import { useEstimationStore } from "@/stores/estimationStore";
 import { cn } from "@/utils/cn";
 import {
-  Info, Package, Box, Layers, ToggleLeft, ToggleRight,
+  Info, Box, ToggleLeft, ToggleRight,
   Truck, Shield, Grid3x3
 } from "lucide-react";
 import { PACKING_RATES } from "@/constants";
@@ -349,7 +350,7 @@ export function StepPacking() {
                 key={type}
                 onClick={() => updatePacking({ containerization: type })}
                 className={cn(
-                  "p-3 rounded-lg border-2 text-left transition-all",
+                  "flex-1 p-3 rounded-lg border-2 text-left transition-all",
                   p.containerization === type
                     ? "border-primary-500 bg-primary-50 dark:bg-primary-500/10"
                     : "border-surface-light-border dark:border-surface-dark-border bg-white dark:bg-surface-dark-secondary"
@@ -367,9 +368,9 @@ export function StepPacking() {
             <label className="label">Container Type</label>
             <div className="grid grid-cols-3 gap-3">
               {([
-                { type: "20ft" as const, label: "20ft FCL", desc: "~10 pallets", pallets: 10 },
-                { type: "40ft" as const, label: "40ft FCL", desc: "~20 pallets", pallets: 20 },
-                { type: "40ft_hc" as const, label: "40ft HC", desc: "~24 pallets", pallets: 24 },
+                { type: "20ft" as const, label: "20ft FCL", desc: "~10 pallets" },
+                { type: "40ft" as const, label: "40ft FCL", desc: "~20 pallets" },
+                { type: "40ft_hc" as const, label: "40ft HC", desc: "~24 pallets" },
               ]).map(({ type, label, desc }) => (
                 <button
                   key={type}

@@ -1,12 +1,11 @@
+import React from "react";
 import { useEstimationStore } from "@/stores/estimationStore";
 import { cn } from "@/utils/cn";
 import {
   CheckCircle, AlertTriangle, Book, Type, Square, Layers,
-  BookOpen, BookMarked, Sparkles, Package, Truck, Printer,
-  DollarSign, MessageSquare, Edit3
+  BookOpen, BookMarked, Sparkles, Package, Truck,
+  DollarSign, Edit3
 } from "lucide-react";
-import { TRIM_SIZE_PRESETS, WIZARD_STEPS } from "@/constants";
-import { formatCurrency } from "@/utils/format";
 import { calculateSpineThickness } from "@/utils/calculations/spine";
 
 export function StepReview() {

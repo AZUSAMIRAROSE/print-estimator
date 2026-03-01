@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useEstimationStore } from "@/stores/estimationStore";
 import { cn } from "@/utils/cn";
 import {
@@ -388,9 +388,7 @@ export function StepBinding() {
                         key={key}
                         className={cn(
                           "flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all",
-                          isChecked
-                            ? "border-primary-500 bg-primary-50 dark:bg-primary-500/10"
-                            : "border-surface-light-border dark:border-surface-dark-border hover:border-primary-300 bg-white dark:bg-surface-dark-secondary"
+                          (binding as any)[key] ? "border-primary-500 bg-primary-50 dark:bg-primary-500/10" : "border-surface-light-border dark:border-surface-dark-border hover:border-primary-300 bg-white dark:bg-surface-dark-secondary"
                         )}
                       >
                         <input

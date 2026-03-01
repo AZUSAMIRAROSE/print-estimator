@@ -651,6 +651,7 @@ export function Calculator() {
                     <AuditGroup title="Printing">
                       <AuditLine label="Text Impressions/Form" value={formatNumber(result.textPrinting.impressionsPerForm)} />
                       <AuditLine label="Text Total Impressions" value={formatNumber(result.textPrinting.totalImpressions)} />
+                      <AuditLine label="Text Machine Hours" value={`${(result.textPrinting.runningHours + result.textPrinting.makereadyHours).toFixed(2)}h (${result.textPrinting.runningHours.toFixed(2)}r + ${result.textPrinting.makereadyHours.toFixed(2)}m)`} />
                       <AuditLine label="Text Rate/1000" value={`₹${result.textPrinting.ratePer1000}`} />
                       <AuditLine label="Text Make-Ready" value={`₹${formatNumber(result.textPrinting.makeReadyCost)}`} />
                       <AuditLine label="Text Plates" value={String(result.textPrinting.totalPlates)} />

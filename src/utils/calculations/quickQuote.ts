@@ -5,13 +5,13 @@
 // wizard, but exposed through a streamlined single-page interface.
 // ============================================================================
 
-import { DEFAULT_PAPER_RATES, LAMINATION_RATES, PERFECT_BINDING_RATES, DEFAULT_MACHINES, DEFAULT_DESTINATIONS, STANDARD_PAPER_SIZES, TRIM_SIZE_PRESETS } from "../../constants/index.ts";
-import { calculatePaperRequirement } from "./paper";
-import { calculatePrintingCostGodLevel } from "./printing";
-import { calculateCTPCost } from "./ctp";
-import { calculateBindingCostGodLevel } from "./binding";
-import { calculateSpineThickness, calculateSpineWithBoard } from "./spine";
-import { calculateBookWeight, type BookWeightResult } from "./weight";
+import { DEFAULT_PAPER_RATES, LAMINATION_RATES, DEFAULT_MACHINES, STANDARD_PAPER_SIZES } from "../../constants/index.ts";
+import { calculatePaperRequirement } from "./paper.ts";
+import { calculatePrintingCostGodLevel } from "./printing.ts";
+import { calculateCTPCost } from "./ctp.ts";
+import { calculateBindingCostGodLevel } from "./binding.ts";
+import { calculateSpineThickness, calculateSpineWithBoard } from "./spine.ts";
+import { calculateBookWeight, type BookWeightResult } from "./weight.ts";
 import type { BindingType, SectionPaperCost, SectionPrintingCost, SectionCTPCost } from "@/types";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -202,7 +202,7 @@ export const ADVANCED_DEFAULT_FORM: QuickCalcForm = {
   pages: "256",
   gsm: "130",
   paperType: "Matt Art Paper",
-  paperSize: "23×36",
+  paperSize: "23x36",
   quantity: "5000",
   quantities: ["5000", "", "", "", ""],
   colorsFront: "4",
@@ -433,6 +433,7 @@ export function calculateAdvancedCosts(input: ParsedQuickCalcInput, quantity?: n
   const textPrinting: SectionPrintingCost = {
     sectionName: textPrintRaw.sectionName,
     sectionType: textPrintRaw.sectionType,
+    machineId: textPrintRaw.machineId,
     machineName: textPrintRaw.machineName,
     totalPlates: textPrintRaw.totalPlates,
     impressionsPerForm: textPrintRaw.impressionsPerForm,
@@ -440,6 +441,8 @@ export function calculateAdvancedCosts(input: ParsedQuickCalcInput, quantity?: n
     ratePer1000: textPrintRaw.effectiveRatePer1000,
     printingCost: textPrintRaw.timeRunningCost + textPrintRaw.energyCost + textPrintRaw.depreciationCost,
     makeReadyCost: textPrintRaw.timeMakereadyCost,
+    runningHours: textPrintRaw.kinematics.runningTime_hours,
+    makereadyHours: textPrintRaw.makeready.totalMakereadyTime_hours,
     totalCost: textPrintRaw.totalCost
   };
 
@@ -459,6 +462,7 @@ export function calculateAdvancedCosts(input: ParsedQuickCalcInput, quantity?: n
   const coverPrinting: SectionPrintingCost = {
     sectionName: coverPrintRaw.sectionName,
     sectionType: coverPrintRaw.sectionType,
+    machineId: coverPrintRaw.machineId,
     machineName: coverPrintRaw.machineName,
     totalPlates: coverPrintRaw.totalPlates,
     impressionsPerForm: coverPrintRaw.impressionsPerForm,
@@ -466,6 +470,8 @@ export function calculateAdvancedCosts(input: ParsedQuickCalcInput, quantity?: n
     ratePer1000: coverPrintRaw.effectiveRatePer1000,
     printingCost: coverPrintRaw.timeRunningCost + coverPrintRaw.energyCost + coverPrintRaw.depreciationCost,
     makeReadyCost: coverPrintRaw.timeMakereadyCost,
+    runningHours: coverPrintRaw.kinematics.runningTime_hours,
+    makereadyHours: coverPrintRaw.makeready.totalMakereadyTime_hours,
     totalCost: coverPrintRaw.totalCost
   };
 
@@ -697,3 +703,4 @@ export function calculateQuickCosts(input: ParsedQuickCalcInput): CostResult {
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
+

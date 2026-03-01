@@ -1,8 +1,9 @@
+import React from "react";
 import { useEstimationStore } from "@/stores/estimationStore";
 import { cn } from "@/utils/cn";
 import {
   Info, Sparkles, ToggleLeft, ToggleRight, Layers, Droplets,
-  Stamp, Scissors, CircleDot, Star, Palette
+  Stamp, Scissors, CircleDot, Palette
 } from "lucide-react";
 import { LAMINATION_RATES } from "@/constants";
 
@@ -394,7 +395,7 @@ export function StepFinishing() {
         )}
       </div>
 
-      {/* Additional Finishing */}
+      {/* Additional Finishing Modules */}
       <div className="card p-5 space-y-4">
         <div className="flex items-center gap-2">
           <CircleDot className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />

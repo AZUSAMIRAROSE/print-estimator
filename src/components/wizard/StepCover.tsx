@@ -1,3 +1,4 @@
+import React from "react";
 import { useEstimationStore } from "@/stores/estimationStore";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
@@ -12,7 +13,7 @@ export function StepCover() {
   const paperTypes = [...new Set(DEFAULT_PAPER_RATES.map(r => r.paperType))].map(p => ({ value: p, label: p }));
   const machineOptions = DEFAULT_MACHINES.map(m => ({ value: m.id, label: m.name }));
   const sizeOptions = STANDARD_PAPER_SIZES.map(s => ({ value: s.label, label: s.label }));
-  const gsmOptions = [130,150,170,200,250,300,350,400].map(g => ({ value: String(g), label: `${g} GSM` }));
+  const gsmOptions = [130, 150, 170, 200, 250, 300, 350, 400].map(g => ({ value: String(g), label: `${g} GSM` }));
 
   return (
     <div className="space-y-6 max-w-3xl animate-in">

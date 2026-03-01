@@ -3,8 +3,7 @@ import { cn } from "@/utils/cn";
 import { useAppStore } from "@/stores/appStore";
 import { useDataStore } from "@/stores/dataStore";
 import { formatCurrency, formatNumber } from "@/utils/format";
-import { save } from '@tauri-apps/plugin-dialog';
-import { writeTextFile } from '@tauri-apps/plugin-fs';
+import { saveTextFilePortable } from "@/utils/fileSave";
 import { BarChart3, Download, Calendar, TrendingUp, TrendingDown, Users, FileCheck, Briefcase, Printer, Layers, PieChart as PieIcon, Target, DollarSign } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, AreaChart, Area, Legend } from "recharts";
 
@@ -327,14 +326,15 @@ export function Reports() {
       const tabLabel = TAB_TITLES[tab].replace(/ /g, "-").toLowerCase();
       const defaultFilename = `${tabLabel}-${now.toISOString().split('T')[0]}.csv`;
 
-      const filePath = await save({
-        filters: [{ name: 'CSV Report', extensions: ['csv'] }],
-        defaultPath: defaultFilename,
-      });
+      const filePath = await saveTextFilePortable(
+        {
+          filters: [{ name: "CSV Report", extensions: ["csv"] }],
+          defaultPath: defaultFilename,
+        },
+        csv
+      );
 
       if (!filePath) return;
-
-      await writeTextFile(filePath, csv);
       addNotification({ type: "success", title: "Report Exported", message: `${TAB_TITLES[tab]} saved to ${filePath}`, category: "export" });
     } catch (error: any) {
       addNotification({ type: "error", title: "Export Failed", message: error.message || "Failed to export the report.", category: "system" });

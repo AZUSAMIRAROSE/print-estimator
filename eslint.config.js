@@ -3,12 +3,26 @@ import tsParser from "@typescript-eslint/parser";
 import tsPlugin from "@typescript-eslint/eslint-plugin";
 import reactHooks from "eslint-plugin-react-hooks";
 import reactRefresh from "eslint-plugin-react-refresh";
+import globals from "globals";
 
 export default [
   {
     ignores: ["dist/**", "node_modules/**", "src-tauri/**"],
   },
   js.configs.recommended,
+  {
+    files: ["**/*.{js,mjs,cjs,ts,tsx}"],
+    languageOptions: {
+      ecmaVersion: "latest",
+      sourceType: "module",
+      globals: {
+        ...globals.browser,
+        ...globals.node,
+        ...globals.es2021,
+        React: "writable", // For JSX
+      },
+    },
+  },
   {
     files: ["**/*.{ts,tsx}"],
     languageOptions: {
@@ -17,11 +31,6 @@ export default [
         ecmaVersion: "latest",
         sourceType: "module",
         ecmaFeatures: { jsx: true },
-      },
-      globals: {
-        window: "readonly",
-        document: "readonly",
-        localStorage: "readonly",
       },
     },
     plugins: {
@@ -35,6 +44,7 @@ export default [
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
       "@typescript-eslint/no-explicit-any": "off",
       "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
+      "no-undef": "error",
     },
   },
 ];

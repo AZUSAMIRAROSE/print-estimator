@@ -8,23 +8,13 @@ import {
   Briefcase, Search, X, Plus, Calendar, SortDesc, SortAsc,
   Download, Eye, Copy, Trash2, LayoutGrid, List, CheckCircle, Clock
 } from "lucide-react";
-import { save } from "@tauri-apps/plugin-dialog";
-import { writeTextFile } from "@tauri-apps/plugin-fs";
+import { saveTextFilePortable } from "@/utils/fileSave";
 import { JobDetailsSlider } from "@/components/jobs/JobDetailsSlider";
 import type { Job } from "@/types";
 
 interface JobEntry extends Job {
   isMock?: boolean;
 }
-
-const MOCK_JOBS: JobEntry[] = [
-  { id: "mock-1", jobNumber: "JOB-2507-0001", title: "Oxford English Dictionary 14th Ed", customerId: "", customerName: "Oxford University Press", estimationId: "", status: "in_production", quantities: [5000, 10000], results: [], totalValue: 2850000, currency: "GBP", assignedTo: "Press Team 1", dueDate: "2025-08-15T00:00:00Z", notes: "", tags: ["urgent", "premium"], createdAt: "2025-07-01T10:30:00Z", updatedAt: "2025-07-10T14:20:00Z", isMock: true, bookSpec: { heightMM: 280, widthMM: 210, orientation: "portrait", trimSizePreset: "", customSize: false, spineThickness: 45, spineWithBoard: 49, totalPages: 1200 } },
-  { id: "mock-2", jobNumber: "JOB-2507-0002", title: "Cambridge Mathematics Grade 10", customerId: "", customerName: "Cambridge University Press", estimationId: "", status: "quoted", quantities: [8000], results: [], totalValue: 1420000, currency: "GBP", assignedTo: "Binding Dept", dueDate: "2025-08-20T00:00:00Z", notes: "", tags: ["textbook"], createdAt: "2025-07-03T09:00:00Z", updatedAt: "2025-07-08T11:00:00Z", isMock: true, bookSpec: { heightMM: 297, widthMM: 210, orientation: "portrait", trimSizePreset: "", customSize: false, spineThickness: 15, spineWithBoard: 15, totalPages: 320 } },
-  { id: "mock-3", jobNumber: "JOB-2507-0003", title: "Penguin Classics — Wuthering Heights", customerId: "", customerName: "Penguin Random House", estimationId: "", status: "estimated", quantities: [3000, 5000, 10000], results: [], totalValue: 980000, currency: "USD", assignedTo: "Estimator VIP", dueDate: "", notes: "", tags: ["reprint"], createdAt: "2025-07-05T15:00:00Z", updatedAt: "2025-07-05T15:00:00Z", isMock: true, bookSpec: { heightMM: 198, widthMM: 129, orientation: "portrait", trimSizePreset: "", customSize: false, spineThickness: 22, spineWithBoard: 22, totalPages: 416 } },
-  { id: "mock-4", jobNumber: "JOB-2506-0045", title: "National Geographic World Atlas", customerId: "", customerName: "National Geographic", estimationId: "", status: "completed", quantities: [15000], results: [], totalValue: 8900000, currency: "USD", assignedTo: "Shipping", dueDate: "2025-06-30T00:00:00Z", notes: "", tags: ["hardcover", "large format"], createdAt: "2025-06-15T08:00:00Z", updatedAt: "2025-07-01T16:00:00Z", isMock: true, bookSpec: { heightMM: 350, widthMM: 260, orientation: "portrait", trimSizePreset: "", customSize: false, spineThickness: 30, spineWithBoard: 34, totalPages: 256 } },
-  { id: "mock-5", jobNumber: "JOB-2507-0004", title: "Harper Collins Children's Collection", customerId: "", customerName: "HarperCollins", estimationId: "", status: "draft", quantities: [2000], results: [], totalValue: 560000, currency: "GBP", assignedTo: "", dueDate: "", notes: "", tags: [], createdAt: "2025-07-10T12:00:00Z", updatedAt: "2025-07-10T12:00:00Z", isMock: true, bookSpec: { heightMM: 220, widthMM: 220, orientation: "square", trimSizePreset: "", customSize: false, spineThickness: 8, spineWithBoard: 8, totalPages: 48 } },
-  { id: "mock-6", jobNumber: "JOB-2507-0005", title: "Wiley Professional Handbook", customerId: "", customerName: "John Wiley & Sons", estimationId: "", status: "cancelled", quantities: [1000], results: [], totalValue: 320000, currency: "USD", assignedTo: "", dueDate: "", notes: "Cancelled due to budget constraints", tags: [], createdAt: "2025-07-02T07:00:00Z", updatedAt: "2025-07-06T09:30:00Z", isMock: true, bookSpec: { heightMM: 254, widthMM: 178, orientation: "portrait", trimSizePreset: "", customSize: false, spineThickness: 40, spineWithBoard: 40, totalPages: 800 } },
-];
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; indicator: string }> = {
   draft: { label: "Draft", color: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300", indicator: "bg-gray-400" },
@@ -49,10 +39,10 @@ export function Jobs() {
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
 
-  const allJobEntries: JobEntry[] = useMemo(() => {
-    if (jobs.length > 0) return jobs.map(j => ({ ...j, isMock: false }));
-    return MOCK_JOBS;
-  }, [jobs]);
+  const allJobEntries: JobEntry[] = useMemo(
+    () => jobs.map((job) => ({ ...job, isMock: false })),
+    [jobs]
+  );
 
   const filtered = useMemo(() => {
     let items = [...allJobEntries];
@@ -132,16 +122,6 @@ export function Jobs() {
 
     setIsExporting(true);
     try {
-      const filePath = await save({
-        filters: [{ name: "CSV", extensions: ["csv"] }],
-        defaultPath: `jobs_export_${new Date().toISOString().split('T')[0]}.csv`,
-      });
-
-      if (!filePath) {
-        setIsExporting(false);
-        return;
-      }
-
       const headers = ["Job Number", "Title", "Customer Name", "Status", "Total Value", "Currency", "Due Date", "Created At"];
       const rows = filtered.map(job => [
         job.jobNumber,
@@ -155,7 +135,14 @@ export function Jobs() {
       ].join(","));
 
       const csvContent = [headers.join(","), ...rows].join("\n");
-      await writeTextFile(filePath, csvContent);
+      const savedPath = await saveTextFilePortable(
+        {
+          filters: [{ name: "CSV", extensions: ["csv"] }],
+          defaultPath: `jobs_export_${new Date().toISOString().split('T')[0]}.csv`,
+        },
+        csvContent
+      );
+      if (!savedPath) return;
 
       addNotification({ type: "success", title: "Export Successful", message: `Jobs exported successfully.`, category: "export" });
     } catch (error) {
@@ -447,3 +434,4 @@ export function Jobs() {
     </div>
   );
 }
+

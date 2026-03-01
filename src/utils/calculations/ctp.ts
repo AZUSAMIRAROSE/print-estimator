@@ -2,7 +2,8 @@
 // CTP PLATE COST CALCULATION
 // ============================================================================
 
-import { CTP_RATES, DEFAULT_MACHINES } from "@/constants";
+import { useMachineStore } from "@/stores/machineStore";
+import { CTP_RATES } from "@/constants";
 import type { SectionCTPCost } from "@/types";
 
 export interface CTPCostInput {
@@ -13,12 +14,13 @@ export interface CTPCostInput {
 }
 
 export function calculateCTPCost(input: CTPCostInput): SectionCTPCost {
-  // Find CTP rate for this machine
-  const machine = DEFAULT_MACHINES.find(m => m.id === input.machineId);
-  const ratePerPlate = machine?.ctpRate || CTP_RATES[input.machineId.toUpperCase()] || 271;
-  
+  // Find CTP rate for this machine from store
+  const { machines } = useMachineStore.getState();
+  const machine = Array.from(machines.values()).find(m => m.id === input.machineId);
+  const ratePerPlate = machine?.plateCost_each || CTP_RATES[input.machineId.toUpperCase()] || 271;
+
   const totalCost = input.totalPlates * ratePerPlate;
-  
+
   return {
     sectionName: input.sectionName,
     sectionType: input.sectionType,

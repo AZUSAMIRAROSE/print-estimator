@@ -2,10 +2,8 @@ import { useState, useRef } from "react";
 import { useAppStore } from "@/stores/appStore";
 import { useDataStore } from "@/stores/dataStore";
 import { cn } from "@/utils/cn";
-import { downloadTextFile } from "@/utils/export";
+import { saveTextFilePortable } from "@/utils/fileSave";
 import { APP_VERSION, APP_BUILD, APP_NAME } from "@/constants";
-import { save, open } from '@tauri-apps/plugin-dialog';
-import { writeTextFile, readTextFile } from '@tauri-apps/plugin-fs';
 import {
   Settings as SettingsIcon, Building, Palette, Bell, Database,
   Save, Download, Upload, Trash2,
@@ -35,6 +33,7 @@ export function Settings() {
   const [showBackupModal, setShowBackupModal] = useState(false);
   const [backupType, setBackupType] = useState<"complete" | "data">("complete");
   const [localeSaved, setLocaleSaved] = useState(false);
+  const restoreInputRef = useRef<HTMLInputElement>(null);
   const [localePrefs, setLocalePrefs] = useState({
     language: "en-IN",
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata",
@@ -86,20 +85,18 @@ export function Settings() {
       const date = new Date().toISOString().split("T")[0];
       const defaultFilename = `print-estimator-${backupType}-backup-${date}.json`;
 
-      const filePath = await save({
-        filters: [{
-          name: 'JSON Backup',
-          extensions: ['json']
-        }],
-        defaultPath: defaultFilename,
-      });
+      const filePath = await saveTextFilePortable(
+        {
+          filters: [{ name: "JSON Backup", extensions: ["json"] }],
+          defaultPath: defaultFilename,
+        },
+        jsonStr
+      );
 
       if (!filePath) {
         setShowBackupModal(false);
         return; // User cancelled
       }
-
-      await writeTextFile(filePath, jsonStr);
 
       addNotification({ type: "success", title: "Backup Saved", message: `Backup saved successfully.`, category: "system" });
       addActivityLog({ action: "BACKUP_CREATED", category: "settings", description: `Backup exported (${backupType}) to: ${filePath}`, user: "Current User", entityType: "settings", entityId: "", level: "info" });
@@ -112,17 +109,50 @@ export function Settings() {
 
   const handleRestore = async () => {
     try {
-      const selectedPath = await open({
-        multiple: false,
-        filters: [{
-          name: 'JSON Backup',
-          extensions: ['json']
-        }]
-      });
+      let fileContent = "";
 
-      if (!selectedPath) return; // User cancelled
-      const pathStr = Array.isArray(selectedPath) ? selectedPath[0] : selectedPath;
-      const fileContent = await readTextFile(pathStr);
+      try {
+        const [{ open }, { readTextFile }] = await Promise.all([
+          import("@tauri-apps/plugin-dialog"),
+          import("@tauri-apps/plugin-fs"),
+        ]);
+
+        const selectedPath = await open({
+          multiple: false,
+          filters: [{
+            name: "JSON Backup",
+            extensions: ["json"],
+          }],
+        });
+
+        if (!selectedPath) return;
+        const pathStr = Array.isArray(selectedPath) ? selectedPath[0] : selectedPath;
+        fileContent = await readTextFile(pathStr);
+      } catch {
+        const fallback = await new Promise<string | null>((resolve) => {
+          const input = restoreInputRef.current;
+          if (!input) {
+            resolve(null);
+            return;
+          }
+
+          input.onchange = async (ev) => {
+            const file = (ev.target as HTMLInputElement).files?.[0];
+            if (!file) {
+              resolve(null);
+              return;
+            }
+            resolve(await file.text());
+            input.value = "";
+          };
+
+          input.click();
+        });
+
+        if (!fallback) return;
+        fileContent = fallback;
+      }
+
       const data = JSON.parse(fileContent);
 
       if (!data || typeof data !== "object") throw new Error("Invalid backup format");
@@ -167,14 +197,15 @@ export function Settings() {
         )
       ].join("\n");
 
-      const filePath = await save({
-        filters: [{ name: 'CSV Files', extensions: ['csv'] }],
-        defaultPath: 'activity-log.csv',
-      });
+      const filePath = await saveTextFilePortable(
+        {
+          filters: [{ name: "CSV Files", extensions: ["csv"] }],
+          defaultPath: "activity-log.csv",
+        },
+        csv
+      );
 
       if (!filePath) return;
-
-      await writeTextFile(filePath, csv);
       addNotification({ type: "success", title: "Activity Log Exported", message: `${activityLog.length} entries exported to ${filePath}.`, category: "export" });
     } catch (error: any) {
       addNotification({ type: "error", title: "Export Failed", message: error.message || "Failed to export activity log.", category: "system" });
@@ -194,6 +225,7 @@ export function Settings() {
 
   return (
     <div className="space-y-6 animate-in">
+      <input ref={restoreInputRef} type="file" accept=".json,application/json" className="hidden" />
       <div>
         <h1 className="text-2xl font-bold text-text-light-primary dark:text-text-dark-primary flex items-center gap-2">
           <SettingsIcon className="w-6 h-6" /> Settings

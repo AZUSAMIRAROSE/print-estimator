@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppStore } from "@/stores/appStore";
 import { cn } from "@/utils/cn";
@@ -143,8 +143,9 @@ export function Header() {
                   {unreadCount > 0 && (
                     <button
                       onClick={markAllNotificationsRead}
-                      className="text-xs text-primary-600 dark:text-primary-400 hover:underline px-2 py-1"
+                      className="text-xs text-primary-600 dark:text-primary-400 hover:underline px-2 py-1 flex items-center gap-1"
                     >
+                      <Check className="w-3 h-3" />
                       Mark all read
                     </button>
                   )}
@@ -195,7 +196,7 @@ export function Header() {
               {user?.avatar ? (
                 <img src={user.avatar} alt="Avatar" className="w-full h-full object-cover" />
               ) : (
-                user?.initials || "U"
+                user?.initials || (user?.name ? getInitials(user.name) : "U")
               )}
             </div>
             {user && (

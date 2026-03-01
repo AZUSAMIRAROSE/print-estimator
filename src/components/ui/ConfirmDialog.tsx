@@ -1,3 +1,4 @@
+import React from "react";
 import { Modal } from "./Modal";
 import { AlertTriangle, Info, CheckCircle } from "lucide-react";
 import { cn } from "@/utils/cn";
@@ -10,7 +11,7 @@ interface ConfirmDialogProps {
   message: string;
   confirmText?: string;
   cancelText?: string;
-  variant?: "danger" | "warning" | "info";
+  variant?: "danger" | "warning" | "info" | "success";
   loading?: boolean;
 }
 
@@ -23,12 +24,14 @@ export function ConfirmDialog({
     danger: <AlertTriangle className="w-6 h-6 text-danger-500" />,
     warning: <AlertTriangle className="w-6 h-6 text-warning-500" />,
     info: <Info className="w-6 h-6 text-info-500" />,
+    success: <CheckCircle className="w-6 h-6 text-success-500" />,
   };
 
   const buttonClasses = {
     danger: "bg-danger-600 hover:bg-danger-700 text-white",
     warning: "bg-warning-600 hover:bg-warning-700 text-white",
     info: "bg-primary-600 hover:bg-primary-700 text-white",
+    success: "bg-success-600 hover:bg-success-700 text-white",
   };
 
   return (

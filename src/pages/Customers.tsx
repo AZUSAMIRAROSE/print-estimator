@@ -2,9 +2,7 @@ import { useState, useMemo, useRef } from "react";
 import { useAppStore } from "@/stores/appStore";
 import { useDataStore } from "@/stores/dataStore";
 import { cn } from "@/utils/cn";
-import { formatCurrency, formatDate, generateCustomerCode } from "@/utils/format";
-import { save } from '@tauri-apps/plugin-dialog';
-import { writeTextFile } from '@tauri-apps/plugin-fs';
+import { saveTextFilePortable } from "@/utils/fileSave";
 import {
   Users, Search, Plus, Download, Upload, Eye, Edit3, Trash2, X, Check,
   Phone, Mail, MapPin, Globe, Building2, CreditCard, Banknote, Briefcase, FileText,
@@ -24,18 +22,6 @@ const STATUS_BADGES: Record<string, { bg: string; text: string; label: string }>
   draft: { bg: "bg-warning-50 dark:bg-warning-500/10", text: "text-warning-700 dark:text-warning-400", label: "Draft" },
   lead: { bg: "bg-blue-50 dark:bg-blue-500/10", text: "text-blue-700 dark:text-blue-400", label: "Lead" },
 };
-
-const MOCK_CUSTOMERS: Customer[] = [
-  {
-    id: "mock-1", code: "OUP-001", name: "Oxford University Press", contactPerson: "James Smith", email: "james@oup.com", phone: "+44 1865 556767", alternatePhone: "",
-    website: "www.oup.com", industry: "Publishing", companyRegNumber: "CRN123456", leadSource: "Direct", socialLinks: [],
-    defaultDiscount: 10, defaultMargin: 25, defaultTaxRate: 0, preferredCurrency: "GBP", preferredBank: "", accountManager: "Alice", creditLimit: 500000, paymentTerms: "Net 60",
-    address: "Walton Street", city: "Oxford", state: "Oxfordshire", country: "United Kingdom", pincode: "OX2 6DP", gstNumber: "", panNumber: "",
-    shippingAddress: { address: "Walton Street", city: "Oxford", state: "Oxfordshire", country: "United Kingdom", pincode: "OX2 6DP" },
-    priority: "high", category: "Education", notes: "Premium account.", status: "active",
-    totalOrders: 45, totalRevenue: 28500000, createdAt: "2024-01-15T10:00:00Z", updatedAt: "2024-01-15T10:00:00Z"
-  }
-];
 
 const EMPTY_FORM: Omit<Customer, "id" | "createdAt" | "updatedAt" | "totalOrders" | "totalRevenue"> = {
   name: "", code: "", contactPerson: "", email: "", phone: "", alternatePhone: "",
@@ -61,10 +47,7 @@ export function Customers() {
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
 
-  const allCustomers = useMemo(() => {
-    if (customers.length > 0) return customers;
-    return MOCK_CUSTOMERS;
-  }, [customers]);
+  const allCustomers = useMemo(() => customers, [customers]);
 
   const filtered = useMemo(() => {
     let items = [...allCustomers];
@@ -90,16 +73,17 @@ export function Customers() {
       );
       const csvContent = [headers.join(","), ...rows].join("\n");
 
-      const filePath = await save({
-        filters: [{ name: 'CSV', extensions: ['csv'] }],
-        defaultPath: 'customers-export.csv',
-      });
+      const filePath = await saveTextFilePortable(
+        {
+          filters: [{ name: "CSV", extensions: ["csv"] }],
+          defaultPath: "customers-export.csv",
+        },
+        csvContent
+      );
 
-      if (filePath) {
-        await writeTextFile(filePath, csvContent);
-        addNotification({ type: "success", title: "Export Successful", message: `Customers exported to ${filePath}`, category: "export" });
-        addActivityLog({ action: "CUSTOMERS_EXPORTED", category: "customer", description: `Exported ${allCustomers.length} customers to CSV`, user: "Current User", entityType: "customer", entityId: "", level: "info" });
-      }
+      if (!filePath) return;
+      addNotification({ type: "success", title: "Export Successful", message: `Customers exported to ${filePath}`, category: "export" });
+      addActivityLog({ action: "CUSTOMERS_EXPORTED", category: "customer", description: `Exported ${allCustomers.length} customers to CSV`, user: "Current User", entityType: "customer", entityId: "", level: "info" });
     } catch (error) {
       console.error("Export failed", error);
       addNotification({ type: "error", title: "Export Failed", message: "Failed to export customers CSV.", category: "export" });
@@ -110,18 +94,108 @@ export function Customers() {
   const handleImportCSV = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    const parseCsvLine = (line: string): string[] => {
+      const out: string[] = [];
+      let current = "";
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') {
+          if (inQuotes && line[i + 1] === '"') {
+            current += '"';
+            i++;
+          } else {
+            inQuotes = !inQuotes;
+          }
+          continue;
+        }
+        if (ch === "," && !inQuotes) {
+          out.push(current.trim());
+          current = "";
+          continue;
+        }
+        current += ch;
+      }
+      out.push(current.trim());
+      return out;
+    };
+
     const reader = new FileReader();
     reader.onload = (ev) => {
       const text = ev.target?.result as string;
       if (!text) return;
-      const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
-      if (lines.length < 2) return;
+      const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      if (lines.length < 2) {
+        addNotification({ type: "error", title: "Import Failed", message: "CSV file has no data rows.", category: "import" });
+        return;
+      }
+
+      const headers = parseCsvLine(lines[0]).map(h => h.toLowerCase());
+      const idx = {
+        code: headers.findIndex(h => h.includes("code")),
+        name: headers.findIndex(h => h === "name" || h.includes("company")),
+        contactPerson: headers.findIndex(h => h.includes("contact")),
+        email: headers.findIndex(h => h.includes("email")),
+        phone: headers.findIndex(h => h.includes("phone")),
+        city: headers.findIndex(h => h.includes("city")),
+        country: headers.findIndex(h => h.includes("country")),
+        priority: headers.findIndex(h => h.includes("priority")),
+        status: headers.findIndex(h => h.includes("status")),
+      };
+
       let imported = 0;
+      let skipped = 0;
+
       for (let i = 1; i < lines.length; i++) {
-        // Advanced import logic would go here, simplified for brevity
+        const cols = parseCsvLine(lines[i]);
+        const name = idx.name >= 0 ? (cols[idx.name] || "").trim() : "";
+        if (!name) {
+          skipped++;
+          continue;
+        }
+
+        const statusRaw = idx.status >= 0 ? (cols[idx.status] || "").trim().toLowerCase() : "active";
+        const status = (["active", "inactive", "draft", "lead"].includes(statusRaw) ? statusRaw : "active") as Customer["status"];
+        const priorityRaw = idx.priority >= 0 ? (cols[idx.priority] || "").trim().toLowerCase() : "medium";
+        const priority = (["high", "medium", "low"].includes(priorityRaw) ? priorityRaw : "medium") as Customer["priority"];
+        const code = idx.code >= 0 ? (cols[idx.code] || "").trim() : "";
+
+        if (code && allCustomers.some(c => c.code === code)) {
+          skipped++;
+          continue;
+        }
+
+        addCustomer({
+          ...EMPTY_FORM,
+          code,
+          name,
+          contactPerson: idx.contactPerson >= 0 ? (cols[idx.contactPerson] || "").trim() : "",
+          email: idx.email >= 0 ? (cols[idx.email] || "").trim() : "",
+          phone: idx.phone >= 0 ? (cols[idx.phone] || "").trim() : "",
+          city: idx.city >= 0 ? (cols[idx.city] || "").trim() : "",
+          country: idx.country >= 0 ? (cols[idx.country] || "").trim() : "",
+          priority,
+          status,
+        });
         imported++;
       }
-      addNotification({ type: "success", title: "Import Failed", message: "Advanced import not fully implemented in UI snippet.", category: "import" });
+
+      addNotification({
+        type: imported > 0 ? "success" : "warning",
+        title: imported > 0 ? "Import Complete" : "No Customers Imported",
+        message: `Imported ${imported} customer(s). Skipped ${skipped}.`,
+        category: "import",
+      });
+      addActivityLog({
+        action: "CUSTOMERS_IMPORTED",
+        category: "customer",
+        description: `Imported ${imported} customers from CSV (${skipped} skipped)`,
+        user: "Current User",
+        entityType: "customer",
+        entityId: "",
+        level: imported > 0 ? "info" : "warning",
+      });
     };
     reader.readAsText(file);
     e.target.value = "";

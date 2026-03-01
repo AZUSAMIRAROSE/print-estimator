@@ -1,3 +1,4 @@
+import React from "react";
 import { useEstimationStore } from "@/stores/estimationStore";
 import { Info, Plus, Trash2 } from "lucide-react";
 import { generateId } from "@/utils/format";
@@ -41,7 +42,7 @@ export function StepAdditional() {
         <div>
           <p className="text-sm font-medium text-primary-800 dark:text-primary-300">Additional Costs</p>
           <p className="text-sm text-primary-600 dark:text-primary-400 mt-1">
-            Add any extra costs not covered by standard sections — design work, special materials, 
+            Add any extra costs not covered by standard sections — design work, special materials,
             manual labor, scanning, photography, indexing, etc. Costs can be per-copy or fixed total.
           </p>
         </div>

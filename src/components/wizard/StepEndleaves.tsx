@@ -1,3 +1,4 @@
+import React from "react";
 import { useEstimationStore } from "@/stores/estimationStore";
 import { cn } from "@/utils/cn";
 import {
@@ -216,7 +217,7 @@ export function StepEndleaves() {
                       "p-3 rounded-lg border-2 text-center transition-all",
                       endleaves.pages === opt.value
                         ? "border-primary-500 bg-primary-50 dark:bg-primary-500/10"
-                        : "border-surface-light-border dark:border-surface-dark-border hover:border-primary-300 bg-white dark:bg-surface-dark-secondary"
+                        : "border-surface-light-border dark:border-surface-dark-border hover:border-primary-300 bg-white dark:bg-surface-dark-secondary text-text-light-primary dark:text-text-dark-primary"
                     )}
                   >
                     <p className="text-sm font-bold text-text-light-primary dark:text-text-dark-primary">
@@ -319,12 +320,13 @@ export function StepEndleaves() {
                         {[0, 1, 2, 3, 4].map((c) => (
                           <button
                             key={c}
+                            type="button"
                             onClick={() => updateEndleaves({ colorsFront: c })}
                             className={cn(
                               "flex-1 py-2 rounded-lg border-2 text-sm font-bold transition-all",
                               endleaves.colorsFront === c
                                 ? "border-primary-500 bg-primary-50 dark:bg-primary-500/10 text-primary-700 dark:text-primary-400"
-                                : "border-surface-light-border dark:border-surface-dark-border bg-white dark:bg-surface-dark-secondary"
+                                : "border-surface-light-border dark:border-surface-dark-border bg-white dark:bg-surface-dark-secondary text-text-light-primary dark:text-text-dark-primary"
                             )}
                           >
                             {c}C
@@ -339,12 +341,13 @@ export function StepEndleaves() {
                         {[0, 1, 2, 3, 4].map((c) => (
                           <button
                             key={c}
+                            type="button"
                             onClick={() => updateEndleaves({ colorsBack: c })}
                             className={cn(
                               "flex-1 py-2 rounded-lg border-2 text-sm font-bold transition-all",
                               endleaves.colorsBack === c
                                 ? "border-primary-500 bg-primary-50 dark:bg-primary-500/10 text-primary-700 dark:text-primary-400"
-                                : "border-surface-light-border dark:border-surface-dark-border bg-white dark:bg-surface-dark-secondary"
+                                : "border-surface-light-border dark:border-surface-dark-border bg-white dark:bg-surface-dark-secondary text-text-light-primary dark:text-text-dark-primary"
                             )}
                           >
                             {c}C

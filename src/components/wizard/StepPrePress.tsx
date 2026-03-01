@@ -1,6 +1,7 @@
+import React from "react";
 import { useEstimationStore } from "@/stores/estimationStore";
 import { cn } from "@/utils/cn";
-import { Info, Printer, FileImage, Eye } from "lucide-react";
+import { Info, FileImage, Eye } from "lucide-react";
 import { EPSON_PROOF_RATE, WET_PROOF_RATE } from "@/constants";
 
 export function StepPrePress() {

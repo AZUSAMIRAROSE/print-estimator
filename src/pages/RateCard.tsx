@@ -1,12 +1,10 @@
 import { useState, useRef } from "react";
-import { save } from '@tauri-apps/plugin-dialog';
-import { writeTextFile } from '@tauri-apps/plugin-fs';
 import { cn } from "@/utils/cn";
 import { useAppStore } from "@/stores/appStore";
 import { useRateCardStore } from "@/stores/rateCardStore";
 import { useInventoryStore } from "@/stores/inventoryStore";
 import { useMachineStore } from "@/stores/machineStore";
-import { exportTabCSV } from "./ratecard/RateCardShared";
+import { saveTextFilePortable } from "@/utils/fileSave";
 import { PaperRatesTab } from "./ratecard/PaperRatesTab";
 import { MachinesTab, MachineDetailsTab } from "./ratecard/MachinesTab";
 import { ImpressionRatesTab, WastageChartTab, BindingRatesTab, FinishingRatesTab, CoveringMaterialTab, BoardTypesTab, FreightRatesTab, PackingRatesTab } from "./ratecard/RateTabsExtra";
@@ -104,14 +102,14 @@ export function RateCard() {
     const csv = sections.join("\n");
 
     try {
-      const filePath = await save({
-        filters: [{ name: 'CSV File', extensions: ['csv'] }],
-        defaultPath: "rate-card-complete-export.csv",
-      });
-
+      const filePath = await saveTextFilePortable(
+        {
+          filters: [{ name: "CSV File", extensions: ["csv"] }],
+          defaultPath: "rate-card-complete-export.csv",
+        },
+        csv
+      );
       if (!filePath) return;
-
-      await writeTextFile(filePath, csv);
 
       addNotification({ type: "success", title: "Rate Card Exported", message: `Complete rate card saved to ${filePath}`, category: "export" });
       addActivityLog({ action: "RATE_CARD_EXPORTED", category: "settings", description: "Complete rate card exported", user: "Current User", entityType: "rate", entityId: "", level: "info" });
@@ -124,18 +122,130 @@ export function RateCard() {
   const handleImportCSV = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    const parseCsvLine = (line: string): string[] => {
+      const out: string[] = [];
+      let current = "";
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') {
+          if (inQuotes && line[i + 1] === '"') {
+            current += '"';
+            i++;
+          } else {
+            inQuotes = !inQuotes;
+          }
+          continue;
+        }
+        if (ch === "," && !inQuotes) {
+          out.push(current.trim());
+          current = "";
+          continue;
+        }
+        current += ch;
+      }
+      out.push(current.trim());
+      return out;
+    };
+
     const reader = new FileReader();
     reader.onload = (ev) => {
       const text = ev.target?.result as string;
       if (!text) return;
-      const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
-      if (lines.length < 2) {
+      const lines = text.split(/\r?\n/).map(l => l.trim());
+      if (lines.filter(Boolean).length < 2) {
         addNotification({ type: "error", title: "Import Failed", message: "CSV file is empty or has no data rows.", category: "import" });
         return;
       }
-      const dataRows = lines.filter(l => !l.startsWith("===") && l.includes(",")).length - 1;
-      addNotification({ type: "success", title: "Rate Card Imported", message: `${Math.max(0, dataRows)} rate entries read from CSV.`, category: "import" });
-      addActivityLog({ action: "RATE_CARD_IMPORTED", category: "settings", description: `Rate card CSV imported with ${Math.max(0, dataRows)} entries`, user: "Current User", entityType: "rate", entityId: "", level: "info" });
+
+      let section = "";
+      const paperSection: string[] = [];
+      const machineSection: string[] = [];
+
+      for (const line of lines) {
+        if (!line) continue;
+        if (line.startsWith("===")) {
+          section = line.replace(/=/g, "").trim().toLowerCase();
+          continue;
+        }
+        if (section === "paper rates") paperSection.push(line);
+        if (section === "machines") machineSection.push(line);
+      }
+
+      let paperImported = 0;
+      let paperUpdated = 0;
+      let paperSkipped = 0;
+
+      if (paperSection.length > 1) {
+        for (let i = 1; i < paperSection.length; i++) {
+          const cols = parseCsvLine(paperSection[i]);
+          const paperType = cols[0] || "";
+          const code = cols[1] || "";
+          const gsm = Number(cols[2] || 0);
+          const size = cols[3] || "23x36";
+
+          if (!paperType || !code || !Number.isFinite(gsm) || gsm <= 0) {
+            paperSkipped++;
+            continue;
+          }
+
+          const candidate = {
+            paperType,
+            code,
+            gsm,
+            size,
+            landedCost: Number(cols[4] || 0),
+            chargeRate: Number(cols[5] || 0),
+            ratePerKg: Number(cols[6] || 0),
+            supplier: cols[7] || "",
+            moq: Number(cols[8] || 0),
+            hsnCode: cols[9] || "",
+            marginPercent: Number(cols[10] || 0),
+            status: (["active", "draft", "inactive"].includes((cols[11] || "").toLowerCase()) ? cols[11].toLowerCase() : "active") as "active" | "draft" | "inactive",
+          };
+
+          const existing = store.paperRates.find(r => r.code === candidate.code && r.gsm === candidate.gsm && r.size === candidate.size);
+          if (existing) {
+            store.updatePaperRate(existing.id, candidate);
+            paperUpdated++;
+          } else {
+            store.addPaperRate(candidate);
+            paperImported++;
+          }
+        }
+      }
+
+      let machineImported = 0;
+      let machineUpdated = 0;
+      let machineSkipped = 0;
+      let machineErrors = 0;
+
+      if (machineSection.length > 1) {
+        const machineCsv = machineSection.join("\n");
+        const machineResult = machineStore.importMachines(machineCsv, "CSV", "MERGE");
+        machineImported = machineResult.imported;
+        machineUpdated = machineResult.updated;
+        machineSkipped = machineResult.skipped;
+        machineErrors = machineResult.errors.length;
+      }
+
+      const totalChanges = paperImported + paperUpdated + machineImported + machineUpdated;
+      addNotification({
+        type: totalChanges > 0 ? "success" : "warning",
+        title: totalChanges > 0 ? "Rate Card Imported" : "No Valid Rows Imported",
+        message: `Paper +${paperImported} new / ${paperUpdated} updated, Machines +${machineImported} new / ${machineUpdated} updated (${paperSkipped + machineSkipped + machineErrors} skipped/errors).`,
+        category: "import",
+      });
+      addActivityLog({
+        action: "RATE_CARD_IMPORTED",
+        category: "settings",
+        description: `Imported rate card CSV (paper: ${paperImported}/${paperUpdated}, machines: ${machineImported}/${machineUpdated})`,
+        user: "Current User",
+        entityType: "rate",
+        entityId: "",
+        level: totalChanges > 0 ? "info" : "warning",
+      });
     };
     reader.readAsText(file);
     e.target.value = "";

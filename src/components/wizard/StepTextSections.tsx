@@ -1,10 +1,11 @@
+import React from "react";
 import { useEstimationStore } from "@/stores/estimationStore";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Toggle } from "@/components/ui/Toggle";
 import { DEFAULT_MACHINES, DEFAULT_PAPER_RATES, STANDARD_PAPER_SIZES } from "@/constants";
 import { cn } from "@/utils/cn";
-import { Type, Plus } from "lucide-react";
+import { Type } from "lucide-react";
 
 export function StepTextSections() {
   const { estimation, updateTextSection } = useEstimationStore();
@@ -15,7 +16,7 @@ export function StepTextSections() {
 
   const machineOptions = DEFAULT_MACHINES.map(m => ({ value: m.id, label: m.name }));
   const sizeOptions = STANDARD_PAPER_SIZES.map(s => ({ value: s.label, label: s.label }));
-  const gsmOptions = [60,70,80,90,100,110,120,130,140,150,170,200,250,300].map(g => ({ value: String(g), label: `${g} GSM` }));
+  const gsmOptions = [60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 170, 200, 250, 300].map(g => ({ value: String(g), label: `${g} GSM` }));
 
   return (
     <div className="space-y-8 animate-in">

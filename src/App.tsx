@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { useAppStore } from "@/stores/appStore";
+import { setApiToken } from "@/api/client";
 import { MainLayout } from "@/layouts/MainLayout";
 import { OnboardingScreen } from "@/pages/Onboarding";
 import { Dashboard } from "@/pages/Dashboard";
@@ -28,6 +29,10 @@ export default function App() {
     }
   }, [theme]);
 
+  useEffect(() => {
+    setApiToken(localStorage.getItem("print-estimator-api-token") || "");
+  }, []);
+
   // Not onboarded — show onboarding
   if (!isOnboarded) {
     return <OnboardingScreen />;
@@ -39,7 +44,6 @@ export default function App() {
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/estimate/new" element={<NewEstimate />} />
-        <Route path="/estimate/:id" element={<NewEstimate />} />
         <Route path="/jobs" element={<Jobs />} />
         <Route path="/quotations" element={<Quotations />} />
         <Route path="/customers" element={<Customers />} />

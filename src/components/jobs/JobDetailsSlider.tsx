@@ -49,6 +49,11 @@ export function JobDetailsSlider({ jobId, isOpen, onClose, onEditJob }: JobDetai
         }
     }, [job, isOpen]);
 
+    const currentStatusConfig = useMemo(() =>
+        STATUS_OPTIONS.find(s => s.value === (editMode ? formData.status : job?.status)),
+        [editMode, formData.status, job?.status]
+    );
+
     if (!isOpen || !job) return null;
 
     const result = job.results?.[0]; // Default to first quantity result
@@ -57,8 +62,6 @@ export function JobDetailsSlider({ jobId, isOpen, onClose, onEditJob }: JobDetai
         onEditJob(job.id, formData);
         setEditMode(false);
     };
-
-    const currentStatusConfig = STATUS_OPTIONS.find(s => s.value === (editMode ? formData.status : job.status));
 
     return (
         <>
@@ -73,8 +76,11 @@ export function JobDetailsSlider({ jobId, isOpen, onClose, onEditJob }: JobDetai
                 {/* Header */}
                 <div className="flex items-center justify-between p-6 border-b border-border-light dark:border-border-dark bg-surface-light dark:bg-surface-dark">
                     <div className="flex items-center gap-3">
-                        <div className="p-2.5 bg-brand-50 dark:bg-brand-500/10 rounded-xl">
+                        <div className="p-2.5 bg-brand-50 dark:bg-brand-500/10 rounded-xl relative">
                             <Briefcase className="w-5 h-5 text-brand-600 dark:text-brand-400" />
+                            <div className="absolute -bottom-1 -right-1 p-0.5 bg-white dark:bg-surface-dark rounded-full shadow-sm">
+                                <Settings className="w-2.5 h-2.5 text-text-light-tertiary" />
+                            </div>
                         </div>
                         <div>
                             <div className="flex items-center gap-2">
@@ -94,8 +100,9 @@ export function JobDetailsSlider({ jobId, isOpen, onClose, onEditJob }: JobDetai
                                     placeholder="Job Title"
                                 />
                             ) : (
-                                <p className="text-sm font-medium text-text-light-secondary dark:text-text-dark-secondary mt-0.5">
+                                <p className="text-sm font-medium text-text-light-secondary dark:text-text-dark-secondary mt-0.5 flex items-center gap-1.5">
                                     {job.title}
+                                    <span className="text-[10px] opacity-40">System Currency: {settings.estimation.defaultCurrency}</span>
                                 </p>
                             )}
                         </div>

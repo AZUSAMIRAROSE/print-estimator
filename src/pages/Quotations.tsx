@@ -2,15 +2,13 @@ import { useState, useMemo } from "react";
 import { cn } from "@/utils/cn";
 import { useAppStore } from "@/stores/appStore";
 import { useDataStore } from "@/stores/dataStore";
-import { apiClient } from "@/api/client";
+import { saveBinaryFilePortable, saveTextFilePortable } from "@/utils/fileSave";
 import { formatCurrency, formatDate, getRelativeTime } from "@/utils/format";
 import {
   FileCheck, Search, Eye, Check, X,
   Download, Clock, AlertCircle, Send,
   FileText, Copy, Trash2, Edit3, Banknote
 } from "lucide-react";
-import { save } from "@tauri-apps/plugin-dialog";
-import { writeTextFile, writeFile } from "@tauri-apps/plugin-fs";
 import { Quotation } from "@/types";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -55,18 +53,6 @@ export function Quotations() {
 
   const handleDownloadPDF = async (qtn: QuotationEntry) => {
     try {
-      const filePath = await save({
-        filters: [{ name: 'PDF Document', extensions: ['pdf'] }],
-        defaultPath: `${qtn.quotationNumber}.pdf`,
-      });
-
-      if (!filePath) return;
-
-      let finalPath = filePath;
-      if (!finalPath.toLowerCase().endsWith('.pdf')) {
-        finalPath += '.pdf';
-      }
-
       const doc = new jsPDF();
 
       // Header Letthead
@@ -115,7 +101,15 @@ export function Quotations() {
       const pdfArrayBuffer = doc.output('arraybuffer');
       const uint8Array = new Uint8Array(pdfArrayBuffer);
 
-      await writeFile(finalPath, uint8Array);
+      const finalPath = await saveBinaryFilePortable(
+        {
+          filters: [{ name: "PDF Document", extensions: ["pdf"] }],
+          defaultPath: `${qtn.quotationNumber}.pdf`,
+        },
+        uint8Array,
+        "application/pdf"
+      );
+      if (!finalPath) return;
 
       addNotification({ type: 'success', title: 'PDF Exported', message: `Saved successfully to ${finalPath}`, category: 'export' });
       addActivityLog({ action: 'QUOTATION_EXPORTED', category: 'export', description: `Exported quotation ${qtn.quotationNumber} to PDF`, user: 'Current User', entityType: 'quotation', entityId: qtn.id, level: 'info' });
@@ -150,11 +144,12 @@ export function Quotations() {
     ].join("\n");
 
     try {
-      const filePath = await save({ filters: [{ name: 'CSV Document', extensions: ['csv'] }], defaultPath: "quotations-history.csv" });
-      if (filePath) {
-        await writeTextFile(filePath, csv);
-        addNotification({ type: "success", title: "Exported", message: `Quotation history saved to ${filePath}`, category: "export" });
-      }
+      const filePath = await saveTextFilePortable(
+        { filters: [{ name: "CSV Document", extensions: ["csv"] }], defaultPath: "quotations-history.csv" },
+        csv
+      );
+      if (!filePath) return;
+      addNotification({ type: "success", title: "Exported", message: `Quotation history saved to ${filePath}`, category: "export" });
     } catch (err) {
       console.error(err);
     }

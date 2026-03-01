@@ -295,16 +295,253 @@ export const useMachineStore = create<MachineStoreState & MachineStoreActions>((
 
     // Bulk Operations
     importMachines: (data, format, strategy) => {
-        // Implementation placeholder for large import engine logic
+        const batchId = "BATCH-" + Date.now();
+        const errors: Array<{ row: number; field: string; message: string }> = [];
+        const warnings: Array<{ row: number; field: string; message: string }> = [];
+        const now = new Date().toISOString();
+
+        const parseBoolean = (value: unknown): boolean => {
+            if (typeof value === "boolean") return value;
+            if (typeof value === "number") return value !== 0;
+            if (typeof value !== "string") return false;
+            const normalized = value.trim().toLowerCase();
+            return normalized === "true" || normalized === "yes" || normalized === "1";
+        };
+
+        const parseNumber = (value: unknown, fallback = 0): number => {
+            if (typeof value === "number" && Number.isFinite(value)) return value;
+            if (typeof value === "string") {
+                const parsed = Number(value.trim());
+                if (Number.isFinite(parsed)) return parsed;
+            }
+            return fallback;
+        };
+
+        const parseCsvLine = (line: string): string[] => {
+            const cells: string[] = [];
+            let current = "";
+            let inQuotes = false;
+
+            for (let i = 0; i < line.length; i++) {
+                const ch = line[i];
+                if (ch === "\"") {
+                    if (inQuotes && line[i + 1] === "\"") {
+                        current += "\"";
+                        i++;
+                    } else {
+                        inQuotes = !inQuotes;
+                    }
+                    continue;
+                }
+                if (ch === "," && !inQuotes) {
+                    cells.push(current.trim());
+                    current = "";
+                    continue;
+                }
+                current += ch;
+            }
+
+            cells.push(current.trim());
+            return cells;
+        };
+
+        const normalizeRecord = (raw: any, row: number): Machine | null => {
+            try {
+                const fallback = createDefaultMachine({
+                    createdAt: now,
+                    updatedAt: now,
+                    updatedBy: "importer",
+                    createdBy: "importer",
+                });
+
+                const maxSheetRaw = raw.maxSheet || raw["max_sheet"] || raw["maxSheetSize"] || "";
+                let maxSheetWidth = parseNumber(raw.maxSheetWidth_mm, fallback.maxSheetWidth_mm);
+                let maxSheetHeight = parseNumber(raw.maxSheetHeight_mm, fallback.maxSheetHeight_mm);
+
+                if ((maxSheetWidth <= 0 || maxSheetHeight <= 0) && typeof maxSheetRaw === "string" && maxSheetRaw.includes("x")) {
+                    const [w, h] = maxSheetRaw.toLowerCase().split("x").map(v => parseNumber(v, 0));
+                    if (w > 0 && h > 0) {
+                        maxSheetWidth = w;
+                        maxSheetHeight = h;
+                    }
+                }
+
+                const candidate: Machine = recalculateMachineComputedFields({
+                    ...fallback,
+                    ...raw,
+                    id: String(raw.id || fallback.id),
+                    name: String(raw.name || fallback.name),
+                    nickname: String(raw.nickname || raw.name || fallback.nickname),
+                    manufacturer: String(raw.manufacturer || fallback.manufacturer),
+                    model: String(raw.model || fallback.model),
+                    type: raw.type || fallback.type,
+                    status: raw.status || fallback.status,
+                    maxSheetWidth_mm: maxSheetWidth,
+                    maxSheetHeight_mm: maxSheetHeight,
+                    maxColorsPerPass: parseNumber(raw.maxColorsPerPass ?? raw.colors, fallback.maxColorsPerPass),
+                    hasCoatingUnit: parseBoolean(raw.hasCoatingUnit ?? raw.coating),
+                    canPerfect: parseBoolean(raw.canPerfect ?? raw.perfector),
+                    effectiveSpeed: parseNumber(raw.effectiveSpeed ?? raw.speed, fallback.effectiveSpeed),
+                    fixedSetupCost: parseNumber(raw.fixedSetupCost ?? raw.setupCost, fallback.fixedSetupCost),
+                    ctpRate_perPlate: parseNumber(raw.ctpRate_perPlate ?? raw.ctpRate, fallback.ctpRate_perPlate),
+                    hourlyRate: parseNumber(raw.hourlyRate, fallback.hourlyRate),
+                    tags: Array.isArray(raw.tags) ? raw.tags.map((tag: unknown) => String(tag)) : fallback.tags,
+                    updatedAt: now,
+                    updatedBy: "importer",
+                    changeLog: [
+                        ...(Array.isArray(raw.changeLog) ? raw.changeLog : fallback.changeLog),
+                        {
+                            timestamp: now,
+                            userId: "importer",
+                            action: "IMPORT",
+                            fieldChanged: null,
+                            oldValue: null,
+                            newValue: null,
+                            batchId,
+                        },
+                    ],
+                } as Machine);
+
+                const validation = validateMachine(candidate);
+                if (!validation.isValid) {
+                    errors.push({
+                        row,
+                        field: validation.errors[0]?.field || "machine",
+                        message: validation.errors[0]?.message || "Validation failed",
+                    });
+                    return null;
+                }
+
+                for (const warning of validation.warnings) {
+                    warnings.push({ row, field: warning.field, message: warning.message });
+                }
+
+                return candidate;
+            } catch (error: any) {
+                errors.push({ row, field: "machine", message: error?.message || "Invalid machine record" });
+                return null;
+            }
+        };
+
+        let rawRows: any[] = [];
+
+        if (format === "JSON") {
+            if (Array.isArray(data)) {
+                rawRows = data;
+            } else if (typeof data === "string") {
+                try {
+                    const parsed = JSON.parse(data);
+                    rawRows = Array.isArray(parsed) ? parsed : [];
+                } catch {
+                    errors.push({ row: 1, field: "json", message: "Invalid JSON payload" });
+                }
+            } else {
+                errors.push({ row: 1, field: "json", message: "Unsupported JSON payload format" });
+            }
+        } else if (format === "CSV") {
+            if (typeof data !== "string") {
+                errors.push({ row: 1, field: "csv", message: "CSV import expects text input" });
+            } else {
+                const rows = data
+                    .split(/\r?\n/)
+                    .map(line => line.trim())
+                    .filter(Boolean)
+                    .filter(line => !line.startsWith("==="));
+
+                if (rows.length > 1) {
+                    const headers = parseCsvLine(rows[0]).map(header => header.toLowerCase());
+                    rawRows = rows.slice(1).map((line) => {
+                        const cols = parseCsvLine(line);
+                        const row: Record<string, unknown> = {};
+                        headers.forEach((header, idx) => {
+                            row[header] = cols[idx] ?? "";
+                        });
+
+                        return {
+                            name: row["name"],
+                            nickname: row["nickname"],
+                            type: row["type"],
+                            maxSheet: row["max sheet"],
+                            colors: row["colors"],
+                            coating: row["coating"],
+                            perfector: row["perfector"],
+                            speed: row["speed"],
+                            setupCost: row["setup cost"],
+                            ctpRate: row["ctp rate"],
+                            hourlyRate: row["hourly rate"],
+                            status: row["status"],
+                            manufacturer: row["manufacturer"],
+                            model: row["model"],
+                        };
+                    });
+                }
+            }
+        } else {
+            errors.push({ row: 1, field: "format", message: `Unsupported format: ${format}` });
+        }
+
+        const normalized: Machine[] = [];
+        rawRows.forEach((row, idx) => {
+            const machine = normalizeRecord(row, idx + 2);
+            if (machine) normalized.push(machine);
+        });
+
+        let imported = 0;
+        let updated = 0;
+        let skipped = 0;
+
+        get()._pushToUndoStack();
+
+        set(produce((state: MachineStoreState) => {
+            const workingMap =
+                strategy === "REPLACE"
+                    ? new Map<string, Machine>()
+                    : new Map<string, Machine>(state.machines);
+            const workingOrder = strategy === "REPLACE" ? [] : [...state.machineOrder];
+
+            for (const machine of normalized) {
+                const hasExisting = workingMap.has(machine.id);
+                let machineToSave = machine;
+
+                if (strategy === "APPEND" && hasExisting) {
+                    machineToSave = {
+                        ...machine,
+                        id: `${machine.id}-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+                        name: `${machine.name} (Imported)`,
+                    } as Machine;
+                }
+
+                if (workingMap.has(machineToSave.id)) {
+                    if (strategy === "APPEND") {
+                        skipped++;
+                        continue;
+                    }
+                    workingMap.set(machineToSave.id, machineToSave);
+                    updated++;
+                } else {
+                    workingMap.set(machineToSave.id, machineToSave);
+                    workingOrder.push(machineToSave.id);
+                    imported++;
+                }
+            }
+
+            state.machines = workingMap;
+            state.machineOrder = workingOrder;
+            Object.assign(state, rebuildIndices(state.machines));
+            state.isDirty = true;
+        }));
+
+        get().persist();
+
         return {
-            success: true,
-            totalRecords: 0,
-            imported: 0,
-            updated: 0,
-            skipped: 0,
-            errors: [],
-            warnings: [],
-            batchId: 'BATCH-' + Date.now()
+            success: errors.length === 0,
+            totalRecords: rawRows.length,
+            imported,
+            updated,
+            skipped,
+            errors,
+            warnings,
+            batchId,
         };
     },
 

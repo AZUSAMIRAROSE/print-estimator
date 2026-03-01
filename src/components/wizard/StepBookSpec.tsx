@@ -1,33 +1,22 @@
-import { useMemo } from "react";
+import React, { useMemo } from "react";
 import { useEstimationStore } from "@/stores/estimationStore";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
-import { Toggle } from "@/components/ui/Toggle";
 import { TRIM_SIZE_PRESETS } from "@/constants";
-import { formatNumber } from "@/utils/format";
 import { cn } from "@/utils/cn";
-import { Book, Maximize2, Grid } from "lucide-react";
+import { Book, Grid } from "lucide-react";
 
 export function StepBookSpec() {
   const { estimation, updateBookSpec, updateQuantity } = useEstimationStore();
   const { bookSpec, quantities } = estimation;
 
-  const presetOptions = [
+  const presetOptions = useMemo(() => [
     { value: "custom", label: "Custom Size" },
     ...TRIM_SIZE_PRESETS.map((p) => ({
       value: p.label,
       label: p.label,
     })),
-  ];
-
-  const presetCategories = useMemo(() => {
-    const cats: Record<string, typeof TRIM_SIZE_PRESETS[number][]> = {};
-    TRIM_SIZE_PRESETS.forEach((p) => {
-      if (!cats[p.category]) cats[p.category] = [];
-      cats[p.category].push(p);
-    });
-    return cats;
-  }, []);
+  ], []);
 
   function handlePresetChange(value: string) {
     if (value === "custom") {

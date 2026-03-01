@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { useAppStore } from "@/stores/appStore";
 import { cn } from "@/utils/cn";
-import { save } from '@tauri-apps/plugin-dialog';
-import { writeTextFile } from '@tauri-apps/plugin-fs';
+import { saveTextFilePortable } from "@/utils/fileSave";
 import { formatCurrency, formatNumber } from "@/utils/format";
 import {
     Plus, Edit3, Trash2, Save, X, Check, Copy, Download,
@@ -285,14 +284,15 @@ export function FormField({ label, required, children, hint }: {
 export async function exportTabCSV(filename: string, headers: string[], rows: string[][], customSuccessMessage?: string) {
     try {
         const csv = [headers.join(","), ...rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(","))].join("\n");
-        const filePath = await save({
-            filters: [{ name: 'CSV File', extensions: ['csv'] }],
-            defaultPath: filename,
-        });
+        const filePath = await saveTextFilePortable(
+            {
+                filters: [{ name: "CSV File", extensions: ["csv"] }],
+                defaultPath: filename,
+            },
+            csv
+        );
 
         if (!filePath) return;
-
-        await writeTextFile(filePath, csv);
         const { addNotification } = useAppStore.getState();
         addNotification({
             type: "success",

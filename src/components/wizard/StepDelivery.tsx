@@ -1,3 +1,4 @@
+import React from "react";
 import { useEstimationStore } from "@/stores/estimationStore";
 import { cn } from "@/utils/cn";
 import { Info, Truck, Ship, Plane, MapPin, Package, Globe } from "lucide-react";
@@ -17,7 +18,7 @@ export function StepDelivery() {
         <div>
           <p className="text-sm font-medium text-primary-800 dark:text-primary-300">Delivery & Freight</p>
           <p className="text-sm text-primary-600 dark:text-primary-400 mt-1">
-            Select the delivery destination and freight mode. Sea freight is most economical for overseas. 
+            Select the delivery destination and freight mode. Sea freight is most economical for overseas.
             Advance copies are typically sent by air courier. All rates are in INR and converted to your chosen currency.
           </p>
         </div>
@@ -88,7 +89,7 @@ export function StepDelivery() {
                     "p-2 rounded-lg border-2 text-left transition-all",
                     d.deliveryType === type
                       ? "border-primary-500 bg-primary-50 dark:bg-primary-500/10"
-                      : "border-surface-light-border dark:border-surface-dark-border bg-white dark:bg-surface-dark-secondary"
+                      : "border-surface-light-border dark:border-surface-dark-border bg-white dark:bg-surface-dark-secondary text-text-light-primary dark:text-text-dark-primary"
                   )}
                 >
                   <p className="text-xs font-bold text-text-light-primary dark:text-text-dark-primary">{label}</p>
@@ -114,7 +115,7 @@ export function StepDelivery() {
                     "p-3 rounded-lg border-2 flex items-center gap-2 transition-all",
                     d.freightMode === type
                       ? "border-primary-500 bg-primary-50 dark:bg-primary-500/10"
-                      : "border-surface-light-border dark:border-surface-dark-border bg-white dark:bg-surface-dark-secondary"
+                      : "border-surface-light-border dark:border-surface-dark-border bg-white dark:bg-surface-dark-secondary text-text-light-primary dark:text-text-dark-primary"
                   )}
                 >
                   {icon}
@@ -223,7 +224,7 @@ export function StepDelivery() {
                   "px-4 py-2 rounded-lg border-2 text-sm transition-all",
                   d.advanceCopiesAirFreight
                     ? "border-primary-500 bg-primary-50 dark:bg-primary-500/10 text-primary-700 dark:text-primary-400"
-                    : "border-surface-light-border dark:border-surface-dark-border bg-white dark:bg-surface-dark-secondary"
+                    : "border-surface-light-border dark:border-surface-dark-border bg-white dark:bg-surface-dark-secondary text-text-light-secondary dark:text-text-dark-secondary"
                 )}
               >
                 {d.advanceCopiesAirFreight ? "✓ Yes, Air Courier" : "No"}

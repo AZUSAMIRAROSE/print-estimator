@@ -18,9 +18,12 @@ import { calculatePackingCostGodLevel } from "./packing";
 import { calculateFreightCostGodLevel } from "./freight";
 import { generateId } from "@/utils/format";
 import { DEFAULT_MACHINES } from "@/constants";
+import { useMachineStore } from "@/stores/machineStore";
 
 function safelyFindMachine(id: string): any {
-  return DEFAULT_MACHINES.find((m) => m.id === id) || { name: "Unknown", speedSPH: 5000, hourlyRate: 3000 };
+  const { machines } = useMachineStore.getState();
+  const machine = Array.from(machines.values()).find((m) => m.id === id);
+  return machine || DEFAULT_MACHINES.find((m) => m.id === id) || { name: "Unknown", speedSPH: 5000, hourlyRate: 3000 };
 }
 
 function normalizePrintMethod(method: string): "SHEETWISE" | "WORK_AND_TURN" | "WORK_AND_TUMBLE" | "PERFECTING" {
@@ -120,6 +123,7 @@ export function calculateFullEstimation(estimation: EstimationInput): Estimation
         printingCosts.push({
           sectionName: printRaw.sectionName,
           sectionType: printRaw.sectionType,
+          machineId: printRaw.machineId,
           machineName: printRaw.machineName,
           totalPlates: printRaw.totalPlates,
           impressionsPerForm: printRaw.impressionsPerForm,
@@ -127,6 +131,8 @@ export function calculateFullEstimation(estimation: EstimationInput): Estimation
           ratePer1000: printRaw.effectiveRatePer1000,
           printingCost: printRaw.timeRunningCost + printRaw.energyCost + printRaw.depreciationCost,
           makeReadyCost: printRaw.timeMakereadyCost,
+          runningHours: printRaw.kinematics.runningTime_hours,
+          makereadyHours: printRaw.makeready.totalMakereadyTime_hours,
           totalCost: printRaw.totalCost,
         });
 
@@ -195,6 +201,7 @@ export function calculateFullEstimation(estimation: EstimationInput): Estimation
           totalWeight: coverPaperRaw.totalWeight,
           ratePerReam: coverPaperRaw.ratePerReam,
           totalCost: coverPaperRaw.totalCost,
+          imposition: coverPaperRaw.imposition,
         });
 
         const coverPrintRaw = calculatePrintingCostGodLevel({
@@ -214,6 +221,7 @@ export function calculateFullEstimation(estimation: EstimationInput): Estimation
         printingCosts.push({
           sectionName: coverPrintRaw.sectionName,
           sectionType: "cover",
+          machineId: coverPrintRaw.machineId,
           machineName: coverPrintRaw.machineName,
           totalPlates: coverPrintRaw.totalPlates,
           impressionsPerForm: coverPrintRaw.impressionsPerForm,
@@ -221,6 +229,8 @@ export function calculateFullEstimation(estimation: EstimationInput): Estimation
           ratePer1000: coverPrintRaw.effectiveRatePer1000,
           printingCost: coverPrintRaw.timeRunningCost + coverPrintRaw.energyCost + coverPrintRaw.depreciationCost,
           makeReadyCost: coverPrintRaw.timeMakereadyCost,
+          runningHours: coverPrintRaw.kinematics.runningTime_hours,
+          makereadyHours: coverPrintRaw.makeready.totalMakereadyTime_hours,
           totalCost: coverPrintRaw.totalCost,
         });
 
@@ -360,12 +370,9 @@ export function calculateFullEstimation(estimation: EstimationInput): Estimation
       const totalSellingPriceForeign = estimation.pricing.currency === "INR" ? totalSellingPrice : totalSellingPrice / fx;
       const sellingPriceForeignCurrency = quantity > 0 ? totalSellingPriceForeign / quantity : 0;
 
-      const totalMachineHours = printingCosts.reduce((sum, p) => {
-        const machine = safelyFindMachine(p.sectionType);
-        return sum + (p.totalImpressions / machine.speedSPH) + (p.makeReadyCost / machine.hourlyRate);
-      }, 0);
-      const makeReadyHours = rawPrintResults.reduce((sum, p) => sum + (p.makeready?.totalMakereadyTime_hours || 0), 0);
-      const runningHours = rawPrintResults.reduce((sum, p) => sum + (p.kinematics?.runningTime_hours || 0), 0);
+      const makeReadyHours = printingCosts.reduce((sum, p) => sum + p.makereadyHours, 0);
+      const runningHours = printingCosts.reduce((sum, p) => sum + p.runningHours, 0);
+      const totalMachineHours = makeReadyHours + runningHours;
 
       const packingBreakdownObj: PackingBreakdown = {
         booksPerCarton: packingRaw.unitsPerCarton,
