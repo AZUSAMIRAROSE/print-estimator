@@ -200,9 +200,9 @@ export function TransferTab({ search, canEdit }: { search: string; canEdit: bool
             <TabActionBar onAdd={() => setShowAdd(true)} onExport={() => {
                 exportTabCSV("transfers.csv",
                     ["Item", "SKU", "Qty", "From", "To", "Status", "Transport", "Handling", "Insurance", "Packaging", "Other", "Total", "Date"],
-                    transfers.map(t => [t.itemName, t.itemSku, String(t.quantity), t.fromWarehouse, t.toWarehouse, t.status, String(t.transportCharges), String(t.handlingCharges), String(t.insuranceCharges), String(t.packagingCharges), String(t.otherCharges), String(t.totalTransferCost), t.transferDate])
+                    transfers.map(t => [t.itemName, t.itemSku, String(t.quantity), t.fromWarehouse, t.toWarehouse, t.status, String(t.transportCharges), String(t.handlingCharges), String(t.insuranceCharges), String(t.packagingCharges), String(t.otherCharges), String(t.totalTransferCost), t.transferDate]),
+                    "Transfers exported."
                 );
-                addNotification({ type: "success", title: "Exported", message: "Transfers exported.", category: "export" });
             }}
                 onReset={() => { resetToDefaults("transfers"); addNotification({ type: "info", title: "Cleared", message: "All transfers cleared.", category: "system" }); }}
                 canEdit={canEdit} itemCount={filtered.length} tabName="transfer"

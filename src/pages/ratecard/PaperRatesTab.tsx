@@ -53,9 +53,9 @@ export function PaperRatesTab({ search, canEdit }: { search: string; canEdit: bo
     const handleExport = () => {
         exportTabCSV("paper-rates.csv",
             ["Paper Type", "Code", "GSM", "Size", "Landed Cost", "Charge Rate", "Rate/Kg", "Supplier", "MOQ", "HSN", "Margin%", "Status", "Notes"],
-            filtered.map(r => [r.paperType, r.code, String(r.gsm), r.size, String(r.landedCost), String(r.chargeRate), String(r.ratePerKg), r.supplier, String(r.moq), r.hsnCode, String(r.marginPercent), r.status, r.notes])
+            filtered.map(r => [r.paperType, r.code, String(r.gsm), r.size, String(r.landedCost), String(r.chargeRate), String(r.ratePerKg), r.supplier, String(r.moq), r.hsnCode, String(r.marginPercent), r.status, r.notes]),
+            "Paper rates exported as CSV."
         );
-        addNotification({ type: "success", title: "Exported", message: "Paper rates exported as CSV.", category: "export" });
     };
 
     const SortIcon = ({ field }: { field: string }) => (

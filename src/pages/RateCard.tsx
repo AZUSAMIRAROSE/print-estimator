@@ -1,7 +1,10 @@
 import { useState, useRef } from "react";
+import { save } from '@tauri-apps/plugin-dialog';
+import { writeTextFile } from '@tauri-apps/plugin-fs';
 import { cn } from "@/utils/cn";
 import { useAppStore } from "@/stores/appStore";
 import { useRateCardStore } from "@/stores/rateCardStore";
+import { useInventoryStore } from "@/stores/inventoryStore";
 import { exportTabCSV } from "./ratecard/RateCardShared";
 import { PaperRatesTab } from "./ratecard/PaperRatesTab";
 import { MachinesTab, MachineDetailsTab } from "./ratecard/MachinesTab";
@@ -33,13 +36,14 @@ const TABS: { key: RateTab; label: string; icon: React.ReactNode }[] = [
 export function RateCard() {
   const { addNotification, addActivityLog, user } = useAppStore();
   const store = useRateCardStore();
+  const invStore = useInventoryStore();
   const [activeTab, setActiveTab] = useState<RateTab>("paper");
   const [search, setSearch] = useState("");
   const canEditRates = (user?.role || "").toLowerCase().includes("admin");
   const importRef = useRef<HTMLInputElement>(null);
 
   // ── Export All ──────────────────────────────────────────────────────────────
-  const handleExportAll = () => {
+  const handleExportAll = async () => {
     const sections: string[] = [];
 
     sections.push("=== PAPER RATES ===");
@@ -89,25 +93,29 @@ export function RateCard() {
     sections.push("", "=== PACKING RATES ===");
     Object.entries(store.packingRates).forEach(([k, v]) => sections.push(`"${k}",${v}`));
 
-    if (store.transfers.length > 0) {
+    if (invStore.transfers.length > 0) {
       sections.push("", "=== TRANSFERS ===");
       sections.push("Item,SKU,Qty,From,To,Status,Total Cost,Date");
-      store.transfers.forEach(t => sections.push(`"${t.itemName}","${t.itemSku}",${t.quantity},"${t.fromWarehouse}","${t.toWarehouse}","${t.status}",${t.totalTransferCost},"${t.transferDate}"`));
+      invStore.transfers.forEach(t => sections.push(`"${t.itemName}","${t.sku}",${t.quantity},"${t.fromWarehouse}","${t.toWarehouse}","${t.status}",${t.totalTransferCost},"${t.transferDate}"`));
     }
 
     const csv = sections.join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "rate-card-complete-export.csv";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
 
-    addNotification({ type: "success", title: "Rate Card Exported", message: "Complete rate card exported as CSV with all sections.", category: "export" });
-    addActivityLog({ action: "RATE_CARD_EXPORTED", category: "settings", description: "Complete rate card exported", user: "Current User", entityType: "rate", entityId: "", level: "info" });
+    try {
+      const filePath = await save({
+        filters: [{ name: 'CSV File', extensions: ['csv'] }],
+        defaultPath: "rate-card-complete-export.csv",
+      });
+
+      if (!filePath) return;
+
+      await writeTextFile(filePath, csv);
+
+      addNotification({ type: "success", title: "Rate Card Exported", message: `Complete rate card saved to ${filePath}`, category: "export" });
+      addActivityLog({ action: "RATE_CARD_EXPORTED", category: "settings", description: "Complete rate card exported", user: "Current User", entityType: "rate", entityId: "", level: "info" });
+    } catch (error: any) {
+      addNotification({ type: "error", title: "Export Failed", message: error.message || "Failed to export complete rate card.", category: "system" });
+    }
   };
 
   // ── Import CSV ─────────────────────────────────────────────────────────────
@@ -145,7 +153,7 @@ export function RateCard() {
       case "board": return store.boardTypes.length;
       case "freight": return store.freightDestinations.length;
       case "packing": return Object.keys(store.packingRates).length;
-      case "transfers": return store.transfers.length;
+      case "transfers": return invStore.transfers.length;
       default: return 0;
     }
   };
@@ -159,7 +167,7 @@ export function RateCard() {
             <CreditCard className="w-6 h-6" /> Rate Card
           </h1>
           <p className="text-sm text-text-light-secondary dark:text-text-dark-secondary mt-1">
-            Manage all pricing rates, machine details, cost tables & inventory transfers — {store.paperRates.length + store.machines.length + store.impressionRates.length} total entries
+            Manage all pricing rates, machine details, cost tables & inventory transfers — {store.paperRates.length + store.machines.length + store.impressionRates.length + invStore.transfers.length} total entries
           </p>
         </div>
         <div className="flex items-center gap-2">

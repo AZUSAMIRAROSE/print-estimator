@@ -1,9 +1,12 @@
 import { useState } from "react";
+import { useAppStore } from "@/stores/appStore";
 import { cn } from "@/utils/cn";
+import { save } from '@tauri-apps/plugin-dialog';
+import { writeTextFile } from '@tauri-apps/plugin-fs';
 import { formatCurrency, formatNumber } from "@/utils/format";
 import {
     Plus, Edit3, Trash2, Save, X, Check, Copy, Download,
-    RotateCcw, ChevronDown, ChevronUp, MoreHorizontal, FileCheck, AlertTriangle
+    RotateCcw, ChevronDown, ChevronUp, MoreHorizontal, FileCheck, AlertTriangle, Settings
 } from "lucide-react";
 import type { RateStatus } from "@/stores/rateCardStore";
 
@@ -208,6 +211,32 @@ export function TD({ children, className = "", align = "left" }: {
     );
 }
 
+// ── Sliding Side Panel (God-Level Editor) ───────────────────────────────────
+export function SlidingSidePanel({
+    title, isOpen, onClose, children, width = "max-w-4xl"
+}: {
+    title: string; isOpen: boolean; onClose: () => void; children: React.ReactNode; width?: string;
+}) {
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 z-[100] flex justify-end bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
+            <div className={cn("bg-surface-light-primary dark:bg-surface-dark-primary h-full w-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300", width)}>
+                <div className="flex items-center justify-between px-6 py-5 border-b border-surface-light-border dark:border-surface-dark-border bg-surface-light-secondary dark:bg-surface-dark-secondary">
+                    <h2 className="text-xl font-bold text-text-light-primary dark:text-text-dark-primary flex items-center gap-2">
+                        <Settings className="w-6 h-6 text-primary-600" /> {title}
+                    </h2>
+                    <button onClick={onClose} className="p-2 hover:bg-surface-light-tertiary dark:hover:bg-surface-dark-tertiary rounded-xl transition-colors">
+                        <X className="w-5 h-5 text-text-light-secondary dark:text-text-dark-secondary" />
+                    </button>
+                </div>
+                <div className="overflow-y-auto p-6 flex-1 custom-scrollbar">
+                    {children}
+                </div>
+            </div>
+        </div>
+    );
+}
+
 // ── Add Item Modal ───────────────────────────────────────────────────────────
 export function AddItemModal({
     title, isOpen, onClose, children
@@ -216,17 +245,17 @@ export function AddItemModal({
 }) {
     if (!isOpen) return null;
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in">
-            <div className="bg-surface-light-primary dark:bg-surface-dark-primary rounded-2xl shadow-2xl border border-surface-light-border dark:border-surface-dark-border w-full max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
-                <div className="flex items-center justify-between px-6 py-4 border-b border-surface-light-border dark:border-surface-dark-border">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-surface-light-primary dark:bg-surface-dark-primary rounded-2xl shadow-2xl border border-surface-light-border dark:border-surface-dark-border w-full max-w-3xl max-h-[85vh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-surface-light-border dark:border-surface-dark-border bg-surface-light-secondary dark:bg-surface-dark-secondary">
                     <h2 className="text-lg font-bold text-text-light-primary dark:text-text-dark-primary flex items-center gap-2">
                         <Plus className="w-5 h-5 text-primary-600" /> {title}
                     </h2>
-                    <button onClick={onClose} className="p-2 hover:bg-surface-light-tertiary dark:hover:bg-surface-dark-tertiary rounded-lg">
-                        <X className="w-5 h-5" />
+                    <button onClick={onClose} className="p-2 hover:bg-surface-light-tertiary dark:hover:bg-surface-dark-tertiary rounded-lg transition-colors">
+                        <X className="w-5 h-5 text-text-light-secondary dark:text-text-dark-secondary" />
                     </button>
                 </div>
-                <div className="overflow-y-auto p-6 flex-1">
+                <div className="overflow-y-auto p-6 flex-1 custom-scrollbar">
                     {children}
                 </div>
             </div>
@@ -250,15 +279,31 @@ export function FormField({ label, required, children, hint }: {
 }
 
 // ── Export helper ─────────────────────────────────────────────────────────────
-export function exportTabCSV(filename: string, headers: string[], rows: string[][]) {
-    const csv = [headers.join(","), ...rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(","))].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+export async function exportTabCSV(filename: string, headers: string[], rows: string[][], customSuccessMessage?: string) {
+    try {
+        const csv = [headers.join(","), ...rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(","))].join("\n");
+        const filePath = await save({
+            filters: [{ name: 'CSV File', extensions: ['csv'] }],
+            defaultPath: filename,
+        });
+
+        if (!filePath) return;
+
+        await writeTextFile(filePath, csv);
+        const { addNotification } = useAppStore.getState();
+        addNotification({
+            type: "success",
+            title: "Exported Successfully",
+            message: customSuccessMessage || `Saved to ${filePath}`,
+            category: "export"
+        });
+    } catch (error: any) {
+        const { addNotification } = useAppStore.getState();
+        addNotification({
+            type: "error",
+            title: "Export Failed",
+            message: error.message || "Failed to export CSV.",
+            category: "system"
+        });
+    }
 }

@@ -1,11 +1,9 @@
-// ============================================================================
-// PRINTING COST CALCULATION — EXACT EXCEL IMPRESSION RATE TABLE
-// ============================================================================
-
-import { IMPRESSION_RATES_DATA, MAKE_READY_RATES, BIBLE_PAPER_SURCHARGES, DEFAULT_MACHINES } from "@/constants";
-import type { SectionPrintingCost, ImpressionRate } from "@/types";
+import { IMPRESSION_RATES_DATA, DEFAULT_MACHINES } from "@/constants";
+import type { SectionPrintingCost } from "@/types";
 import type { ImpositionResult } from "./imposition";
 import type { WastageResult } from "./wastage";
+import { useInventoryStore } from "@/stores/inventoryStore";
+import { useRateCardStore } from "@/stores/rateCardStore";
 
 export interface PrintingCostInput {
   sectionName: string;
@@ -21,16 +19,9 @@ export interface PrintingCostInput {
   printingMethod: "sheetwise" | "work_and_turn" | "work_and_tumble" | "perfector";
 }
 
-/**
- * Calculate printing cost for a section
- * Impressions per form = (quantity + wastage_sheets) / ups
- * Rate looked up from table by impression count AND machine
- * Cost per form = (impressions / 1000) × rate_per_1000
- * Add make-ready cost per form
- */
 export function calculatePrintingCost(input: PrintingCostInput): SectionPrintingCost {
   const { imposition, wastageResult, quantity } = input;
-  
+
   // Calculate total plates needed
   let platesPerForm: number;
   if (input.printingMethod === "work_and_turn" || input.printingMethod === "work_and_tumble") {
@@ -41,43 +32,64 @@ export function calculatePrintingCost(input: PrintingCostInput): SectionPrinting
     // Sheetwise: both sides printed separately
     platesPerForm = input.colorsFront + input.colorsBack;
   }
-  
+
   const totalPlates = platesPerForm * imposition.numberOfForms;
-  
+
   // Calculate impressions per form
   const grossSheetsPerForm = Math.ceil((quantity + wastageResult.wastagePerForm) / imposition.ups);
   const impressionsPerForm = grossSheetsPerForm;
   const totalImpressions = impressionsPerForm * imposition.numberOfForms;
-  
+
   // For perfector, impressions are halved (prints both sides simultaneously)
   const effectiveImpressions = input.printingMethod === "perfector"
     ? totalImpressions / 2
     : totalImpressions;
-  
-  // Look up impression rate based on quantity and machine
-  const ratePer1000 = getImpressionRate(impressionsPerForm, input.machineId);
-  
-  // Calculate printing cost
-  const printingCost = (effectiveImpressions / 1000) * ratePer1000;
-  
-  // Make ready cost
-  const makeReadyCostPerForm = MAKE_READY_RATES[input.machineId.toUpperCase()] || 
-                                MAKE_READY_RATES[input.machineName] || 
-                                1500;
-  const totalMakeReady = makeReadyCostPerForm * imposition.numberOfForms;
-  
-  // Bible paper surcharge
-  let surchargeMultiplier = 1;
-  const surcharge = BIBLE_PAPER_SURCHARGES.find(
-    s => input.gsm >= s.minGSM && input.gsm <= s.maxGSM
-  );
-  if (surcharge) {
-    surchargeMultiplier = 1 + surcharge.surchargePercent / 100;
+
+  // ── Find Machine from Stores ──
+  const { machines: invMachines } = useInventoryStore.getState();
+  const { machines: rcMachines } = useRateCardStore.getState();
+
+  let machine = invMachines.find(m => m.id === input.machineId || m.name === input.machineName);
+  if (!machine) {
+    machine = rcMachines.find(m => m.id === input.machineId || m.name === input.machineName);
   }
-  
-  const adjustedPrintingCost = printingCost * surchargeMultiplier;
-  const totalCost = adjustedPrintingCost + totalMakeReady;
-  
+
+  let printingCost = 0;
+  let totalMakeReady = 0;
+  let ratePer1000 = 0;
+
+  // ── Super Ultimate Precise Estimate Calculation ──
+  if (machine && machine.speedSPH > 0 && machine.hourlyRate >= 0) {
+    // 1. Calculate running time in hours
+    const runningHours = effectiveImpressions / machine.speedSPH;
+
+    // 2. Calculate hourly total operational cost
+    const powerCostPerHour = machine.powerConsumptionKW * machine.electricityCostPerUnit;
+    const totalHourlyCost = machine.hourlyRate + machine.inkCostPerHour + powerCostPerHour;
+
+    // 3. Printing Cost
+    printingCost = runningHours * totalHourlyCost;
+
+    // Calculate synthetic ratePer1000 for display/legacy compat
+    ratePer1000 = effectiveImpressions > 0 ? (printingCost / effectiveImpressions) * 1000 : 0;
+
+    // 4. Make Ready Cost (Fixed + Time-based)
+    const makeReadyTimeCost = (machine.makeReadyTime || 0) * totalHourlyCost;
+    const flatMakeReady = machine.makeReadyCost || 0;
+
+    const combinedMakeReadyPerForm = flatMakeReady + makeReadyTimeCost;
+    totalMakeReady = combinedMakeReadyPerForm * imposition.numberOfForms;
+  } else {
+    // ── Fallback to legacy Excel table rates ──
+    ratePer1000 = getImpressionRate(impressionsPerForm, input.machineId);
+    printingCost = (effectiveImpressions / 1000) * ratePer1000;
+
+    const defaultMR = 1500;
+    totalMakeReady = defaultMR * imposition.numberOfForms;
+  }
+
+  const totalCost = printingCost + totalMakeReady;
+
   return {
     sectionName: input.sectionName,
     sectionType: input.sectionType,
@@ -85,17 +97,16 @@ export function calculatePrintingCost(input: PrintingCostInput): SectionPrinting
     totalPlates,
     impressionsPerForm,
     totalImpressions: Math.round(effectiveImpressions),
-    ratePer1000,
-    printingCost: Math.round(adjustedPrintingCost * 100) / 100,
-    makeReadyCost: totalMakeReady,
+    ratePer1000: Math.round(ratePer1000 * 100) / 100,
+    printingCost: Math.round(printingCost * 100) / 100,
+    makeReadyCost: Math.round(totalMakeReady * 100) / 100,
     totalCost: Math.round(totalCost * 100) / 100,
   };
 }
 
 function getImpressionRate(impressions: number, machineId: string): number {
-  // Determine machine column
   const machineKey = machineId.toLowerCase();
-  
+
   for (const entry of IMPRESSION_RATES_DATA) {
     if (impressions >= entry.range[0] && impressions <= entry.range[1]) {
       if (machineKey.includes("fav")) return entry.fav;
@@ -106,8 +117,7 @@ function getImpressionRate(impressions: number, machineId: string): number {
       return entry.fav; // Default
     }
   }
-  
-  // Fallback: use last entry
+
   const last = IMPRESSION_RATES_DATA[IMPRESSION_RATES_DATA.length - 1];
   return last.fav;
 }
