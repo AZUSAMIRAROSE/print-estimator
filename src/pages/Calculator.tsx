@@ -1,18 +1,19 @@
-import { useMemo, useState, useCallback } from "react";
+import React, { useMemo, useState, useCallback } from "react";
 import { cn } from "@/utils/cn";
 import { formatCurrency, formatNumber } from "@/utils/format";
 import { calculateSpineThickness } from "@/utils/calculations/spine";
 import { calculateBookWeight } from "@/utils/calculations/weight";
 import { useDataStore } from "@/stores/dataStore";
 import {
-  Calculator as CalcIcon, Book, Layers, DollarSign, RefreshCcw, AlertTriangle,
-  ChevronDown, ChevronRight, Printer, Settings2, Sparkles, BarChart3,
-  Copy, TrendingDown, TrendingUp, Info, Zap, Package, Weight, Ruler,
+  Calculator as CalcIcon, Book, DollarSign, RefreshCcw, AlertTriangle,
+  Printer, Settings2, Sparkles, BarChart3,
+  Copy, TrendingDown, TrendingUp, Info, Zap, Weight, Ruler,
   Palette, Grid3X3, FileText, Eye, EyeOff, ArrowRight, CheckCircle2,
   Maximize2, Minimize2
 } from "lucide-react";
 import { DEFAULT_PAPER_RATES, TRIM_SIZE_PRESETS, DEFAULT_MACHINES, STANDARD_PAPER_SIZES, DEFAULT_DESTINATIONS, LAMINATION_RATES } from "@/constants";
-import type { PricingMode, Turnaround, BindingType } from "@/utils/calculations/quickQuote";
+import type { PricingMode, Turnaround } from "@/utils/calculations/quickQuote";
+import type { BindingType } from "@/types";
 import type { QuickCalcForm, AdvancedCostResult } from "@/utils/calculations/quickQuote";
 import { ADVANCED_DEFAULT_FORM, validateAndParseQuickCalc, calculateAdvancedCosts, calculateMultiQuantity } from "@/utils/calculations/quickQuote";
 
@@ -80,6 +81,44 @@ export function Calculator() {
     }
   }, [parsed, errors]);
 
+  // Compute live basic spine thickness if text pages & gsm provided
+  const liveSpine = useMemo(() => {
+    try {
+      if (form.pages && form.gsm && form.paperType) {
+        return calculateSpineThickness({
+          textSections: [{ pages: Number(form.pages), gsm: Number(form.gsm), paperType: form.paperType }]
+        });
+      }
+    } catch {
+      // Error calculating live spine - silent fail
+    }
+    return 0;
+  }, [form.pages, form.gsm, form.paperType]);
+
+  const liveWeight = useMemo(() => {
+    try {
+      if (form.pages && form.gsm && form.bookWidth && form.bookHeight) {
+        return calculateBookWeight({
+          trimWidthMM: Number(form.bookWidth),
+          trimHeightMM: Number(form.bookHeight),
+          textSections: [{ pages: Number(form.pages), gsm: Number(form.gsm) }],
+          coverGSM: Number(form.coverGSM || 300),
+          spineThickness: liveSpine || 5,
+          hasEndleaves: false,
+          endleavesGSM: 0,
+          endleavesPages: 0,
+          hasJacket: false,
+          jacketGSM: 0,
+          hasBoard: form.bindingType === "case_binding" || form.bindingType === "section_sewn_hardcase",
+          boardThicknessMM: Number(form.boardThickness || 0)
+        });
+      }
+    } catch {
+      // Error calculating live weight - silent fail
+    }
+    return null;
+  }, [form.pages, form.gsm, form.bookWidth, form.bookHeight, form.coverGSM, liveSpine, form.bindingType, form.boardThickness]);
+
   const allErrors = [...errors, ...(runtimeError ? [runtimeError] : [])];
 
   const updateForm = useCallback((updates: Partial<QuickCalcForm>) => {
@@ -96,10 +135,10 @@ export function Calculator() {
 
   // ── Input sections config ──────────────────────────────────────────────────
   const sections = [
-    { icon: <Book className="w-4 h-4" />, label: "Book Spec", key: 0 },
-    { icon: <Layers className="w-4 h-4" />, label: "Paper & Printing", key: 1 },
-    { icon: <Package className="w-4 h-4" />, label: "Binding & Finishing", key: 2 },
-    { icon: <DollarSign className="w-4 h-4" />, label: "Pricing", key: 3 },
+    { icon: <Book className="w-4 h-4 text-purple-500" />, label: "Book Spec", key: 0 },
+    { icon: <Printer className="w-4 h-4 text-blue-500" />, label: "Paper & Printing", key: 1 },
+    { icon: <Settings2 className="w-4 h-4 text-amber-500" />, label: "Finishing", key: 2 },
+    { icon: <DollarSign className="w-4 h-4 text-green-500" />, label: "Pricing", key: 3 },
   ];
 
   return (
@@ -108,8 +147,9 @@ export function Calculator() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-text-light-primary dark:text-text-dark-primary flex items-center gap-2">
-            <div className="p-2 rounded-xl bg-gradient-to-br from-primary-500 to-primary-700 text-white">
-              <CalcIcon className="w-5 h-5" />
+            <div className="p-2 rounded-xl bg-gradient-to-br from-primary-500 to-primary-700 text-white shadow-lg relative overflow-hidden group">
+              <Sparkles className="w-5 h-5 absolute inset-0 m-auto text-white/20 animate-spin-slow group-hover:scale-150 transition-transform duration-700" />
+              <CalcIcon className="w-5 h-5 relative z-10" />
             </div>
             Advanced Print Calculator
           </h1>
@@ -122,13 +162,18 @@ export function Calculator() {
             onClick={() => setShowMultiQty(!showMultiQty)}
             className={cn("btn-secondary flex items-center gap-1.5 text-xs", showMultiQty && "bg-primary-50 dark:bg-primary-500/10 border-primary-300 dark:border-primary-500/40")}
           >
-            <Grid3X3 className="w-3.5 h-3.5" />
+            <Zap className="w-3.5 h-3.5" />
             Multi-Qty
           </button>
           <button onClick={handleReset} className="btn-secondary flex items-center gap-1.5 text-xs">
             <RefreshCcw className="w-3.5 h-3.5" />
             Reset
           </button>
+          {activeSection < 3 && (
+            <button onClick={() => setActiveSection(s => Math.min(3, s + 1))} className="btn-primary flex items-center gap-1.5 text-xs">
+              Next <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -176,7 +221,13 @@ export function Calculator() {
           {/* ── Section 0: Book Spec ─────────────────────────────────────────── */}
           {activeSection === 0 && (
             <div className="card p-4 space-y-4">
-              <SectionTitle icon={<Book className="w-4 h-4 text-primary-500" />} title="Book Specification" />
+              <SectionTitle icon={<Book className="w-4 h-4 text-purple-500" />} title="Book Specification" />
+              {liveSpine > 0 && (
+                <div className="flex items-center gap-2 text-xs bg-primary-50 dark:bg-primary-500/10 text-primary-700 dark:text-primary-400 p-2 rounded-lg border border-primary-200 dark:border-primary-500/20 shadow-sm animate-in fade-in zoom-in duration-300">
+                  <Info className="w-4 h-4 text-primary-500" />
+                  <span>Estimated Spine: <strong>{liveSpine.toFixed(2)} mm</strong> {liveWeight ? `• Est. Weight: ${(liveWeight.totalWeight / 1000).toFixed(2)} kg` : ''}</span>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Width (mm)" value={form.bookWidth} onChange={v => updateForm({ bookWidth: v })} />
                 <Field label="Height (mm)" value={form.bookHeight} onChange={v => updateForm({ bookHeight: v })} />
@@ -234,7 +285,7 @@ export function Calculator() {
           {/* ── Section 1: Paper & Printing ──────────────────────────────────── */}
           {activeSection === 1 && (
             <div className="card p-4 space-y-4">
-              <SectionTitle icon={<Layers className="w-4 h-4 text-blue-500" />} title="Paper & Printing" />
+              <SectionTitle icon={<Printer className="w-4 h-4 text-blue-500" />} title="Paper & Printing" />
 
               {/* Text section */}
               <div className="space-y-3">
@@ -250,7 +301,7 @@ export function Calculator() {
                     options={DEFAULT_MACHINES.map(m => m.id)}
                     labels={DEFAULT_MACHINES.map(m => m.name)}
                   />
-                  <Field label="Front Colors" value={form.colorsFront} onChange={v => updateForm({ colorsFront: v })} />
+                  <Field label="Front Colors" value={form.colorsFront} onChange={v => updateForm({ colorsFront: v })} hint={<span className="flex items-center gap-1"><Palette className="w-3 h-3" /> CMYK</span> as any} />
                   <Field label="Back Colors" value={form.colorsBack} onChange={v => updateForm({ colorsBack: v })} />
                 </div>
                 <SelectField
@@ -285,7 +336,7 @@ export function Calculator() {
           {/* ── Section 2: Binding & Finishing ───────────────────────────────── */}
           {activeSection === 2 && (
             <div className="card p-4 space-y-4">
-              <SectionTitle icon={<Package className="w-4 h-4 text-amber-500" />} title="Binding & Finishing" />
+              <SectionTitle icon={<Settings2 className="w-4 h-4 text-amber-500" />} title="Binding & Finishing" />
 
               {/* Binding */}
               <div className="space-y-3">
@@ -323,8 +374,8 @@ export function Calculator() {
                       label="Lamination"
                       value={form.laminationType}
                       onChange={v => updateForm({ laminationType: v as QuickCalcForm["laminationType"] })}
-                      options={["gloss", "matt", "velvet", "anti_scratch", "none"]}
-                      labels={["Gloss", "Matt", "Velvet", "Anti-Scratch", "None"]}
+                      options={Object.keys(LAMINATION_RATES).concat("none")}
+                      labels={Object.keys(LAMINATION_RATES).map(k => `${k.replace("_", " ")} (₹${(LAMINATION_RATES as any)[k].ratePerCopy}/copy)`).concat("None")}
                     />
                     <div className="grid grid-cols-2 gap-3">
                       <ToggleOption label="Spot UV" checked={form.spotUV} onChange={v => updateForm({ spotUV: v })} />
@@ -390,6 +441,13 @@ export function Calculator() {
                   onChange={v => updateForm({ turnaround: v as Turnaround })}
                   options={["standard", "rush", "express"]}
                   labels={["Standard", "Rush (+15%)", "Express (+30%)"]}
+                />
+                <SelectField
+                  label="Destination"
+                  value={form.destinationId}
+                  onChange={v => updateForm({ destinationId: v })}
+                  options={DEFAULT_DESTINATIONS.map(d => d.id)}
+                  labels={DEFAULT_DESTINATIONS.map(d => `${d.name} (${d.country})`)}
                 />
               </div>
             </div>
@@ -568,7 +626,7 @@ export function Calculator() {
                   <span className="text-xs font-bold text-text-light-tertiary dark:text-text-dark-tertiary uppercase tracking-wider flex items-center gap-1.5">
                     <FileText className="w-3.5 h-3.5" /> Calculation Audit Trail
                   </span>
-                  {showAudit ? <ChevronDown className="w-4 h-4 text-text-light-tertiary dark:text-text-dark-tertiary" /> : <ChevronRight className="w-4 h-4 text-text-light-tertiary dark:text-text-dark-tertiary" />}
+                  {showAudit ? <EyeOff className="w-4 h-4 text-text-light-tertiary dark:text-text-dark-tertiary" /> : <Eye className="w-4 h-4 text-text-light-tertiary dark:text-text-dark-tertiary" />}
                 </button>
                 {showAudit && (
                   <div className="px-4 pb-4 space-y-3 text-xs">
@@ -803,9 +861,20 @@ function WeightItem({ label, value, highlight }: { label: string; value: number;
 }
 
 function CompRow({ label, values, bold }: { label: string; values: string[]; bold?: boolean }) {
+  // Check trend if numeric array and > 1 item
+  const nums = values.map(v => Number(v.replace(/[^0-9.-]+/g, "")));
+  const isDecreasing = nums.length > 1 && nums.every((n, i) => i === 0 || n <= nums[i - 1]) && nums[0] > nums[nums.length - 1];
+  const isIncreasing = nums.length > 1 && nums.every((n, i) => i === 0 || n >= nums[i - 1]) && nums[0] < nums[nums.length - 1];
+
   return (
     <tr>
-      <td className={cn("py-1.5 pr-3", bold ? "font-semibold text-text-light-primary dark:text-text-dark-primary" : "text-text-light-secondary dark:text-text-dark-secondary")}>{label}</td>
+      <td className={cn("py-1.5 pr-3", bold ? "font-semibold text-text-light-primary dark:text-text-dark-primary" : "text-text-light-secondary dark:text-text-dark-secondary")}>
+        <div className="flex items-center gap-1">
+          {label}
+          {isDecreasing && <TrendingDown className="w-3 h-3 text-success-500" />}
+          {isIncreasing && <TrendingUp className="w-3 h-3 text-danger-500" />}
+        </div>
+      </td>
       {values.map((v, i) => (
         <td key={i} className={cn("text-right py-1.5 px-2 tabular-nums", bold ? "font-bold text-primary-600 dark:text-primary-400" : "text-text-light-primary dark:text-text-dark-primary")}>{v}</td>
       ))}

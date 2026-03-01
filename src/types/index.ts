@@ -978,6 +978,7 @@ export interface SectionPaperCost {
   totalWeight: number;
   ratePerReam: number;
   totalCost: number;
+  imposition?: any;
 }
 
 export interface SectionPrintingCost {
