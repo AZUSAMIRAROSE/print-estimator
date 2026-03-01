@@ -16,127 +16,127 @@ const BINDING_OPTIONS: {
   category: "common" | "premium" | "specialty";
   supportsBoard: boolean;
 }[] = [
-  {
-    type: "perfect_binding",
-    label: "Perfect Binding",
-    description: "Pages glued to a wrap-around cover. Most common for paperbacks, magazines, and catalogs. Cost-effective for runs over 500 copies.",
-    icon: <BookMarked className="w-5 h-5" />,
-    category: "common",
-    supportsBoard: false,
-  },
-  {
-    type: "pur_binding",
-    label: "PUR Binding",
-    description: "Polyurethane reactive adhesive binding. Superior strength and flexibility vs standard perfect binding. Pages lay flatter. Ideal for heavy coated stocks.",
-    icon: <BookMarked className="w-5 h-5" />,
-    category: "common",
-    supportsBoard: false,
-  },
-  {
-    type: "section_sewn_perfect",
-    label: "Section Sewn + Perfect Bound",
-    description: "Signatures sewn together then perfect bound with cover. Extremely durable. Pages lay flat. Premium quality for paperbacks and reference books.",
-    icon: <Layers className="w-5 h-5" />,
-    category: "premium",
-    supportsBoard: false,
-  },
-  {
-    type: "section_sewn_hardcase",
-    label: "Section Sewn + Hardcase",
-    description: "Signatures sewn, cased into rigid boards with covering material. The gold standard for books. Maximum durability and premium appearance.",
-    icon: <Shield className="w-5 h-5" />,
-    category: "premium",
-    supportsBoard: true,
-  },
-  {
-    type: "saddle_stitching",
-    label: "Saddle Stitching",
-    description: "Wire staples through the spine fold. Ideal for booklets, brochures, and thin publications up to ~64 pages. Most economical binding.",
-    icon: <Grip className="w-5 h-5" />,
-    category: "common",
-    supportsBoard: false,
-  },
-  {
-    type: "wire_o",
-    label: "Wire-O Binding",
-    description: "Double-loop wire through punched holes. Pages turn 360°. Great for manuals, calendars, cookbooks. Available in various colors and diameters.",
-    icon: <Circle className="w-5 h-5" />,
-    category: "common",
-    supportsBoard: false,
-  },
-  {
-    type: "spiral",
-    label: "Spiral / Coil Binding",
-    description: "Plastic or metal coil threaded through punched holes. Full 360° page turn. Durable and flexible. Common for notebooks and training materials.",
-    icon: <CircleDot className="w-5 h-5" />,
-    category: "common",
-    supportsBoard: false,
-  },
-  {
-    type: "case_binding",
-    label: "Case Binding (Unsewn)",
-    description: "Pages glued and cased into rigid boards without sewing. Lower cost alternative to sewn hardcase. Suitable for shorter books.",
-    icon: <Square className="w-5 h-5" />,
-    category: "premium",
-    supportsBoard: true,
-  },
-  {
-    type: "lay_flat",
-    label: "Lay-Flat Binding",
-    description: "Specialized binding that allows pages to lay completely flat when opened. Perfect for photo books, music books, and workbooks. Uses flexible spine adhesive.",
-    icon: <BookOpen className="w-5 h-5" />,
-    category: "premium",
-    supportsBoard: false,
-  },
-  {
-    type: "coptic",
-    label: "Coptic Binding",
-    description: "Exposed spine sewing with decorative chain stitch pattern. No cover spine needed. Artisanal and decorative. Pages lay completely flat.",
-    icon: <Link2 className="w-5 h-5" />,
-    category: "specialty",
-    supportsBoard: false,
-  },
-  {
-    type: "japanese",
-    label: "Japanese Stab Binding",
-    description: "Thread sewn through holes along the spine edge. Decorative exposed binding. Single-sided pages only. Traditional Asian bookbinding technique.",
-    icon: <Scissors className="w-5 h-5" />,
-    category: "specialty",
-    supportsBoard: false,
-  },
-  {
-    type: "singer_sewn",
-    label: "Singer Sewn",
-    description: "Machine-sewn through the spine like a sewing machine stitch. Visible thread on spine. Artisanal look for thin booklets and brochures.",
-    icon: <Ribbon className="w-5 h-5" />,
-    category: "specialty",
-    supportsBoard: false,
-  },
-  {
-    type: "pamphlet",
-    label: "Pamphlet Stitch",
-    description: "Hand or machine sewn through the spine fold with thread. For single-signature booklets. Clean, elegant look without visible wire.",
-    icon: <BookMarked className="w-5 h-5" />,
-    category: "specialty",
-    supportsBoard: false,
-  },
-  {
-    type: "tape_binding",
-    label: "Tape Binding",
-    description: "Cloth or paper tape applied to the spine edge. Quick and economical. Used for reports, manuscripts, and short-run documents.",
-    icon: <Wrench className="w-5 h-5" />,
-    category: "common",
-    supportsBoard: false,
-  },
-  {
-    type: "thermal_binding",
-    label: "Thermal Binding",
-    description: "Pre-glued cover activated by heat. Clean professional finish. Ideal for presentations, proposals, and small print runs.",
-    icon: <Star className="w-5 h-5" />,
-    category: "common",
-    supportsBoard: false,
-  },
-];
+    {
+      type: "perfect_binding",
+      label: "Perfect Binding",
+      description: "Pages glued to a wrap-around cover. Most common for paperbacks, magazines, and catalogs. Cost-effective for runs over 500 copies.",
+      icon: <BookMarked className="w-5 h-5" />,
+      category: "common",
+      supportsBoard: false,
+    },
+    {
+      type: "pur_binding",
+      label: "PUR Binding",
+      description: "Polyurethane reactive adhesive binding. Superior strength and flexibility vs standard perfect binding. Pages lay flatter. Ideal for heavy coated stocks.",
+      icon: <BookMarked className="w-5 h-5" />,
+      category: "common",
+      supportsBoard: false,
+    },
+    {
+      type: "section_sewn_perfect",
+      label: "Section Sewn + Perfect Bound",
+      description: "Signatures sewn together then perfect bound with cover. Extremely durable. Pages lay flat. Premium quality for paperbacks and reference books.",
+      icon: <Layers className="w-5 h-5" />,
+      category: "premium",
+      supportsBoard: false,
+    },
+    {
+      type: "section_sewn_hardcase",
+      label: "Section Sewn + Hardcase",
+      description: "Signatures sewn, cased into rigid boards with covering material. The gold standard for books. Maximum durability and premium appearance.",
+      icon: <Shield className="w-5 h-5" />,
+      category: "premium",
+      supportsBoard: true,
+    },
+    {
+      type: "saddle_stitching",
+      label: "Saddle Stitching",
+      description: "Wire staples through the spine fold. Ideal for booklets, brochures, and thin publications up to ~64 pages. Most economical binding.",
+      icon: <Grip className="w-5 h-5" />,
+      category: "common",
+      supportsBoard: false,
+    },
+    {
+      type: "wire_o",
+      label: "Wire-O Binding",
+      description: "Double-loop wire through punched holes. Pages turn 360°. Great for manuals, calendars, cookbooks. Available in various colors and diameters.",
+      icon: <Circle className="w-5 h-5" />,
+      category: "common",
+      supportsBoard: false,
+    },
+    {
+      type: "spiral",
+      label: "Spiral / Coil Binding",
+      description: "Plastic or metal coil threaded through punched holes. Full 360° page turn. Durable and flexible. Common for notebooks and training materials.",
+      icon: <CircleDot className="w-5 h-5" />,
+      category: "common",
+      supportsBoard: false,
+    },
+    {
+      type: "case_binding",
+      label: "Case Binding (Unsewn)",
+      description: "Pages glued and cased into rigid boards without sewing. Lower cost alternative to sewn hardcase. Suitable for shorter books.",
+      icon: <Square className="w-5 h-5" />,
+      category: "premium",
+      supportsBoard: true,
+    },
+    {
+      type: "lay_flat",
+      label: "Lay-Flat Binding",
+      description: "Specialized binding that allows pages to lay completely flat when opened. Perfect for photo books, music books, and workbooks. Uses flexible spine adhesive.",
+      icon: <BookOpen className="w-5 h-5" />,
+      category: "premium",
+      supportsBoard: false,
+    },
+    {
+      type: "coptic",
+      label: "Coptic Binding",
+      description: "Exposed spine sewing with decorative chain stitch pattern. No cover spine needed. Artisanal and decorative. Pages lay completely flat.",
+      icon: <Link2 className="w-5 h-5" />,
+      category: "specialty",
+      supportsBoard: false,
+    },
+    {
+      type: "japanese",
+      label: "Japanese Stab Binding",
+      description: "Thread sewn through holes along the spine edge. Decorative exposed binding. Single-sided pages only. Traditional Asian bookbinding technique.",
+      icon: <Scissors className="w-5 h-5" />,
+      category: "specialty",
+      supportsBoard: false,
+    },
+    {
+      type: "singer_sewn",
+      label: "Singer Sewn",
+      description: "Machine-sewn through the spine like a sewing machine stitch. Visible thread on spine. Artisanal look for thin booklets and brochures.",
+      icon: <Ribbon className="w-5 h-5" />,
+      category: "specialty",
+      supportsBoard: false,
+    },
+    {
+      type: "pamphlet",
+      label: "Pamphlet Stitch",
+      description: "Hand or machine sewn through the spine fold with thread. For single-signature booklets. Clean, elegant look without visible wire.",
+      icon: <BookMarked className="w-5 h-5" />,
+      category: "specialty",
+      supportsBoard: false,
+    },
+    {
+      type: "tape_binding",
+      label: "Tape Binding",
+      description: "Cloth or paper tape applied to the spine edge. Quick and economical. Used for reports, manuscripts, and short-run documents.",
+      icon: <Wrench className="w-5 h-5" />,
+      category: "common",
+      supportsBoard: false,
+    },
+    {
+      type: "thermal_binding",
+      label: "Thermal Binding",
+      description: "Pre-glued cover activated by heat. Clean professional finish. Ideal for presentations, proposals, and small print runs.",
+      icon: <Star className="w-5 h-5" />,
+      category: "common",
+      supportsBoard: false,
+    },
+  ];
 
 export function StepBinding() {
   const { estimation, updateBinding } = useEstimationStore();
@@ -190,11 +190,11 @@ export function StepBinding() {
         {filteredBindings.map((option) => {
           const isSelected = binding.primaryBinding === option.type;
           return (
-            <button
+            <div
               key={option.type}
               onClick={() => updateBinding({ primaryBinding: option.type as any })}
               className={cn(
-                "relative p-4 rounded-xl border-2 text-left transition-all duration-200",
+                "relative p-4 rounded-xl border-2 text-left cursor-pointer transition-all duration-200",
                 isSelected
                   ? "border-primary-500 bg-primary-50 dark:bg-primary-500/10 shadow-md"
                   : "border-surface-light-border dark:border-surface-dark-border hover:border-primary-300 dark:hover:border-primary-500/50 bg-white dark:bg-surface-dark-secondary"
@@ -259,7 +259,7 @@ export function StepBinding() {
                   </svg>
                 </div>
               )}
-            </button>
+            </div>
           );
         })}
       </div>

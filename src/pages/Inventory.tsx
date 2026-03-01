@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useInventoryStore } from "@/stores/inventoryStore";
+import { useMachineStore } from "@/stores/machineStore";
 import { useAppStore } from "@/stores/appStore";
 import { cn } from "@/utils/cn";
 import { formatCurrency } from "@/utils/format";
@@ -26,7 +27,8 @@ const TABS: { key: TabKey; label: string; icon: React.ReactNode }[] = [
 
 export function Inventory() {
   const [activeTab, setActiveTab] = useState<TabKey>("items");
-  const { items, machines, nmiRecords, transfers } = useInventoryStore();
+  const { items, nmiRecords, transfers } = useInventoryStore();
+  const { machines } = useMachineStore();
   const { addNotification } = useAppStore();
 
   const totalValue = items.reduce((s, i) => s + i.stock * i.costPerUnit, 0);
@@ -34,7 +36,7 @@ export function Inventory() {
 
   const tabCounts: Record<TabKey, number> = {
     items: items.length,
-    machines: machines.length,
+    machines: machines.size,
     nmi: nmiRecords.length,
     transfers: transfers.length,
     analytics: 0,
@@ -52,9 +54,9 @@ export function Inventory() {
 
     lines.push("");
     lines.push("=== MACHINES ===");
-    lines.push("Code,Name,Type,Manufacturer,Model,SerialNumber,Year,MaxColors,SpeedSPH,HourlyRate,MakeReadyCost,Location,Status,TotalRunningHours,CurrentValue,NextMaintenance");
-    machines.forEach(m => {
-      lines.push([m.code, m.name, m.type, m.manufacturer, m.model, m.serialNumber, m.yearOfManufacture, m.maxColors, m.speedSPH, m.hourlyRate, m.makeReadyCost, m.location, m.operationalStatus, m.totalRunningHours, m.currentValue, m.nextMaintenanceDate].map(v => `"${String(v).replace(/"/g, '""')}"`).join(","));
+    lines.push("Nickname,Name,Type,Manufacturer,Model,SerialNumber,MaxColors,Speed,HourlyRate,SetupCost,Status,BookValue");
+    Array.from(machines.values()).forEach(m => {
+      lines.push([m.nickname, m.name, m.type, m.manufacturer, m.model, m.serialNumber, m.maxColorsPerPass, m.effectiveSpeed, m.hourlyRate, m.fixedSetupCost, m.status, m.currentBookValue].map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(","));
     });
 
     lines.push("");
@@ -72,7 +74,7 @@ export function Inventory() {
     });
 
     downloadTextFile("inventory-full-export.csv", lines.join("\n"), "text/csv;charset=utf-8");
-    addNotification({ type: "success", title: "Export Complete", message: `Exported ${items.length} items, ${machines.length} machines, ${nmiRecords.length} NMI records, ${transfers.length} transfers.`, category: "export" });
+    addNotification({ type: "success", title: "Export Complete", message: `Exported ${items.length} items, ${machines.size} machines, ${nmiRecords.length} NMI records, ${transfers.length} transfers.`, category: "export" });
   };
 
   return (
@@ -84,7 +86,7 @@ export function Inventory() {
             <Warehouse className="w-6 h-6" /> Inventory Management
           </h1>
           <p className="text-sm text-text-light-secondary dark:text-text-dark-secondary mt-1">
-            {items.length} items • {machines.length} machines • Total value: {formatCurrency(totalValue)}
+            {items.length} items • {machines.size} machines • Total value: {formatCurrency(totalValue)}
             {lowStockCount > 0 && <span className="text-danger-500 ml-2">• {lowStockCount} low stock</span>}
           </p>
         </div>

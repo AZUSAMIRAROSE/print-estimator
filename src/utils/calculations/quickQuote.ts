@@ -7,9 +7,9 @@
 
 import { DEFAULT_PAPER_RATES, LAMINATION_RATES, PERFECT_BINDING_RATES, DEFAULT_MACHINES, DEFAULT_DESTINATIONS, STANDARD_PAPER_SIZES, TRIM_SIZE_PRESETS } from "../../constants/index.ts";
 import { calculatePaperRequirement } from "./paper";
-import { calculatePrintingCost } from "./printing";
+import { calculatePrintingCostGodLevel } from "./printing";
 import { calculateCTPCost } from "./ctp";
-import { calculateBindingCost } from "./binding";
+import { calculateBindingCostGodLevel } from "./binding";
 import { calculateSpineThickness, calculateSpineWithBoard } from "./spine";
 import { calculateBookWeight, type BookWeightResult } from "./weight";
 import type { BindingType, SectionPaperCost, SectionPrintingCost, SectionCTPCost } from "@/types";
@@ -417,33 +417,57 @@ export function calculateAdvancedCosts(input: ParsedQuickCalcInput, quantity?: n
   });
 
   // ── Printing ───────────────────────────────────────────────────────────────
-  const textPrinting = calculatePrintingCost({
+  const textPrintRaw = calculatePrintingCostGodLevel({
     sectionName: "Text",
     sectionType: "text1",
     machineId: input.machineId,
-    machineName: machine.name,
     colorsFront: input.colorsFront,
     colorsBack: input.colorsBack,
     quantity: qty,
     imposition: textPaper.imposition,
-    wastageResult: textPaper.wastageResult,
-    gsm: input.gsm,
-    printingMethod: input.printingMethod,
+    wastageResult: textPaper.wastageResult as any,
+    substrate: textPaper.substrate,
+    printingMethod: input.printingMethod.toUpperCase().replace("PERFECTOR", "PERFECTING") as any,
   });
 
-  const coverPrinting = calculatePrintingCost({
+  const textPrinting: SectionPrintingCost = {
+    sectionName: textPrintRaw.sectionName,
+    sectionType: textPrintRaw.sectionType,
+    machineName: textPrintRaw.machineName,
+    totalPlates: textPrintRaw.totalPlates,
+    impressionsPerForm: textPrintRaw.impressionsPerForm,
+    totalImpressions: textPrintRaw.totalImpressions,
+    ratePer1000: textPrintRaw.effectiveRatePer1000,
+    printingCost: textPrintRaw.timeRunningCost + textPrintRaw.energyCost + textPrintRaw.depreciationCost,
+    makeReadyCost: textPrintRaw.timeMakereadyCost,
+    totalCost: textPrintRaw.totalCost
+  };
+
+  const coverPrintRaw = calculatePrintingCostGodLevel({
     sectionName: "Cover",
     sectionType: "cover",
     machineId: input.coverMachineId,
-    machineName: coverMachine.name,
     colorsFront: input.coverColorsFront,
     colorsBack: input.coverColorsBack,
     quantity: qty,
     imposition: coverPaper.imposition,
     wastageResult: coverPaper.wastageResult,
-    gsm: input.coverGSM,
-    printingMethod: "sheetwise",
+    substrate: coverPaper.substrate,
+    printingMethod: "SHEETWISE",
   });
+
+  const coverPrinting: SectionPrintingCost = {
+    sectionName: coverPrintRaw.sectionName,
+    sectionType: coverPrintRaw.sectionType,
+    machineName: coverPrintRaw.machineName,
+    totalPlates: coverPrintRaw.totalPlates,
+    impressionsPerForm: coverPrintRaw.impressionsPerForm,
+    totalImpressions: coverPrintRaw.totalImpressions,
+    ratePer1000: coverPrintRaw.effectiveRatePer1000,
+    printingCost: coverPrintRaw.timeRunningCost + coverPrintRaw.energyCost + coverPrintRaw.depreciationCost,
+    makeReadyCost: coverPrintRaw.timeMakereadyCost,
+    totalCost: coverPrintRaw.totalCost
+  };
 
   // ── CTP ────────────────────────────────────────────────────────────────────
   const textCTP = calculateCTPCost({
@@ -462,43 +486,37 @@ export function calculateAdvancedCosts(input: ParsedQuickCalcInput, quantity?: n
 
   // ── Binding ────────────────────────────────────────────────────────────────
   const totalForms = textPaper.imposition.numberOfForms;
-  const bindingResult = calculateBindingCost({
-    binding: {
-      primaryBinding: input.bindingType,
-      purBinding: false,
-      backShape: "square",
-      boardType: isHardcase ? (input.boardOrigin === "imported" ? "bd_imp_25" : "bd_ind_25") : "",
-      boardThickness: input.boardThickness,
-      boardOrigin: input.boardOrigin,
-      coveringMaterialId: "",
-      coveringMaterialName: "Printed Paper",
-      caseMaterial: "printed_paper",
-      ribbonMarker: 0,
-      headTailBand: isHardcase,
-      giltEdging: false,
-      foamPadding: false,
-      roundCornering: false,
-      goldBlockingFront: input.foilBlocking,
-      goldBlockingSpine: false,
-      embossingFront: input.embossing,
-      roundingBacking: false,
-    },
+
+  const bindingRaw = calculateBindingCostGodLevel({
+    jobType: 'BOOK',
+    bindingMethod: input.bindingType.includes('perfect') ? 'PERFECT' :
+      (input.bindingType.includes('case') ? 'CASE' : 'SECTION_SEWN'),
     quantity: qty,
-    bookSpec: {
-      heightMM: input.bookHeight,
-      widthMM: input.bookWidth,
-      orientation: input.bookHeight > input.bookWidth ? "portrait" : input.bookHeight === input.bookWidth ? "square" : "landscape",
-      trimSizePreset: "",
-      customSize: true,
-      spineThickness,
-      spineWithBoard,
-      totalPages: input.pages,
-    },
-    spineThickness,
-    totalForms,
-    totalSections: 1,
-    textPages: input.pages,
+    bookWidth_mm: input.bookWidth,
+    bookHeight_mm: input.bookHeight,
+    textSections: [{
+      pages: input.pages,
+      substrate: textPaper.substrate,
+      signatures: textPaper.imposition.numberOfForms
+    }],
+    hardcoverSpecs: isHardcase ? {
+      boardThickness_mm: input.boardThickness,
+      clothMaterial: "Printed Paper",
+      headTailBands: true,
+      ribbonMarker: false,
+      foilStamping_sqcm: input.foilBlocking ? 50 : 0
+    } : undefined
   });
+
+  const bindingResult = {
+    totalCost: bindingRaw.costBreakdown.totalCost,
+    costPerCopy: bindingRaw.unitCost,
+    breakdown: {
+      adhesive: bindingRaw.costBreakdown.adhesiveCost,
+      case: bindingRaw.costBreakdown.hardcoverMaterialsCost,
+      machine: bindingRaw.costBreakdown.machineTimeCost
+    }
+  };
 
   // ── Finishing ──────────────────────────────────────────────────────────────
   let laminationCost = 0;
@@ -593,8 +611,8 @@ export function calculateAdvancedCosts(input: ParsedQuickCalcInput, quantity?: n
 
   return {
     quantity: qty,
-    textPaper,
-    coverPaper,
+    textPaper: textPaper as unknown as SectionPaperCost,
+    coverPaper: coverPaper as unknown as SectionPaperCost,
     totalPaperCost: round2(totalPaperCost),
     textPrinting,
     coverPrinting,
@@ -635,7 +653,7 @@ export function calculateAdvancedCosts(input: ParsedQuickCalcInput, quantity?: n
     formatSize: textPaper.imposition.formatLabel,
     paperSizeUsed: textPaper.imposition.paperSizeLabel,
     textPPPerForm: textPaper.imposition.ppPerForm,
-    textWastageSheets: textPaper.wastageResult.totalWastage,
+    textWastageSheets: textPaper.wastageResult.totalWasteSheets,
     machineUsed: machine.name,
     coverMachineUsed: coverMachine.name,
   };

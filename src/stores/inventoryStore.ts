@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { immer } from "zustand/middleware/immer";
 import type {
-    InventoryItem, InventoryCategory, MachineDetail,
+    InventoryItem, InventoryCategory,
     NMIRecord, InventoryTransfer
 } from "@/types";
 import { generateId } from "@/utils/format";
@@ -46,76 +46,10 @@ const INITIAL_ITEMS: InventoryItem[] = [
     createDefaultItem({ id: "inv-14", name: "Process Cyan Ink", sku: "INK-PRO-CY", category: "ink", subcategory: "Process Ink", unit: "Kg", stock: 18, minLevel: 8, maxLevel: 80, reorderQty: 15, costPerUnit: 1400, sellingPrice: 1600, lastPurchasePrice: 1380, avgCost: 1390, supplier: "DIC India", supplierCode: "DIC-001", hsnCode: "3215", warehouse: "Main Warehouse", zone: "E", rack: "R1", shelf: "S1", bin: "B2", weight: 1, movementClass: "fast_moving" }),
 ];
 
-const INITIAL_MACHINES: MachineDetail[] = [
-    {
-        id: "mch-1", code: "SM-102", name: "Speedmaster SM 102-4P", type: "offset",
-        manufacturer: "Heidelberg", model: "SM 102-4+L", serialNumber: "HD-SM102-2019-0456",
-        yearOfManufacture: 2019,
-        maxSheetWidth: 40, maxSheetHeight: 28, minSheetWidth: 14, minSheetHeight: 10,
-        maxColors: 4, hasAQUnit: true, hasPerfector: true, speedSPH: 13000,
-        plateSize: "1030×790", gripperMargin: 10, tailMargin: 10, sideMargin: 5,
-        maxPaperWeight: 400, minPaperWeight: 40,
-        purchaseCost: 25000000, currentValue: 18000000, depreciationRate: 10,
-        makeReadyCost: 1500, makeReadyTime: 0.75, washingCost: 800, ctpRate: 600,
-        hourlyRate: 3500, maintenanceCostPerMonth: 45000, inkCostPerHour: 250,
-        powerConsumptionKW: 45, electricityCostPerUnit: 9,
-        lastMaintenanceDate: "2025-06-15", nextMaintenanceDate: "2025-09-15",
-        maintenanceIntervalDays: 90, totalRunningHours: 12500, hoursUntilService: 450,
-        maintenanceNotes: "Last PM completed — all rollers checked, blanket replaced",
-        isActive: true, operationalStatus: "running", location: "Production Floor — Bay 1",
-        operatorName: "Rajesh Kumar", shiftCapacity: 3, avgUptimePercent: 92,
-        avgEfficiencyPercent: 87, description: "Primary 4-color press with AQ coating unit",
-        insuranceProvider: "ICICI Lombard", insuranceExpiry: "2026-03-31",
-        insurancePremium: 180000, warrantyExpiry: "2024-12-31",
-    },
-    {
-        id: "mch-2", code: "CD-102", name: "Speedmaster CD 102-5+L", type: "offset",
-        manufacturer: "Heidelberg", model: "CD 102-5+L", serialNumber: "HD-CD102-2020-0789",
-        yearOfManufacture: 2020,
-        maxSheetWidth: 40, maxSheetHeight: 28, minSheetWidth: 14, minSheetHeight: 10,
-        maxColors: 5, hasAQUnit: true, hasPerfector: false, speedSPH: 15000,
-        plateSize: "1030×790", gripperMargin: 10, tailMargin: 10, sideMargin: 5,
-        maxPaperWeight: 500, minPaperWeight: 40,
-        purchaseCost: 35000000, currentValue: 28000000, depreciationRate: 10,
-        makeReadyCost: 2000, makeReadyTime: 1, washingCost: 1200, ctpRate: 600,
-        hourlyRate: 4500, maintenanceCostPerMonth: 55000, inkCostPerHour: 350,
-        powerConsumptionKW: 55, electricityCostPerUnit: 9,
-        lastMaintenanceDate: "2025-07-01", nextMaintenanceDate: "2025-10-01",
-        maintenanceIntervalDays: 90, totalRunningHours: 8900, hoursUntilService: 600,
-        maintenanceNotes: "All units operating normally",
-        isActive: true, operationalStatus: "running", location: "Production Floor — Bay 2",
-        operatorName: "Suresh Patel", shiftCapacity: 3, avgUptimePercent: 94,
-        avgEfficiencyPercent: 89, description: "5-color press for high-quality color work",
-        insuranceProvider: "Bajaj Allianz", insuranceExpiry: "2026-06-30",
-        insurancePremium: 250000, warrantyExpiry: "2025-12-31",
-    },
-    {
-        id: "mch-3", code: "STAHL-F66", name: "Stahl F66/4 Folder", type: "folding",
-        manufacturer: "Stahl", model: "F66/4", serialNumber: "STH-F66-2018-0123",
-        yearOfManufacture: 2018,
-        maxSheetWidth: 26, maxSheetHeight: 40, minSheetWidth: 6, minSheetHeight: 8,
-        maxColors: 0, hasAQUnit: false, hasPerfector: false, speedSPH: 20000,
-        plateSize: "", gripperMargin: 0, tailMargin: 0, sideMargin: 0,
-        maxPaperWeight: 200, minPaperWeight: 40,
-        purchaseCost: 8000000, currentValue: 5000000, depreciationRate: 12,
-        makeReadyCost: 500, makeReadyTime: 0.25, washingCost: 0, ctpRate: 0,
-        hourlyRate: 1500, maintenanceCostPerMonth: 15000, inkCostPerHour: 0,
-        powerConsumptionKW: 18, electricityCostPerUnit: 9,
-        lastMaintenanceDate: "2025-05-20", nextMaintenanceDate: "2025-08-20",
-        maintenanceIntervalDays: 90, totalRunningHours: 15000, hoursUntilService: 300,
-        maintenanceNotes: "Folding blades replaced at 14,000 hours",
-        isActive: true, operationalStatus: "running", location: "Finishing Area — Bay 3",
-        operatorName: "Mohan Das", shiftCapacity: 2, avgUptimePercent: 90,
-        avgEfficiencyPercent: 85, description: "High-speed 4-buckle folder",
-        insuranceProvider: "HDFC Ergo", insuranceExpiry: "2026-01-15",
-        insurancePremium: 60000, warrantyExpiry: "2023-12-31",
-    },
-];
 
 // ── Store Interface ──────────────────────────────────────────────────────────
 interface InventoryState {
     items: InventoryItem[];
-    machines: MachineDetail[];
     nmiRecords: NMIRecord[];
     transfers: InventoryTransfer[];
 
@@ -125,11 +59,6 @@ interface InventoryState {
     deleteItem: (id: string) => void;
     duplicateItem: (id: string) => void;
 
-    // Machine actions
-    addMachine: (machine: Omit<MachineDetail, "id">) => void;
-    updateMachine: (id: string, updates: Partial<MachineDetail>) => void;
-    deleteMachine: (id: string) => void;
-    duplicateMachine: (id: string) => void;
 
     // NMI actions
     addNMI: (record: Omit<NMIRecord, "id" | "createdAt" | "updatedAt">) => void;
@@ -153,7 +82,6 @@ export const useInventoryStore = create<InventoryState>()(
     persist(
         immer((set, get) => ({
             items: INITIAL_ITEMS,
-            machines: INITIAL_MACHINES,
             nmiRecords: [],
             transfers: [],
 
@@ -194,38 +122,6 @@ export const useInventoryStore = create<InventoryState>()(
                 }
             }),
 
-            // ── Machine Actions ──────────────────────────────────────────────────
-            addMachine: (machineData) => set((state) => {
-                const newMachine: MachineDetail = {
-                    ...machineData,
-                    id: generateId(),
-                };
-                state.machines.push(newMachine);
-            }),
-
-            updateMachine: (id, updates) => set((state) => {
-                const idx = state.machines.findIndex((m) => m.id === id);
-                if (idx !== -1) {
-                    Object.assign(state.machines[idx], updates);
-                }
-            }),
-
-            deleteMachine: (id) => set((state) => {
-                state.machines = state.machines.filter((m) => m.id !== id);
-            }),
-
-            duplicateMachine: (id) => set((state) => {
-                const machine = state.machines.find((m) => m.id === id);
-                if (machine) {
-                    const dup: MachineDetail = {
-                        ...JSON.parse(JSON.stringify(machine)),
-                        id: generateId(),
-                        name: `${machine.name} (Copy)`,
-                        code: `${machine.code}-COPY`,
-                    };
-                    state.machines.push(dup);
-                }
-            }),
 
             // ── NMI Actions ──────────────────────────────────────────────────────
             addNMI: (recordData) => set((state) => {

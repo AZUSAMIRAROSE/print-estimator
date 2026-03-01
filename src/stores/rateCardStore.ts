@@ -2,9 +2,9 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { immer } from "zustand/middleware/immer";
 import { generateId } from "@/utils/format";
-import type { MachineDetail, InventoryTransfer } from "@/types";
+import type { InventoryTransfer } from "@/types";
 import {
-    DEFAULT_PAPER_RATES, DEFAULT_MACHINES, IMPRESSION_RATES_DATA,
+    DEFAULT_PAPER_RATES, IMPRESSION_RATES_DATA,
     WASTAGE_CHART, PERFECT_BINDING_RATES, SADDLE_STITCHING_RATES,
     LAMINATION_RATES, SPOT_UV_RATES, UV_VARNISH_RATES,
     AQUEOUS_VARNISH_RATE, GOLD_BLOCKING_RATES, EMBOSSING_RATES,
@@ -37,76 +37,6 @@ export interface PaperRateEntry {
     status: RateStatus;
     createdAt: string;
     updatedAt: string;
-}
-
-export interface MachineEntry {
-    id: string;
-    code: string;
-    name: string;
-    type: "offset" | "digital" | "flexo" | "gravure" | "screen" | "cutting" | "folding" | "binding" | "lamination" | "other";
-    manufacturer: string;
-    model: string;
-    serialNumber: string;
-    yearOfManufacture: number;
-    maxSheetWidth: number;
-    maxSheetHeight: number;
-    minSheetWidth: number;
-    minSheetHeight: number;
-    maxColors: number;
-    hasAQUnit: boolean;
-    hasPerfector: boolean;
-    speedSPH: number;
-    plateSize: string;
-    gripperMargin: number;
-    tailMargin: number;
-    sideMargin: number;
-    maxPaperWeight: number;
-    minPaperWeight: number;
-    purchaseCost: number;
-    currentValue: number;
-    depreciationRate: number;
-    makeReadyCost: number;
-    makeReadyTime: number;
-    washingCost: number;
-    ctpRate: number;
-    hourlyRate: number;
-    maintenanceCostPerMonth: number;
-    inkCostPerHour: number;
-    powerConsumptionKW: number;
-    electricityCostPerUnit: number;
-    lastMaintenanceDate: string;
-    nextMaintenanceDate: string;
-    maintenanceIntervalDays: number;
-    totalRunningHours: number;
-    hoursUntilService: number;
-    maintenanceNotes: string;
-    isActive: boolean;
-    operationalStatus: "running" | "idle" | "maintenance" | "decommissioned";
-    location: string;
-    operatorName: string;
-    shiftCapacity: number;
-    avgUptimePercent: number;
-    avgEfficiencyPercent: number;
-    description: string;
-    insuranceProvider: string;
-    insuranceExpiry: string;
-    insurancePremium: number;
-    warrantyExpiry: string;
-    status: RateStatus;
-    createdAt: string;
-    updatedAt: string;
-}
-
-export interface ImpressionRateEntry {
-    id: string;
-    rangeMin: number;
-    rangeMax: number;
-    fav: number;
-    rekordAQ: number;
-    rekordNoAQ: number;
-    rmgt: number;
-    rmgtPerfecto: number;
-    status: RateStatus;
 }
 
 export interface WastageEntry {
@@ -200,6 +130,18 @@ export interface BoardTypeEntry {
     supplier: string;
     notes: string;
     isActive: boolean;
+    status: RateStatus;
+}
+
+export interface ImpressionRateEntry {
+    id: string;
+    rangeMin: number;
+    rangeMax: number;
+    fav: number;
+    rekordAQ: number;
+    rekordNoAQ: number;
+    rmgt: number;
+    rmgtPerfecto: number;
     status: RateStatus;
 }
 
@@ -305,64 +247,8 @@ function seedPaperRates(): PaperRateEntry[] {
     }));
 }
 
-function seedMachines(): MachineEntry[] {
-    return DEFAULT_MACHINES.map(m => ({
-        id: m.id,
-        code: m.code,
-        name: m.name,
-        type: m.type,
-        manufacturer: "",
-        model: "",
-        serialNumber: "",
-        yearOfManufacture: 0,
-        maxSheetWidth: m.maxSheetWidth,
-        maxSheetHeight: m.maxSheetHeight,
-        minSheetWidth: m.minSheetWidth,
-        minSheetHeight: m.minSheetHeight,
-        maxColors: m.maxColors,
-        hasAQUnit: m.hasAQUnit,
-        hasPerfector: m.hasPerfector,
-        speedSPH: m.speedSPH,
-        plateSize: m.plateSize,
-        gripperMargin: m.gripperMargin,
-        tailMargin: m.tailMargin,
-        sideMargin: m.sideMargin,
-        maxPaperWeight: 400,
-        minPaperWeight: 40,
-        purchaseCost: 0,
-        currentValue: 0,
-        depreciationRate: 10,
-        makeReadyCost: m.makeReadyCost,
-        makeReadyTime: m.makeReadyTime,
-        washingCost: m.washingCost,
-        ctpRate: m.ctpRate,
-        hourlyRate: m.hourlyRate,
-        maintenanceCostPerMonth: 0,
-        inkCostPerHour: 0,
-        powerConsumptionKW: 0,
-        electricityCostPerUnit: 0,
-        lastMaintenanceDate: "",
-        nextMaintenanceDate: "",
-        maintenanceIntervalDays: 90,
-        totalRunningHours: 0,
-        hoursUntilService: 500,
-        maintenanceNotes: "",
-        isActive: m.isActive,
-        operationalStatus: "running" as const,
-        location: "",
-        operatorName: "",
-        shiftCapacity: 8,
-        avgUptimePercent: 85,
-        avgEfficiencyPercent: 75,
-        description: m.description,
-        insuranceProvider: "",
-        insuranceExpiry: "",
-        insurancePremium: 0,
-        warrantyExpiry: "",
-        status: "active" as RateStatus,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-    }));
+function seedWastage(): WastageEntry[] {
+    return WASTAGE_CHART.map(w => ({ ...w, status: "active" as RateStatus }));
 }
 
 function seedImpressionRates(): ImpressionRateEntry[] {
@@ -377,10 +263,6 @@ function seedImpressionRates(): ImpressionRateEntry[] {
         rmgtPerfecto: r.rmgtPerfecto,
         status: "active" as RateStatus,
     }));
-}
-
-function seedWastage(): WastageEntry[] {
-    return WASTAGE_CHART.map(w => ({ ...w, status: "active" as RateStatus }));
 }
 
 function seedPerfectBinding(): PerfectBindingEntry[] {
@@ -456,10 +338,9 @@ function seedPacking(): PackingRatesEntry {
 
 interface RateCardState {
     paperRates: PaperRateEntry[];
-    machines: MachineEntry[];
-    impressionRates: ImpressionRateEntry[];
     wastageChart: WastageEntry[];
     perfectBinding: PerfectBindingEntry[];
+    bindingRates: PerfectBindingEntry[];
     saddleStitch: SaddleStitchEntry[];
     wireO: WireOEntry[];
     lamination: LaminationEntry[];
@@ -467,26 +348,21 @@ interface RateCardState {
     coveringMaterials: CoveringMaterialEntry[];
     boardTypes: BoardTypeEntry[];
     freightDestinations: FreightDestEntry[];
+    impressionRates: ImpressionRateEntry[];
     packingRates: PackingRatesEntry;
     hardcaseDefaults: Record<string, number>;
     transfers: TransferEntry[];
+
+    // ── Impression Rate Actions ──
+    addImpressionRate: (data: Partial<ImpressionRateEntry>) => void;
+    updateImpressionRate: (id: string, updates: Partial<ImpressionRateEntry>) => void;
+    deleteImpressionRate: (id: string) => void;
 
     // ── Paper Actions ──
     addPaperRate: (data: Partial<PaperRateEntry>) => void;
     updatePaperRate: (id: string, updates: Partial<PaperRateEntry>) => void;
     deletePaperRate: (id: string) => void;
     duplicatePaperRate: (id: string) => void;
-
-    // ── Machine Actions ──
-    addMachine: (data: Partial<MachineEntry>) => void;
-    updateMachine: (id: string, updates: Partial<MachineEntry>) => void;
-    deleteMachine: (id: string) => void;
-    duplicateMachine: (id: string) => void;
-
-    // ── Impression Actions ──
-    addImpressionRate: (data: Partial<ImpressionRateEntry>) => void;
-    updateImpressionRate: (id: string, updates: Partial<ImpressionRateEntry>) => void;
-    deleteImpressionRate: (id: string) => void;
 
     // ── Wastage Actions ──
     addWastageEntry: (data: Partial<WastageEntry>) => void;
@@ -546,10 +422,9 @@ export const useRateCardStore = create<RateCardState>()(
     persist(
         immer((set) => ({
             paperRates: seedPaperRates(),
-            machines: seedMachines(),
-            impressionRates: seedImpressionRates(),
             wastageChart: seedWastage(),
             perfectBinding: seedPerfectBinding(),
+            bindingRates: seedPerfectBinding(),
             saddleStitch: seedSaddleStitch(),
             wireO: seedWireO(),
             lamination: seedLamination(),
@@ -557,6 +432,7 @@ export const useRateCardStore = create<RateCardState>()(
             coveringMaterials: seedCovering(),
             boardTypes: seedBoards(),
             freightDestinations: seedFreight(),
+            impressionRates: seedImpressionRates(),
             packingRates: seedPacking(),
             hardcaseDefaults: { ...HARDCASE_DEFAULTS },
             transfers: [],
@@ -585,43 +461,6 @@ export const useRateCardStore = create<RateCardState>()(
                 set(s => {
                     const orig = s.paperRates.find(r => r.id === id);
                     if (orig) s.paperRates.push({ ...orig, id: generateId(), status: "draft", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
-                });
-            },
-
-            // ── Machine ────────────────────────────────────────────────────────
-            addMachine(data) {
-                set(s => {
-                    s.machines.push({
-                        id: generateId(), code: "", name: "", type: "offset",
-                        manufacturer: "", model: "", serialNumber: "", yearOfManufacture: 0,
-                        maxSheetWidth: 0, maxSheetHeight: 0, minSheetWidth: 0, minSheetHeight: 0,
-                        maxColors: 4, hasAQUnit: false, hasPerfector: false, speedSPH: 0,
-                        plateSize: "", gripperMargin: 12, tailMargin: 8, sideMargin: 5,
-                        maxPaperWeight: 400, minPaperWeight: 40,
-                        purchaseCost: 0, currentValue: 0, depreciationRate: 10,
-                        makeReadyCost: 0, makeReadyTime: 0, washingCost: 0, ctpRate: 0, hourlyRate: 0,
-                        maintenanceCostPerMonth: 0, inkCostPerHour: 0, powerConsumptionKW: 0, electricityCostPerUnit: 0,
-                        lastMaintenanceDate: "", nextMaintenanceDate: "", maintenanceIntervalDays: 90,
-                        totalRunningHours: 0, hoursUntilService: 500, maintenanceNotes: "",
-                        isActive: true, operationalStatus: "running",
-                        location: "", operatorName: "", shiftCapacity: 8, avgUptimePercent: 85, avgEfficiencyPercent: 75,
-                        description: "", insuranceProvider: "", insuranceExpiry: "", insurancePremium: 0, warrantyExpiry: "",
-                        status: "active", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-                        ...data,
-                    } as MachineEntry);
-                });
-            },
-            updateMachine(id, updates) {
-                set(s => {
-                    const idx = s.machines.findIndex(m => m.id === id);
-                    if (idx >= 0) Object.assign(s.machines[idx], updates, { updatedAt: new Date().toISOString() });
-                });
-            },
-            deleteMachine(id) { set(s => { s.machines = s.machines.filter(m => m.id !== id); }); },
-            duplicateMachine(id) {
-                set(s => {
-                    const orig = s.machines.find(m => m.id === id);
-                    if (orig) s.machines.push({ ...orig, id: generateId(), name: `${orig.name} (Copy)`, status: "draft", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
                 });
             },
 
@@ -767,9 +606,8 @@ export const useRateCardStore = create<RateCardState>()(
                 set(s => {
                     switch (category) {
                         case "paper": s.paperRates = seedPaperRates(); break;
-                        case "machines": s.machines = seedMachines(); break;
-                        case "impressions": s.impressionRates = seedImpressionRates(); break;
                         case "wastage": s.wastageChart = seedWastage(); break;
+                        case "impressions": s.impressionRates = seedImpressionRates(); break;
                         case "binding": s.perfectBinding = seedPerfectBinding(); s.saddleStitch = seedSaddleStitch(); s.wireO = seedWireO(); s.hardcaseDefaults = { ...HARDCASE_DEFAULTS }; break;
                         case "finishing": s.lamination = seedLamination(); s.spotUV = seedSpotUV(); break;
                         case "covering": s.coveringMaterials = seedCovering(); break;

@@ -1,0 +1,4 @@
+- [x] Fix constants.ts (add missing properties to interface and constants)
+- [x] Fix paper.ts (add gripper_mm to interface)
+- [x] Fix estimator.ts (add missing calculation calls and totals)
+- [x] Verify fixes with TypeScript compiler

@@ -168,13 +168,16 @@ export function CurrencyCell({ value, isEditing, onChange }: {
 }
 
 // ── Section Header in Tables ─────────────────────────────────────────────────
-export function SectionHeader({ title, count }: { title: string; count?: number }) {
+export function SectionHeader({ title, count, action }: { title: string; count?: number; action?: React.ReactNode }) {
     return (
         <div className="flex items-center justify-between px-4 py-2.5 bg-surface-light-secondary dark:bg-surface-dark-secondary border-b border-surface-light-border dark:border-surface-dark-border">
-            <h3 className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary">{title}</h3>
-            {count !== undefined && (
-                <span className="text-[10px] text-text-light-tertiary dark:text-text-dark-tertiary">{count} items</span>
-            )}
+            <div className="flex flex-1 items-center gap-3">
+                <h3 className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary">{title}</h3>
+                {count !== undefined && (
+                    <span className="text-[10px] text-text-light-tertiary dark:text-text-dark-tertiary">{count} items</span>
+                )}
+            </div>
+            {action && <div>{action}</div>}
         </div>
     );
 }

@@ -5,6 +5,7 @@ import { cn } from "@/utils/cn";
 import { useAppStore } from "@/stores/appStore";
 import { useRateCardStore } from "@/stores/rateCardStore";
 import { useInventoryStore } from "@/stores/inventoryStore";
+import { useMachineStore } from "@/stores/machineStore";
 import { exportTabCSV } from "./ratecard/RateCardShared";
 import { PaperRatesTab } from "./ratecard/PaperRatesTab";
 import { MachinesTab, MachineDetailsTab } from "./ratecard/MachinesTab";
@@ -37,6 +38,7 @@ export function RateCard() {
   const { addNotification, addActivityLog, user } = useAppStore();
   const store = useRateCardStore();
   const invStore = useInventoryStore();
+  const machineStore = useMachineStore();
   const [activeTab, setActiveTab] = useState<RateTab>("paper");
   const [search, setSearch] = useState("");
   const canEditRates = (user?.role || "").toLowerCase().includes("admin");
@@ -51,8 +53,8 @@ export function RateCard() {
     store.paperRates.forEach(r => sections.push(`"${r.paperType}","${r.code}",${r.gsm},"${r.size}",${r.landedCost},${r.chargeRate},${r.ratePerKg},"${r.supplier}",${r.moq},"${r.hsnCode}",${r.marginPercent},"${r.status}"`));
 
     sections.push("", "=== MACHINES ===");
-    sections.push("Name,Code,Type,Max Sheet,Colors,AQ,Perfector,Speed,Make Ready,CTP Rate,Hourly Rate,Status,Manufacturer,Model");
-    store.machines.forEach(m => sections.push(`"${m.name}","${m.code}","${m.type}","${m.maxSheetWidth}x${m.maxSheetHeight}",${m.maxColors},${m.hasAQUnit},${m.hasPerfector},${m.speedSPH},${m.makeReadyCost},${m.ctpRate},${m.hourlyRate},"${m.operationalStatus}","${m.manufacturer}","${m.model}"`));
+    sections.push("Name,Nickname,Type,Max Sheet,Colors,Coating,Perfector,Speed,Setup Cost,CTP Rate,Hourly Rate,Status,Manufacturer,Model");
+    machineStore.machines.forEach(m => sections.push(`"${m.name}","${m.nickname}","${m.type}","${m.maxSheetWidth_mm}x${m.maxSheetHeight_mm}",${m.maxColorsPerPass},${m.hasCoatingUnit},${m.canPerfect},${m.effectiveSpeed},${m.fixedSetupCost},${m.ctpRate_perPlate},${m.hourlyRate},"${m.status}","${m.manufacturer}","${m.model}"`));
 
     sections.push("", "=== IMPRESSION RATES ===");
     sections.push("Range Min,Range Max,FAV,Rekord+AQ,Rekord-AQ,RMGT,RMGT Perfecto");
@@ -143,8 +145,8 @@ export function RateCard() {
   const tabCount = (tab: RateTab): number => {
     switch (tab) {
       case "paper": return store.paperRates.length;
-      case "machines": return store.machines.length;
-      case "machine_details": return store.machines.length;
+      case "machines": return machineStore.machines.size;
+      case "machine_details": return machineStore.machines.size;
       case "impressions": return store.impressionRates.length;
       case "wastage": return store.wastageChart.length;
       case "binding": return store.perfectBinding.length + store.saddleStitch.length + store.wireO.length;
@@ -167,7 +169,7 @@ export function RateCard() {
             <CreditCard className="w-6 h-6" /> Rate Card
           </h1>
           <p className="text-sm text-text-light-secondary dark:text-text-dark-secondary mt-1">
-            Manage all pricing rates, machine details, cost tables & inventory transfers — {store.paperRates.length + store.machines.length + store.impressionRates.length + invStore.transfers.length} total entries
+            Manage all pricing rates, machine details, cost tables & inventory transfers — {store.paperRates.length + machineStore.machines.size + store.impressionRates.length + invStore.transfers.length} total entries
           </p>
         </div>
         <div className="flex items-center gap-2">

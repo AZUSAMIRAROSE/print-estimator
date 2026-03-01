@@ -2,12 +2,12 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { immer } from "zustand/middleware/immer";
 import type {
-  Customer, Job, Quotation, PaperType, Machine,
+  Customer, Job, Quotation, PaperType,
   FreightDestination, BoardType, CoveringMaterial, EstimationInput,
   EstimationResult
 } from "@/types";
 import {
-  DEFAULT_MACHINES, DEFAULT_DESTINATIONS, DEFAULT_BOARD_TYPES,
+  DEFAULT_DESTINATIONS, DEFAULT_BOARD_TYPES,
   DEFAULT_COVERING_MATERIALS, DEFAULT_PAPER_RATES, STANDARD_PAPER_SIZES
 } from "@/constants";
 import { generateId, generateJobNumber, generateQuotationNumber, generateCustomerCode } from "@/utils/format";
@@ -19,7 +19,6 @@ interface DataState {
   quotations: Quotation[];
 
   // Rate Card Data
-  machines: Machine[];
   destinations: FreightDestination[];
   boardTypes: BoardType[];
   coveringMaterials: CoveringMaterial[];
@@ -50,8 +49,6 @@ interface DataState {
   addQuotationComment: (quotationId: string, author: string, text: string, type: "internal" | "external") => void;
 
   // Rate Card CRUD
-  addMachine: (machine: Omit<Machine, "id">) => void;
-  updateMachine: (id: string, updates: Partial<Machine>) => void;
   addDestination: (dest: Omit<FreightDestination, "id">) => void;
   updateDestination: (id: string, updates: Partial<FreightDestination>) => void;
   addBoardType: (board: Omit<BoardType, "id">) => void;
@@ -72,7 +69,6 @@ export const useDataStore = create<DataState>()(
       customers: [],
       jobs: [],
       quotations: [],
-      machines: DEFAULT_MACHINES as Machine[],
       destinations: DEFAULT_DESTINATIONS as FreightDestination[],
       boardTypes: DEFAULT_BOARD_TYPES as BoardType[],
       coveringMaterials: DEFAULT_COVERING_MATERIALS as CoveringMaterial[],
@@ -229,15 +225,6 @@ export const useDataStore = create<DataState>()(
       }),
 
       // ── Rate Card ─────────────────────────────────────────────────────────
-      addMachine: (machine) => set((state) => {
-        state.machines.push({ ...machine, id: generateId() } as Machine);
-      }),
-
-      updateMachine: (id, updates) => set((state) => {
-        const idx = state.machines.findIndex((m) => m.id === id);
-        if (idx >= 0) Object.assign(state.machines[idx], updates);
-      }),
-
       addDestination: (dest) => set((state) => {
         state.destinations.push({ ...dest, id: generateId() } as FreightDestination);
       }),
@@ -282,7 +269,6 @@ export const useDataStore = create<DataState>()(
         state.jobs = [];
         state.quotations = [];
         state.draftEstimation = null;
-        state.machines = DEFAULT_MACHINES as Machine[];
         state.destinations = DEFAULT_DESTINATIONS as FreightDestination[];
         state.boardTypes = DEFAULT_BOARD_TYPES as BoardType[];
         state.coveringMaterials = DEFAULT_COVERING_MATERIALS as CoveringMaterial[];

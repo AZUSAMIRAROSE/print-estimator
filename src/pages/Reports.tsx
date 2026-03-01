@@ -258,7 +258,7 @@ export function Reports() {
           break;
         }
         case "customers": {
-          const activeCount = customers.filter(c => c.isActive).length;
+          const activeCount = customers.filter(c => c.status === "active").length;
           const highPriority = customers.filter(c => c.priority === "high").length;
           dataRows = [
             "CUSTOMER INTELLIGENCE SUMMARY",
@@ -274,7 +274,7 @@ export function Reports() {
             "",
             "COMPLETE CUSTOMER DIRECTORY",
             "Sr No,Code,Name,Email,Phone,City,Priority,Status",
-            ...customers.map((c, i) => `"${i + 1}","${c.code || ''}","${(c.name || '').replace(/"/g, '""')}","${c.email || ''}","${c.phone || ''}","${c.city || ''}","${c.priority || 'normal'}","${c.isActive ? 'Active' : 'Inactive'}"`),
+            ...customers.map((c, i) => `"${i + 1}","${c.code || ''}","${(c.name || '').replace(/"/g, '""')}","${c.email || ''}","${c.phone || ''}","${c.city || ''}","${c.priority || 'normal'}","${c.status === 'active' ? 'Active' : 'Inactive'}"`),
           ];
           break;
         }
@@ -533,7 +533,7 @@ export function Reports() {
         <div className="space-y-6 animate-in">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <StatBox icon={<Users className="w-5 h-5 text-blue-500" />} label="Total Customers" value={formatNumber(realCustomerCount || 89)} change={8.1} />
-            <StatBox icon={<Users className="w-5 h-5 text-green-500" />} label="Active" value={formatNumber(customers.filter(c => c.isActive).length || 78)} change={6.3} />
+            <StatBox icon={<Users className="w-5 h-5 text-green-500" />} label="Active" value={formatNumber(customers.filter(c => c.status === "active").length || 78)} change={6.3} />
             <StatBox icon={<DollarSign className="w-5 h-5 text-purple-500" />} label="Avg Revenue/Customer" value={formatCurrency(realCustomerCount > 0 ? realRevenue / realCustomerCount : 274720)} change={11.2} />
             <StatBox icon={<Target className="w-5 h-5 text-amber-500" />} label="High Priority" value={formatNumber(customers.filter(c => c.priority === "high").length || 12)} change={2.0} />
           </div>

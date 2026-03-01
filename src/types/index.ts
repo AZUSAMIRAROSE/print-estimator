@@ -142,32 +142,7 @@ export interface PaperRate {
   isActive: boolean;
 }
 
-// ── Machine ──────────────────────────────────────────────────────────────────
-export interface Machine {
-  id: string;
-  code: string;
-  name: string;
-  type: "offset" | "digital" | "flexo" | "gravure";
-  maxSheetWidth: number; // inches
-  maxSheetHeight: number; // inches
-  minSheetWidth: number;
-  minSheetHeight: number;
-  maxColors: number;
-  hasAQUnit: boolean;
-  hasPerfector: boolean;
-  speedSPH: number; // sheets per hour
-  makeReadyCost: number;
-  makeReadyTime: number; // hours
-  washingCost: number;
-  plateSize: string;
-  gripperMargin: number; // mm
-  tailMargin: number;
-  sideMargin: number;
-  ctpRate: number;
-  hourlyRate: number;
-  isActive: boolean;
-  description: string;
-}
+// ── Machine interface has been moved to machine.types.ts ──────────────────────
 
 // ── Advanced Inventory ───────────────────────────────────────────────────────
 export type InventoryCategory = "paper" | "plates" | "finishing" | "packing" | "ink" | "chemicals" | "consumables" | "spare_parts" | "other";
@@ -240,66 +215,7 @@ export interface InventoryItem {
   notes: string;
 }
 
-export interface MachineDetail {
-  id: string;
-  // ── Basic ──
-  code: string;
-  name: string;
-  type: "offset" | "digital" | "flexo" | "gravure" | "screen" | "cutting" | "folding" | "binding" | "lamination" | "other";
-  manufacturer: string;
-  model: string;
-  serialNumber: string;
-  yearOfManufacture: number;
-  // ── Specs ──
-  maxSheetWidth: number;
-  maxSheetHeight: number;
-  minSheetWidth: number;
-  minSheetHeight: number;
-  maxColors: number;
-  hasAQUnit: boolean;
-  hasPerfector: boolean;
-  speedSPH: number;
-  plateSize: string;
-  gripperMargin: number;
-  tailMargin: number;
-  sideMargin: number;
-  maxPaperWeight: number;
-  minPaperWeight: number;
-  // ── Costs ──
-  purchaseCost: number;
-  currentValue: number;
-  depreciationRate: number;
-  makeReadyCost: number;
-  makeReadyTime: number;
-  washingCost: number;
-  ctpRate: number;
-  hourlyRate: number;
-  maintenanceCostPerMonth: number;
-  inkCostPerHour: number;
-  powerConsumptionKW: number;
-  electricityCostPerUnit: number;
-  // ── Maintenance ──
-  lastMaintenanceDate: string;
-  nextMaintenanceDate: string;
-  maintenanceIntervalDays: number;
-  totalRunningHours: number;
-  hoursUntilService: number;
-  maintenanceNotes: string;
-  // ── Operational ──
-  isActive: boolean;
-  operationalStatus: "running" | "idle" | "maintenance" | "decommissioned";
-  location: string;
-  operatorName: string;
-  shiftCapacity: number;
-  avgUptimePercent: number;
-  avgEfficiencyPercent: number;
-  description: string;
-  // ── Insurance ──
-  insuranceProvider: string;
-  insuranceExpiry: string;
-  insurancePremium: number;
-  warrantyExpiry: string;
-}
+// Machine detail interface unified into `Machine` above
 
 export type NMIAction = "hold" | "write_off" | "liquidate" | "transfer" | "dispose" | "revalue";
 export type NMICategory = "slow_moving" | "non_moving" | "dead_stock" | "obsolete";
