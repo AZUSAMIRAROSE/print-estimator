@@ -288,7 +288,7 @@ export function TransferTab({ search, canEdit }: { search: string; canEdit: bool
 
                 <div className="flex justify-end gap-2 mt-6 pt-4 border-t border-surface-light-border dark:border-surface-dark-border">
                     <button onClick={() => setShowAdd(false)} className="btn-secondary text-sm px-4">Cancel</button>
-                    <button onClick={() => setNewT(n => ({ ...n, status: "draft" as const })) || handleAdd()} className="btn-secondary text-sm px-4">Save as Draft</button>
+                    <button onClick={() => { setNewT(n => ({ ...n, status: "pending" })); handleAdd(); }} className="btn-secondary text-sm px-4">Save as Draft</button>
                     <button onClick={handleAdd} className="btn-primary text-sm px-6" disabled={!newT.itemName || !newT.fromWarehouse || !newT.toWarehouse}>
                         Create Transfer
                     </button>
