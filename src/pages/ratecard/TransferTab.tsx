@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useRateCardStore, type TransferEntry } from "@/stores/rateCardStore";
-import { formatCurrency, formatNumber } from "@/utils/format";
+import { formatCurrency } from "@/utils/format";
 import { cn } from "@/utils/cn";
-import { TabActionBar, RowActions, StatusBadge, AddItemModal, FormField, TH, TR, TD, exportTabCSV } from "./RateCardShared";
+import { TabActionBar, AddItemModal, FormField } from "./RateCardShared";
+import { exportTabCSV } from "@/utils/export/exportTabCSV";
 import { useAppStore } from "@/stores/appStore";
-import { Truck, ArrowRight, DollarSign, Package, Clock, MapPin, AlertTriangle, Check, X, Save, Edit3 } from "lucide-react";
+import { Truck, ArrowRight, DollarSign, Package, MapPin, X, Save, Edit3 } from "lucide-react";
 
 export function TransferTab({ search, canEdit }: { search: string; canEdit: boolean }) {
     const { transfers, addTransfer, updateTransfer, deleteTransfer, resetToDefaults } = useRateCardStore();

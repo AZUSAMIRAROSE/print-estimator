@@ -10,7 +10,7 @@
 // - Packing material costs (Tape, strap, stretch film)
 // ============================================================================
 
-import { ENGINE_CONSTANTS } from "./constants";
+
 
 export interface UnitDimensions {
   width_mm: number;
@@ -54,7 +54,7 @@ export interface PackingResult {
 export function calculatePackingCostGodLevel(
   quantityToPack: number,
   unitSpec: UnitDimensions,
-  standardCartons?: CartonSpecification[]
+  _standardCartons?: CartonSpecification[]
 ): PackingResult {
 
   // 1. Determine best standard carton or use a custom "fit to print" sizing

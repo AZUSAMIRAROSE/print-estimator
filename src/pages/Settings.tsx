@@ -257,7 +257,7 @@ export function Settings() {
                 <div><label className="label">Website</label><input type="text" value={companyForm.website} onChange={e => setCompanyForm({ ...companyForm, website: e.target.value })} className="input-field" /></div>
                 <div><label className="label">Email</label><input type="email" value={companyForm.email} onChange={e => setCompanyForm({ ...companyForm, email: e.target.value })} className="input-field" /></div>
                 <div><label className="label">Phone</label><input type="tel" value={companyForm.phone} onChange={e => setCompanyForm({ ...companyForm, phone: e.target.value })} className="input-field" /></div>
-                <div className="col-span-2"><label className="label">Address</label><input type="text" value={companyForm.address} onChange={e => setCompanyForm({ ...companyForm, address: e.target.value })} className="input-field" /></div>
+                <div className="col-span-2"><label className="label flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" /> Address</label><input type="text" value={companyForm.address} onChange={e => setCompanyForm({ ...companyForm, address: e.target.value })} className="input-field" /></div>
                 <div><label className="label">City</label><input type="text" value={companyForm.city} onChange={e => setCompanyForm({ ...companyForm, city: e.target.value })} className="input-field" /></div>
                 <div><label className="label">State</label><input type="text" value={companyForm.state} onChange={e => setCompanyForm({ ...companyForm, state: e.target.value })} className="input-field" /></div>
                 <div><label className="label">GST Number</label><input type="text" value={companyForm.gstNumber} onChange={e => setCompanyForm({ ...companyForm, gstNumber: e.target.value })} className="input-field" /></div>
@@ -345,7 +345,7 @@ export function Settings() {
                     </select>
                   </div>
                   <div>
-                    <label className="label">Number Format</label>
+                    <label className="label flex items-center gap-1.5"><Hash className="w-3.5 h-3.5" /> Number Format</label>
                     <select value={localePrefs.numberFormat} onChange={e => setLocalePrefs(p => ({ ...p, numberFormat: e.target.value }))} className="input-field">
                       <option value="en-IN">Indian (12,34,567.89)</option>
                       <option value="en-US">US/International (1,234,567.89)</option>
@@ -388,7 +388,7 @@ export function Settings() {
                     </select>
                   </div>
                   <div>
-                    <label className="label">Date Format</label>
+                    <label className="label flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> Date Format</label>
                     <select value={localePrefs.dateFormat} onChange={e => setLocalePrefs(p => ({ ...p, dateFormat: e.target.value }))} className="input-field">
                       <option value="DD/MM/YYYY">DD/MM/YYYY (28/02/2026)</option>
                       <option value="MM/DD/YYYY">MM/DD/YYYY (02/28/2026)</option>

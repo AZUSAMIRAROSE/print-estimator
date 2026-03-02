@@ -2,13 +2,12 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { immer } from "zustand/middleware/immer";
 import type {
-  Customer, Job, Quotation, PaperType,
-  FreightDestination, BoardType, CoveringMaterial, EstimationInput,
-  EstimationResult
+  Customer, Job, Quotation,
+  FreightDestination, BoardType, CoveringMaterial, EstimationInput
 } from "@/types";
 import {
   DEFAULT_DESTINATIONS, DEFAULT_BOARD_TYPES,
-  DEFAULT_COVERING_MATERIALS, DEFAULT_PAPER_RATES, STANDARD_PAPER_SIZES
+  DEFAULT_COVERING_MATERIALS
 } from "@/constants";
 import { generateId, generateJobNumber, generateQuotationNumber, generateCustomerCode } from "@/utils/format";
 

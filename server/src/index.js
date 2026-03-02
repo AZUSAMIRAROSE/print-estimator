@@ -1,4 +1,3 @@
-/* global process */
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
@@ -69,12 +68,14 @@ app.use("/api/v1/jobs", jobRoutes);
 app.use("/api/v1/inventory", inventoryRoutes);
 
 app.use((err, _req, res, _next) => {
+  if (res.headersSent) {
+    return _next(err);
+  }
   const isValidation = err?.name === "ZodError";
   const status = isValidation ? 400 : 500;
   res.status(status).json({ error: err?.message || "Internal server error" });
 });
 
 app.listen(port, () => {
-  // eslint-disable-next-line no-console
   console.log(`[api] listening on http://localhost:${port}`);
 });

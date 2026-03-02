@@ -2,15 +2,14 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { immer } from "zustand/middleware/immer";
 import { generateId } from "@/utils/format";
-import type { InventoryTransfer } from "@/types";
+
 import {
     DEFAULT_PAPER_RATES, IMPRESSION_RATES_DATA,
     WASTAGE_CHART, PERFECT_BINDING_RATES, SADDLE_STITCHING_RATES,
-    LAMINATION_RATES, SPOT_UV_RATES, UV_VARNISH_RATES,
-    AQUEOUS_VARNISH_RATE, GOLD_BLOCKING_RATES, EMBOSSING_RATES,
-    DIE_CUTTING_RATES, PACKING_RATES, DEFAULT_DESTINATIONS,
+    LAMINATION_RATES, SPOT_UV_RATES,
+    PACKING_RATES, DEFAULT_DESTINATIONS,
     DEFAULT_COVERING_MATERIALS, DEFAULT_BOARD_TYPES,
-    HARDCASE_DEFAULTS, WIRE_O_RATES, CTP_RATES
+    HARDCASE_DEFAULTS, WIRE_O_RATES
 } from "@/constants";
 
 // ── Types ────────────────────────────────────────────────────────────────────

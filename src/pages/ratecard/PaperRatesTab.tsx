@@ -3,8 +3,9 @@ import { useRateCardStore, type PaperRateEntry } from "@/stores/rateCardStore";
 import { formatCurrency } from "@/utils/format";
 import { cn } from "@/utils/cn";
 import {
-    TabActionBar, RowActions, StatusBadge, AddItemModal, FormField, TH, TR, TD, exportTabCSV
+    TabActionBar, RowActions, StatusBadge, AddItemModal, FormField, TH, TR, TD,
 } from "./RateCardShared";
+import { exportTabCSV } from '@/utils/export/exportTabCSV';
 import { useAppStore } from "@/stores/appStore";
 
 export function PaperRatesTab({ search, canEdit }: { search: string; canEdit: boolean }) {

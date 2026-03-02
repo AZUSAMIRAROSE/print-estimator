@@ -5,7 +5,7 @@
 // wizard, but exposed through a streamlined single-page interface.
 // ============================================================================
 
-import { DEFAULT_PAPER_RATES, LAMINATION_RATES, DEFAULT_MACHINES, STANDARD_PAPER_SIZES } from "../../constants/index.ts";
+import { DEFAULT_PAPER_RATES, LAMINATION_RATES, DEFAULT_MACHINES } from "../../constants/index.ts";
 import { calculatePaperRequirement } from "./paper.ts";
 import { calculatePrintingCostGodLevel } from "./printing.ts";
 import { calculateCTPCost } from "./ctp.ts";
@@ -359,9 +359,7 @@ export function calculateAdvancedCosts(input: ParsedQuickCalcInput, quantity?: n
   const machine = DEFAULT_MACHINES.find(m => m.id === input.machineId) ?? DEFAULT_MACHINES[3]; // RMGT default
   const coverMachine = DEFAULT_MACHINES.find(m => m.id === input.coverMachineId) ?? machine;
 
-  // Find paper size
-  const paperSize = STANDARD_PAPER_SIZES.find(ps => ps.label === input.paperSize);
-  const availableSizes = paperSize ? [paperSize] : STANDARD_PAPER_SIZES;
+
 
   // ── Spine ──────────────────────────────────────────────────────────────────
   const spineThickness = calculateSpineThickness({
@@ -491,7 +489,7 @@ export function calculateAdvancedCosts(input: ParsedQuickCalcInput, quantity?: n
   });
 
   // ── Binding ────────────────────────────────────────────────────────────────
-  const totalForms = textPaper.imposition.numberOfForms;
+
 
   const bindingRaw = calculateBindingCostGodLevel({
     jobType: 'BOOK',

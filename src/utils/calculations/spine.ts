@@ -6,7 +6,6 @@
 // ============================================================================
 
 import { BULK_FACTORS } from "@/constants";
-import type { TextSection, EndleavesSection } from "@/types";
 
 export interface SpineInput {
   textSections: { pages: number; gsm: number; paperType: string }[];
@@ -22,7 +21,7 @@ export function calculateSpineThickness(input: SpineInput): number {
 
   for (const section of input.textSections) {
     if (section.pages <= 0 || section.gsm <= 0) continue;
-    
+
     const bulkFactor = getBulkFactor(section.paperType);
     const leaves = section.pages / 2; // Each leaf has 2 pages (front and back)
     const thicknessPerLeaf = (section.gsm / 1000) * bulkFactor; // mm
@@ -64,14 +63,14 @@ export function calculateSpineWithBoard(
 function getBulkFactor(paperType: string): number {
   // Try exact match first
   if (BULK_FACTORS[paperType]) return BULK_FACTORS[paperType];
-  
+
   // Try case-insensitive search
   const lower = paperType.toLowerCase();
   for (const [key, value] of Object.entries(BULK_FACTORS)) {
     if (key.toLowerCase() === lower) return value;
     if (lower.includes(key.toLowerCase()) || key.toLowerCase().includes(lower)) return value;
   }
-  
+
   // Default bulk factor
   return 1.0;
 }

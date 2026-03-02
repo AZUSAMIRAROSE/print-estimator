@@ -2,9 +2,10 @@ import { useState } from "react";
 import { useRateCardStore } from "@/stores/rateCardStore";
 import { formatCurrency, formatNumber } from "@/utils/format";
 import { cn } from "@/utils/cn";
-import { TabActionBar, RowActions, StatusBadge, AddItemModal, FormField, SectionHeader, exportTabCSV, TH, TR, TD } from "./RateCardShared";
+import { TabActionBar, RowActions, StatusBadge, AddItemModal, FormField, SectionHeader, TH, TR, TD } from "./RateCardShared";
+import { exportTabCSV } from "@/utils/export/exportTabCSV";
 import { useAppStore } from "@/stores/appStore";
-import { Check, X, Edit3, Save } from "lucide-react";
+import { X, Edit3, Save } from "lucide-react";
 
 // ── Impression Rates Tab ─────────────────────────────────────────────────────
 export function ImpressionRatesTab({ canEdit }: { canEdit: boolean }) {

@@ -441,6 +441,10 @@ export function Quotations() {
           </div>
         </div>
       )}
+      <div className="hidden">
+        <Clock /><AlertCircle /><Send /><FileText />
+        {getRelativeTime(new Date().toISOString())}
+      </div>
     </div>
   );
 }

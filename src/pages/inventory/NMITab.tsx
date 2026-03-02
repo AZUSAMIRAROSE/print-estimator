@@ -72,7 +72,8 @@ export function NMITab() {
             updateNMI(editId, form);
             addNotification({ type: "success", title: "NMI Updated", message: `${form.itemName} updated.`, category: "system" });
         } else {
-            addNMI(form as Omit<NMIRecord, "id" | "createdAt" | "updatedAt">);
+            const newId = generateId();
+            addNMI({ ...form, id: newId } as unknown as Omit<NMIRecord, "id" | "createdAt" | "updatedAt">);
             addNotification({ type: "success", title: "NMI Record Added", message: `${form.itemName} added to NMI.`, category: "system" });
         }
         setShowModal(false); setEditId(null);
@@ -116,7 +117,7 @@ export function NMITab() {
                     {agingData.map(b => (
                         <div key={b.label} className="flex-1 rounded-lg p-2 text-center" style={{ backgroundColor: `${b.color}15` }}>
                             <p className="text-[10px] font-medium" style={{ color: b.color }}>{b.label}</p>
-                            <p className="text-sm font-bold text-text-light-primary dark:text-text-dark-primary">{b.count}</p>
+                            <p className="text-sm font-bold text-text-light-primary dark:text-text-dark-primary">{formatNumber(b.count)}</p>
                             <p className="text-[9px] text-text-light-tertiary">{formatCurrency(b.value)}</p>
                         </div>
                     ))}
@@ -164,7 +165,7 @@ export function NMITab() {
                         {filtered.map(r => (
                             <tr key={r.id} className="border-b border-surface-light-border/50 dark:border-surface-dark-border/50 hover:bg-surface-light-secondary dark:hover:bg-surface-dark-tertiary">
                                 <td className="py-2.5 px-3"><p className="font-medium text-xs">{r.itemName}</p><p className="text-[10px] text-text-light-tertiary font-mono">{r.sku} • {r.location}</p></td>
-                                <td className="py-2.5 px-3 text-center"><span className="font-bold text-xs">{r.daysWithoutMovement}</span><span className="text-[10px] text-text-light-tertiary ml-1">days</span></td>
+                                <td className="py-2.5 px-3 text-center"><div className="flex items-center justify-center gap-1"><Clock className="w-3 h-3 text-text-light-tertiary" /><span className="font-bold text-xs">{r.daysWithoutMovement}</span><span className="text-[10px] text-text-light-tertiary ml-1">days</span></div></td>
                                 <td className="py-2.5 px-3 text-center"><span className={cn("text-[10px] px-2 py-0.5 rounded-full font-medium capitalize", NMI_CATEGORY_COLORS[r.nmiCategory])}>{r.nmiCategory.replace("_", " ")}</span></td>
                                 <td className="py-2.5 px-3 text-right text-xs"><div>{formatCurrency(r.currentValue)}</div><div className="text-[10px] text-text-light-tertiary line-through">{formatCurrency(r.depreciatedValue)}</div></td>
                                 <td className="py-2.5 px-3 text-center"><span className={cn("text-[10px] px-2 py-0.5 rounded-full font-medium capitalize", NMI_STATUS_COLORS[r.status])}>{r.status}</span></td>
@@ -173,6 +174,7 @@ export function NMITab() {
                                         <button onClick={() => handleAction(r.id, "write_off")} className="p-1 rounded hover:bg-surface-light-tertiary" title="Write Off"><Ban className="w-3.5 h-3.5 text-danger-400" /></button>
                                         <button onClick={() => handleAction(r.id, "transfer")} className="p-1 rounded hover:bg-surface-light-tertiary" title="Transfer"><ArrowRightLeft className="w-3.5 h-3.5 text-blue-400" /></button>
                                         <button onClick={() => handleAction(r.id, "dispose")} className="p-1 rounded hover:bg-surface-light-tertiary" title="Dispose"><Trash2 className="w-3.5 h-3.5 text-warning-400" /></button>
+                                        <button onClick={() => handleAction(r.id, "revalue")} className="p-1 rounded hover:bg-surface-light-tertiary" title="Revalue"><CheckCircle className="w-3.5 h-3.5 text-success-400" /></button>
                                         <button onClick={() => openEdit(r)} className="p-1 rounded hover:bg-surface-light-tertiary" title="Edit"><Edit3 className="w-3.5 h-3.5 text-text-light-tertiary" /></button>
                                         <button onClick={() => deleteNMI(r.id)} className="p-1 rounded hover:bg-danger-50" title="Delete"><Trash2 className="w-3.5 h-3.5 text-danger-400" /></button>
                                     </div>

@@ -5,8 +5,8 @@ import { cn } from "@/utils/cn";
 import { saveTextFilePortable } from "@/utils/fileSave";
 import {
   Users, Search, Plus, Download, Upload, Eye, Edit3, Trash2, X, Check,
-  Phone, Mail, MapPin, Globe, Building2, CreditCard, Banknote, Briefcase, FileText,
-  Copy, MoreVertical, Archive, ArrowRight, Tag, Percent
+  Phone, Mail, MapPin, Globe, Building2, FileText,
+  Copy, Percent
 } from "lucide-react";
 import type { Customer } from "@/types";
 

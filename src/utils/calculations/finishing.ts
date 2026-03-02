@@ -11,8 +11,7 @@
 // - Foil Stamping: True pull-length indexing, unwinding waste, heat dwell
 // ============================================================================
 
-import { useMachineStore } from "@/stores/machineStore";
-import { useRateCardStore } from "@/stores/rateCardStore";
+
 import { ENGINE_CONSTANTS } from "./constants";
 
 function getElectricityRatePerKWh(): number {

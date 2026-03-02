@@ -259,7 +259,7 @@ function resolveSubstrate(gsm: number, paperType: string, paperCode: string, siz
   const { paperRates = [] } = useRateCardStore.getState();
 
   // Default fallback physics
-  const defaultCaliper = (gsm * 1.05); // Rough guess 1.05 bulk
+
   const isCoated = paperType.toLowerCase().includes('coated') || paperType.toLowerCase().includes('art') || paperType.toLowerCase().includes('gloss') || paperType.toLowerCase().includes('matt');
 
   let costPerKg = 80; // default fallback (INR)
@@ -449,7 +449,7 @@ function analyzeGrainDirection(
 }
 
 // ─── 3. IMPOSITION CALCULATOR (CONSTRAINT SATISFACTION) ──────────────────────
-function calculateImpositionGodLevel(input: ImpositionInput, substrate: SubstratePhysicalModel): ImpositionResult {
+function calculateImpositionGodLevel(input: ImpositionInput, _substrate: SubstratePhysicalModel): ImpositionResult {
   const bleed = input.bleed_mm ?? 3;
   const gripper = input.gripper_mm ?? 12;
   const tail = input.machineTailMargin_mm ?? 8;

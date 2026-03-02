@@ -136,14 +136,7 @@ function calculateKinematics(
   const penaltyMult = (1 - (subPenalty / 100)) * (1 - (syncPenalty / 100)) * (1 - (perfectingPenalty / 100));
   const effectiveSpeed = Math.floor(baseSpeed * penaltyMult);
 
-  // Total Impressions required (gross)
-  let impressions = totalGrossSheets;
-  if (method === 'SHEETWISE') {
-    // Sheetwise processes back side as a separate pass (impression count is same, but goes through machine twice? No, sheets are passed twice)
-    impressions = totalGrossSheets * 2;
-    // Wait, if it's 4c/4c sheetwise, that's two separate runs of the sheet.
-    // If we count impressions as machine passes:
-  }
+
   // For standard mathematical simplicity, we calculate total machine passes required.
   // Actually, grossSheets from wastage engine already models total sheets required at the feeder for the ENTIRE job.
   // We need to know how many passes.

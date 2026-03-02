@@ -1,4 +1,4 @@
-/* eslint-disable no-console */
+
 import { performance } from "node:perf_hooks";
 import { calculateQuickCosts, validateAndParseQuickCalc, type QuickCalcForm } from "../src/utils/calculations/quickQuote.ts";
 

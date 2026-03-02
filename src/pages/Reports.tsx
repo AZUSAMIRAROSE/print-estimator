@@ -16,36 +16,7 @@ const MONTHLY = [
   { month: "Jun", jobs: 19, revenue: 4850000, quotations: 23, accepted: 13 },
 ];
 
-const TOP_CUSTOMERS = [
-  { name: "Oxford University Press", revenue: 28500000, jobs: 45 },
-  { name: "Cambridge University Press", revenue: 19200000, jobs: 38 },
-  { name: "Penguin Random House", revenue: 12800000, jobs: 22 },
-  { name: "National Geographic", revenue: 8900000, jobs: 8 },
-  { name: "HarperCollins", revenue: 7600000, jobs: 15 },
-];
 
-const MACHINE_UTIL = [
-  { name: "RMGT", hours: 1250, utilization: 78, jobs: 68 },
-  { name: "FAV", hours: 980, utilization: 65, jobs: 42 },
-  { name: "Rekord+AQ", hours: 870, utilization: 58, jobs: 35 },
-  { name: "RMGT Perfecto", hours: 620, utilization: 41, jobs: 22 },
-];
-
-const PAPER_USAGE = [
-  { type: "Matt Art", reams: 1850, weight: 12500 },
-  { type: "Woodfree (CW)", reams: 920, weight: 5800 },
-  { type: "Art Card", reams: 450, weight: 6200 },
-  { type: "Holmen Bulky", reams: 380, weight: 2100 },
-  { type: "C1S", reams: 220, weight: 4800 },
-];
-
-const BINDING_DATA = [
-  { name: "Perfect", value: 42, color: "#3b82f6" },
-  { name: "Hardcase", value: 28, color: "#8b5cf6" },
-  { name: "Saddle", value: 15, color: "#22c55e" },
-  { name: "Wire-O", value: 8, color: "#f59e0b" },
-  { name: "Others", value: 7, color: "#64748b" },
-];
 
 type ReportTab = "overview" | "revenue" | "jobs" | "quotations" | "customers" | "machines" | "paper";
 
@@ -66,7 +37,7 @@ export function Reports() {
   const realRevenue = jobs.reduce((s, j) => s + (j.totalValue || 0), 0);
   const acceptedQuotations = quotations.filter(q => q.status === "accepted").length;
   const sentQuotations = quotations.filter(q => q.status === "sent").length;
-  const conversionRate = realQuotationCount > 0 ? (acceptedQuotations / realQuotationCount) * 100 : 67.3;
+  const conversionRate = realQuotationCount > 0 ? (acceptedQuotations / realQuotationCount) * 100 : 0;
 
   // Revenue by month from real jobs
   const revenueByMonth = useMemo(() => {
@@ -88,12 +59,24 @@ export function Reports() {
       if (q.status === "accepted") monthMap[key].accepted++;
     });
     const result = Object.entries(monthMap).map(([month, data]) => ({ month, ...data }));
-    return result.length > 0 ? result : MONTHLY;
+
+    // Fill remaining months with zeros
+    if (result.length > 0 && result.length < 6) {
+      for (let i = 1; i < 6; i++) {
+        const d = new Date(); d.setMonth(d.getMonth() - i);
+        const key = months[d.getMonth()];
+        if (!monthMap[key]) {
+          result.push({ month: key, jobs: 0, revenue: 0, quotations: 0, accepted: 0 });
+        }
+      }
+    }
+
+    return result.length > 0 ? result.sort((a, b) => months.indexOf(a.month) - months.indexOf(b.month)) : [];
   }, [jobs, quotations]);
 
   // Customer revenue from real data
   const customerRevenue = useMemo(() => {
-    if (customers.length === 0) return TOP_CUSTOMERS;
+    if (customers.length === 0) return [] as { name: string; revenue: number; jobs: number }[];
     const cMap: Record<string, { name: string; revenue: number; jobs: number }> = {};
     jobs.forEach(j => {
       const key = j.customerName || "Unknown";
@@ -102,18 +85,68 @@ export function Reports() {
       cMap[key].jobs++;
     });
     const sorted = Object.values(cMap).sort((a, b) => b.revenue - a.revenue).slice(0, 5);
-    return sorted.length > 0 ? sorted : TOP_CUSTOMERS;
+    return sorted;
   }, [jobs, customers]);
+
+  const machineUtil = useMemo(() => {
+    if (jobs.length === 0) return [];
+    const mData: Record<string, { name: string; hours: number; jobs: number }> = {};
+    jobs.forEach(j => {
+      const costs = j.results[0]?.printingCosts || [];
+      const mNames = new Set<string>();
+      costs.forEach(c => {
+        const key = c.machineName || 'Unknown';
+        if (!mData[key]) mData[key] = { name: key, hours: 0, jobs: 0 };
+        mData[key].hours += (c.runningHours || 0) + (c.makereadyHours || 0);
+        mNames.add(key);
+      });
+      mNames.forEach(name => {
+        mData[name].jobs++;
+      });
+    });
+    const arr = Object.values(mData).map(m => ({
+      ...m,
+      utilization: Math.min(100, Math.round((m.hours / 200) * 100)) // Scaled dummy utilization
+    })).sort((a, b) => b.hours - a.hours).slice(0, 5);
+    return arr;
+  }, [jobs]);
+
+  const paperUsage = useMemo(() => {
+    if (jobs.length === 0) return [];
+    const pData: Record<string, { type: string; reams: number; weight: number }> = {};
+    jobs.forEach(j => {
+      const costs = j.results[0]?.paperCosts || [];
+      costs.forEach(c => {
+        const key = c.paperType || 'Unknown';
+        if (!pData[key]) pData[key] = { type: key, reams: 0, weight: 0 };
+        pData[key].reams += (c.reams || 0);
+        pData[key].weight += (c.totalWeight || 0);
+      });
+    });
+    return Object.values(pData).sort((a, b) => b.weight - a.weight).slice(0, 10);
+  }, [jobs]);
+
+  const jobStatusBreakdown = useMemo(() => {
+    if (jobs.length === 0) {
+      return [{ name: "No Jobs", value: 100, color: "#94a3b8" }];
+    }
+    const counts: Record<string, number> = {};
+    jobs.forEach(j => { counts[j.status] = (counts[j.status] || 0) + 1; });
+    const colors: Record<string, string> = { draft: "#94a3b8", estimated: "#3b82f6", quoted: "#8b5cf6", in_production: "#f59e0b", completed: "#22c55e", cancelled: "#ef4444" };
+
+    let total = jobs.length;
+    return Object.entries(counts).map(([status, count]) => ({
+      name: status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+      value: Math.round((count / total) * 100),
+      rawCount: count,
+      color: colors[status] || "#64748b",
+    })).sort((a, b) => b.rawCount - a.rawCount);
+  }, [jobs]);
 
   // Quotation status breakdown
   const quotationBreakdown = useMemo(() => {
     if (quotations.length === 0) {
-      return [
-        { name: "Draft", value: 1, color: "#94a3b8" },
-        { name: "Sent", value: 2, color: "#3b82f6" },
-        { name: "Accepted", value: 2, color: "#22c55e" },
-        { name: "Rejected", value: 1, color: "#ef4444" },
-      ];
+      return [{ name: "No Quotes", value: 100, color: "#94a3b8" }];
     }
     const counts: Record<string, number> = {};
     quotations.forEach(q => { counts[q.status] = (counts[q.status] || 0) + 1; });
@@ -173,11 +206,11 @@ export function Reports() {
           dataRows = [
             "KEY PERFORMANCE INDICATORS",
             "Metric,Value,Change",
-            `"Total Jobs","${formatNumber(realJobCount || 97)}","+12.5%"`,
-            `"Total Revenue","${formatCurrency(realRevenue || 24450000)}","+15.7%"`,
-            `"Conversion Rate","${conversionRate.toFixed(1)}%","+3.2%"`,
-            `"Avg Job Value","${formatCurrency(realJobCount > 0 ? realRevenue / realJobCount : 252000)}","+8.1%"`,
-            `"Total Customers","${formatNumber(realCustomerCount || 89)}","+8.1%"`,
+            `"Total Jobs","${formatNumber(realJobCount)}","0%"`,
+            `"Total Revenue","${formatCurrency(realRevenue)}","0%"`,
+            `"Conversion Rate","${conversionRate.toFixed(1)}%","0%"`,
+            `"Avg Job Value","${formatCurrency(realJobCount > 0 ? realRevenue / realJobCount : 0)}","0%"`,
+            `"Total Customers","${formatNumber(realCustomerCount)}","0%"`,
             `"Accepted Quotations","${acceptedQuotations}",""`,
             `"Pending Quotations","${sentQuotations}",""`,
             "",
@@ -189,21 +222,21 @@ export function Reports() {
             "Rank,Customer Name,Revenue,Jobs Count",
             ...customerRevenue.map((c, i) => `"${i + 1}","${c.name}","${formatCurrency(c.revenue)}","${c.jobs}"`),
             "",
-            "BINDING DISTRIBUTION",
-            "Binding Type,Percentage",
-            ...BINDING_DATA.map(b => `"${b.name}","${b.value}%"`),
+            "JOB STATUS DISTRIBUTION",
+            "Status,Percentage",
+            ...jobStatusBreakdown.map(b => `"${b.name}","${b.value}%"`),
           ];
           break;
         }
         case "revenue": {
-          const avgMonthly = (realRevenue || 24450000) / 6;
+          const avgMonthly = realRevenue / (revenueByMonth.length || 1);
           dataRows = [
             "REVENUE SUMMARY",
             "Metric,Value",
-            `"Total Revenue","${formatCurrency(realRevenue || 24450000)}"`,
+            `"Total Revenue","${formatCurrency(realRevenue)}"`,
             `"Average Monthly Revenue","${formatCurrency(avgMonthly)}"`,
-            `"Average Revenue per Job","${formatCurrency(realJobCount > 0 ? realRevenue / realJobCount : 252000)}"`,
-            `"Best Performing Month","May"`,
+            `"Average Revenue per Job","${formatCurrency(realJobCount > 0 ? realRevenue / realJobCount : 0)}"`,
+            `"Best Performing Month","${revenueByMonth.length > 0 ? [...revenueByMonth].sort((a, b) => b.revenue - a.revenue)[0].month : 'N/A'}"`,
             "",
             "MONTHLY REVENUE BREAKDOWN",
             "Month,Revenue,Jobs Count,Revenue per Job",
@@ -218,10 +251,10 @@ export function Reports() {
           dataRows = [
             "JOB STATUS SUMMARY",
             "Status,Count,Percentage",
-            `"Total Jobs","${realJobCount || 97}","100%"`,
-            `"In Production","${inProd || 3}","${realJobCount > 0 ? ((inProd / realJobCount) * 100).toFixed(1) : '3.1'}%"`,
-            `"Completed","${completed || 45}","${realJobCount > 0 ? ((completed / realJobCount) * 100).toFixed(1) : '46.4'}%"`,
-            `"Draft","${draft || 12}","${realJobCount > 0 ? ((draft / realJobCount) * 100).toFixed(1) : '12.4'}%"`,
+            `"Total Jobs","${realJobCount}","100%"`,
+            `"In Production","${inProd}","${realJobCount > 0 ? ((inProd / realJobCount) * 100).toFixed(1) : '0'}%"`,
+            `"Completed","${completed}","${realJobCount > 0 ? ((completed / realJobCount) * 100).toFixed(1) : '0'}%"`,
+            `"Draft","${draft}","${realJobCount > 0 ? ((draft / realJobCount) * 100).toFixed(1) : '0'}%"`,
             "",
             "JOBS BY MONTH",
             "Month,Jobs Created,Revenue Generated",
@@ -237,9 +270,9 @@ export function Reports() {
           dataRows = [
             "QUOTATION PERFORMANCE SUMMARY",
             "Metric,Value",
-            `"Total Quotations","${realQuotationCount || 134}"`,
-            `"Accepted","${acceptedQuotations || 71}"`,
-            `"Pending (Sent)","${sentQuotations || 23}"`,
+            `"Total Quotations","${realQuotationCount}"`,
+            `"Accepted","${acceptedQuotations}"`,
+            `"Pending (Sent)","${sentQuotations}"`,
             `"Conversion Rate","${conversionRate.toFixed(1)}%"`,
             "",
             "STATUS DISTRIBUTION",
@@ -262,10 +295,10 @@ export function Reports() {
           dataRows = [
             "CUSTOMER INTELLIGENCE SUMMARY",
             "Metric,Value",
-            `"Total Customers","${realCustomerCount || 89}"`,
-            `"Active Customers","${activeCount || 78}"`,
-            `"High Priority","${highPriority || 12}"`,
-            `"Avg Revenue per Customer","${formatCurrency(realCustomerCount > 0 ? realRevenue / realCustomerCount : 274720)}"`,
+            `"Total Customers","${realCustomerCount}"`,
+            `"Active Customers","${activeCount}"`,
+            `"High Priority","${highPriority}"`,
+            `"Avg Revenue per Customer","${formatCurrency(realCustomerCount > 0 ? realRevenue / realCustomerCount : 0)}"`,
             "",
             "TOP CUSTOMERS BY REVENUE",
             "Rank,Customer Name,Total Revenue,Jobs Count,Revenue per Job",
@@ -278,9 +311,9 @@ export function Reports() {
           break;
         }
         case "machines": {
-          const totalHours = MACHINE_UTIL.reduce((s, m) => s + m.hours, 0);
-          const totalJobs = MACHINE_UTIL.reduce((s, m) => s + m.jobs, 0);
-          const avgUtil = MACHINE_UTIL.reduce((s, m) => s + m.utilization, 0) / MACHINE_UTIL.length;
+          const totalHours = machineUtil.reduce((s, m) => s + m.hours, 0);
+          const totalJobs = machineUtil.reduce((s, m) => s + m.jobs, 0);
+          const avgUtil = machineUtil.length > 0 ? machineUtil.reduce((s, m) => s + m.utilization, 0) / machineUtil.length : 0;
           dataRows = [
             "MACHINE UTILIZATION SUMMARY",
             "Metric,Value",
@@ -290,23 +323,23 @@ export function Reports() {
             "",
             "MACHINE-WISE BREAKDOWN",
             "Machine Name,Hours Logged,Utilization %,Jobs Processed,Avg Hours/Job,Status",
-            ...MACHINE_UTIL.map(m => `"${m.name}","${formatNumber(m.hours)}","${m.utilization}%","${m.jobs}","${(m.hours / m.jobs).toFixed(1)}","${m.utilization > 70 ? 'Optimal' : m.utilization > 40 ? 'Moderate' : 'Under-utilized'}"`),
+            ...machineUtil.map(m => `"${m.name}","${formatNumber(m.hours)}","${m.utilization}%","${m.jobs}","${m.jobs > 0 ? (m.hours / m.jobs).toFixed(1) : 0}","${m.utilization > 70 ? 'Optimal' : m.utilization > 40 ? 'Moderate' : 'Under-utilized'}"`),
           ];
           break;
         }
         case "paper": {
-          const totalReams = PAPER_USAGE.reduce((s, p) => s + p.reams, 0);
-          const totalWeight = PAPER_USAGE.reduce((s, p) => s + p.weight, 0);
+          const totalReams = paperUsage.reduce((s, p) => s + p.reams, 0);
+          const totalWeight = paperUsage.reduce((s, p) => s + p.weight, 0);
           dataRows = [
             "PAPER CONSUMPTION SUMMARY",
             "Metric,Value",
             `"Total Reams Used","${formatNumber(totalReams)}"`,
             `"Total Weight","${formatNumber(totalWeight)} kg"`,
-            `"Paper Types","${PAPER_USAGE.length}"`,
+            `"Paper Types","${paperUsage.length}"`,
             "",
             "PAPER-WISE BREAKDOWN",
             "Paper Type,Reams Used,Weight (kg),% of Total Reams,% of Total Weight",
-            ...PAPER_USAGE.map(p => `"${p.type}","${formatNumber(p.reams)}","${formatNumber(p.weight)}","${((p.reams / totalReams) * 100).toFixed(1)}%","${((p.weight / totalWeight) * 100).toFixed(1)}%"`),
+            ...paperUsage.map(p => `"${p.type}","${formatNumber(p.reams)}","${formatNumber(p.weight)}","${totalReams > 0 ? ((p.reams / totalReams) * 100).toFixed(1) : 0}%","${totalWeight > 0 ? ((p.weight / totalWeight) * 100).toFixed(1) : 0}%"`),
           ];
           break;
         }
@@ -349,6 +382,7 @@ export function Reports() {
           <p className="text-sm text-text-light-secondary dark:text-text-dark-secondary mt-1">Comprehensive analytics and business intelligence</p>
         </div>
         <div className="flex items-center gap-2">
+          <Calendar className="w-4 h-4 text-text-light-secondary opacity-50" />
           <div className="flex items-center gap-1 p-1 bg-surface-light-tertiary dark:bg-surface-dark-tertiary rounded-lg">
             {[{ key: "3m", label: "3 Months" }, { key: "6m", label: "6 Months" }, { key: "1y", label: "1 Year" }].map(r => (
               <button key={r.key} onClick={() => setDateRange(r.key)} className={cn("px-3 py-1.5 rounded-md text-xs font-medium transition-all", dateRange === r.key ? "bg-white dark:bg-surface-dark-secondary shadow-sm" : "text-text-light-secondary dark:text-text-dark-secondary")}>
@@ -379,17 +413,17 @@ export function Reports() {
       {tab === "overview" && (
         <div className="space-y-6 animate-in">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <StatBox icon={<Briefcase className="w-5 h-5 text-blue-500" />} label="Total Jobs" value={formatNumber(realJobCount || 97)} change={12.5} />
-            <StatBox icon={<DollarSign className="w-5 h-5 text-green-500" />} label="Total Revenue" value={formatCurrency(realRevenue || 24450000)} change={15.7} />
-            <StatBox icon={<FileCheck className="w-5 h-5 text-amber-500" />} label="Conversion Rate" value={`${conversionRate.toFixed(1)}%`} change={3.2} />
-            <StatBox icon={<Target className="w-5 h-5 text-purple-500" />} label="Avg Job Value" value={formatCurrency(realJobCount > 0 ? realRevenue / realJobCount : 252000)} change={8.1} />
+            <StatBox icon={<Briefcase className="w-5 h-5 text-blue-500" />} label="Total Jobs" value={formatNumber(realJobCount)} change={0} />
+            <StatBox icon={<DollarSign className="w-5 h-5 text-green-500" />} label="Total Revenue" value={formatCurrency(realRevenue)} change={0} />
+            <StatBox icon={<FileCheck className="w-5 h-5 text-amber-500" />} label="Conversion Rate" value={`${conversionRate.toFixed(1)}%`} change={0} />
+            <StatBox icon={<Target className="w-5 h-5 text-purple-500" />} label="Avg Job Value" value={formatCurrency(realJobCount > 0 ? realRevenue / realJobCount : 0)} change={0} />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="card p-5 min-w-0">
               <h3 className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary mb-4">Revenue Trend</h3>
               <div className="h-64 min-w-0">
-                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={1}>
+                <ResponsiveContainer width="99%" height="100%" minWidth={0} minHeight={1}>
                   <AreaChart data={revenueByMonth}>
                     <defs><linearGradient id="rg" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#3b82f6" stopOpacity={0.15} /><stop offset="95%" stopColor="#3b82f6" stopOpacity={0} /></linearGradient></defs>
                     <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
@@ -403,14 +437,14 @@ export function Reports() {
             </div>
 
             <div className="card p-5 min-w-0">
-              <h3 className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary mb-4">Binding Distribution</h3>
+              <h3 className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary mb-4 flex items-center gap-2"><PieIcon className="w-4 h-4" /> Job Status Distribution</h3>
               <div className="h-52 min-w-0">
-                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={1}>
-                  <PieChart><Pie data={BINDING_DATA} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="value">{BINDING_DATA.map((e, i) => <Cell key={i} fill={e.color} />)}</Pie><Tooltip contentStyle={chartStyle} /></PieChart>
+                <ResponsiveContainer width="99%" height="100%" minWidth={0} minHeight={1}>
+                  <PieChart><Pie data={jobStatusBreakdown} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="value">{jobStatusBreakdown.map((e, i) => <Cell key={i} fill={e.color} />)}</Pie><Tooltip contentStyle={chartStyle} /><Legend /></PieChart>
                 </ResponsiveContainer>
               </div>
               <div className="flex flex-wrap gap-3 justify-center mt-2">
-                {BINDING_DATA.map(b => (<div key={b.name} className="flex items-center gap-1.5 text-xs"><div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: b.color }} />{b.name} ({b.value}%)</div>))}
+                {jobStatusBreakdown.map(b => (<div key={b.name} className="flex items-center gap-1.5 text-xs"><div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: b.color }} />{b.name} ({b.value}%)</div>))}
               </div>
             </div>
           </div>
@@ -441,15 +475,15 @@ export function Reports() {
       {tab === "revenue" && (
         <div className="space-y-6 animate-in">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <StatBox icon={<DollarSign className="w-5 h-5 text-green-500" />} label="Total Revenue" value={formatCurrency(realRevenue || 24450000)} change={15.7} />
-            <StatBox icon={<TrendingUp className="w-5 h-5 text-blue-500" />} label="Avg Monthly" value={formatCurrency((realRevenue || 24450000) / 6)} change={8.3} />
-            <StatBox icon={<Target className="w-5 h-5 text-purple-500" />} label="Best Month" value="May" change={22.1} />
-            <StatBox icon={<DollarSign className="w-5 h-5 text-amber-500" />} label="Avg per Job" value={formatCurrency(realJobCount > 0 ? realRevenue / realJobCount : 252000)} change={5.4} />
+            <StatBox icon={<DollarSign className="w-5 h-5 text-green-500" />} label="Total Revenue" value={formatCurrency(realRevenue)} change={0} />
+            <StatBox icon={<TrendingUp className="w-5 h-5 text-blue-500" />} label="Avg Monthly" value={formatCurrency(realRevenue / (revenueByMonth.length || 1))} change={0} />
+            <StatBox icon={<Target className="w-5 h-5 text-purple-500" />} label="Best Month" value={revenueByMonth.length > 0 ? [...revenueByMonth].sort((a, b) => b.revenue - a.revenue)[0].month : "N/A"} change={0} />
+            <StatBox icon={<DollarSign className="w-5 h-5 text-amber-500" />} label="Avg per Job" value={formatCurrency(realJobCount > 0 ? realRevenue / realJobCount : 0)} change={0} />
           </div>
           <div className="card p-5 min-w-0">
-            <h3 className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary mb-4">Revenue & Jobs Trend</h3>
+            <h3 className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary mb-4 flex items-center gap-2"><LineChart className="w-4 h-4" /> Revenue & Jobs Trend</h3>
             <div className="h-72 min-w-0">
-              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={1}>
+              <ResponsiveContainer width="99%" height="100%" minWidth={0} minHeight={1}>
                 <AreaChart data={revenueByMonth}>
                   <defs><linearGradient id="rg2" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#3b82f6" stopOpacity={0.15} /><stop offset="95%" stopColor="#3b82f6" stopOpacity={0} /></linearGradient></defs>
                   <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
@@ -468,15 +502,15 @@ export function Reports() {
       {tab === "jobs" && (
         <div className="space-y-6 animate-in">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <StatBox icon={<Briefcase className="w-5 h-5 text-blue-500" />} label="Total Jobs" value={formatNumber(realJobCount || 97)} change={12.5} />
-            <StatBox icon={<Briefcase className="w-5 h-5 text-purple-500" />} label="In Production" value={formatNumber(jobs.filter(j => j.status === "in_production").length || 3)} change={5.0} />
-            <StatBox icon={<Briefcase className="w-5 h-5 text-green-500" />} label="Completed" value={formatNumber(jobs.filter(j => j.status === "completed").length || 45)} change={18.2} />
-            <StatBox icon={<Briefcase className="w-5 h-5 text-amber-500" />} label="Draft" value={formatNumber(jobs.filter(j => j.status === "draft").length || 12)} change={-2.1} />
+            <StatBox icon={<Briefcase className="w-5 h-5 text-blue-500" />} label="Total Jobs" value={formatNumber(realJobCount)} change={0} />
+            <StatBox icon={<Briefcase className="w-5 h-5 text-purple-500" />} label="In Production" value={formatNumber(jobs.filter(j => j.status === "in_production").length)} change={0} />
+            <StatBox icon={<Briefcase className="w-5 h-5 text-green-500" />} label="Completed" value={formatNumber(jobs.filter(j => j.status === "completed").length)} change={0} />
+            <StatBox icon={<Briefcase className="w-5 h-5 text-amber-500" />} label="Draft" value={formatNumber(jobs.filter(j => j.status === "draft").length)} change={0} />
           </div>
           <div className="card p-5 min-w-0">
             <h3 className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary mb-4">Jobs by Month</h3>
             <div className="h-64 min-w-0">
-              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={1}>
+              <ResponsiveContainer width="99%" height="100%" minWidth={0} minHeight={1}>
                 <BarChart data={revenueByMonth}>
                   <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
                   <XAxis dataKey="month" tick={{ fontSize: 12, fill: tickFill }} />
@@ -493,16 +527,16 @@ export function Reports() {
       {tab === "quotations" && (
         <div className="space-y-6 animate-in">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <StatBox icon={<FileCheck className="w-5 h-5 text-blue-500" />} label="Total Quotes" value={formatNumber(realQuotationCount || 134)} change={9.8} />
-            <StatBox icon={<FileCheck className="w-5 h-5 text-green-500" />} label="Accepted" value={formatNumber(acceptedQuotations || 71)} change={12.4} />
-            <StatBox icon={<FileCheck className="w-5 h-5 text-amber-500" />} label="Pending" value={formatNumber(sentQuotations || 23)} change={-5.2} />
-            <StatBox icon={<Target className="w-5 h-5 text-purple-500" />} label="Conversion" value={`${conversionRate.toFixed(1)}%`} change={3.2} />
+            <StatBox icon={<FileCheck className="w-5 h-5 text-blue-500" />} label="Total Quotes" value={formatNumber(realQuotationCount)} change={0} />
+            <StatBox icon={<FileCheck className="w-5 h-5 text-green-500" />} label="Accepted" value={formatNumber(acceptedQuotations)} change={0} />
+            <StatBox icon={<FileCheck className="w-5 h-5 text-amber-500" />} label="Pending" value={formatNumber(sentQuotations)} change={0} />
+            <StatBox icon={<Target className="w-5 h-5 text-purple-500" />} label="Conversion" value={`${conversionRate.toFixed(1)}%`} change={0} />
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="card p-5 min-w-0">
               <h3 className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary mb-4">Quotation Status Distribution</h3>
               <div className="h-52 min-w-0">
-                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={1}>
+                <ResponsiveContainer width="99%" height="100%" minWidth={0} minHeight={1}>
                   <PieChart><Pie data={quotationBreakdown} cx="50%" cy="50%" innerRadius={45} outerRadius={75} paddingAngle={3} dataKey="value">{quotationBreakdown.map((e, i) => <Cell key={i} fill={e.color} />)}</Pie><Tooltip contentStyle={chartStyle} /></PieChart>
                 </ResponsiveContainer>
               </div>
@@ -513,7 +547,7 @@ export function Reports() {
             <div className="card p-5 min-w-0">
               <h3 className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary mb-4">Quotations vs Accepted Trend</h3>
               <div className="h-64 min-w-0">
-                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={1}>
+                <ResponsiveContainer width="99%" height="100%" minWidth={0} minHeight={1}>
                   <BarChart data={revenueByMonth}>
                     <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
                     <XAxis dataKey="month" tick={{ fontSize: 12, fill: tickFill }} />
@@ -532,10 +566,10 @@ export function Reports() {
       {tab === "customers" && (
         <div className="space-y-6 animate-in">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <StatBox icon={<Users className="w-5 h-5 text-blue-500" />} label="Total Customers" value={formatNumber(realCustomerCount || 89)} change={8.1} />
-            <StatBox icon={<Users className="w-5 h-5 text-green-500" />} label="Active" value={formatNumber(customers.filter(c => c.status === "active").length || 78)} change={6.3} />
-            <StatBox icon={<DollarSign className="w-5 h-5 text-purple-500" />} label="Avg Revenue/Customer" value={formatCurrency(realCustomerCount > 0 ? realRevenue / realCustomerCount : 274720)} change={11.2} />
-            <StatBox icon={<Target className="w-5 h-5 text-amber-500" />} label="High Priority" value={formatNumber(customers.filter(c => c.priority === "high").length || 12)} change={2.0} />
+            <StatBox icon={<Users className="w-5 h-5 text-blue-500" />} label="Total Customers" value={formatNumber(realCustomerCount)} change={0} />
+            <StatBox icon={<Users className="w-5 h-5 text-green-500" />} label="Active" value={formatNumber(customers.filter(c => c.status === "active").length)} change={0} />
+            <StatBox icon={<DollarSign className="w-5 h-5 text-purple-500" />} label="Avg Revenue/Customer" value={formatCurrency(realCustomerCount > 0 ? realRevenue / realCustomerCount : 0)} change={0} />
+            <StatBox icon={<Target className="w-5 h-5 text-amber-500" />} label="High Priority" value={formatNumber(customers.filter(c => c.priority === "high").length)} change={0} />
           </div>
           <div className="card p-5">
             <h3 className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary mb-4">Customer Revenue Ranking</h3>
@@ -563,7 +597,7 @@ export function Reports() {
       {tab === "machines" && (
         <div className="space-y-6 animate-in">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {MACHINE_UTIL.map(m => (
+            {machineUtil.map(m => (
               <div key={m.name} className="card p-5">
                 <h4 className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary">{m.name}</h4>
                 <div className="mt-3 space-y-2">
@@ -582,8 +616,8 @@ export function Reports() {
         <div className="card p-5 animate-in min-w-0">
           <h3 className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary mb-4">Paper Consumption</h3>
           <div className="h-64 mb-6">
-            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={1}>
-              <BarChart data={PAPER_USAGE}>
+            <ResponsiveContainer width="99%" height="100%" minWidth={0} minHeight={1}>
+              <BarChart data={paperUsage}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
                 <XAxis dataKey="type" tick={{ fontSize: 12, fill: tickFill }} />
                 <YAxis tick={{ fontSize: 12, fill: tickFill }} />
@@ -594,7 +628,7 @@ export function Reports() {
           </div>
           <table className="w-full text-sm">
             <thead><tr className="bg-surface-light-tertiary dark:bg-surface-dark-tertiary border-b"><th className="py-2 px-4 text-left font-semibold">Paper Type</th><th className="py-2 px-4 text-right font-semibold">Reams Used</th><th className="py-2 px-4 text-right font-semibold">Weight (kg)</th></tr></thead>
-            <tbody>{PAPER_USAGE.map(p => (<tr key={p.type} className="border-b border-surface-light-border/50 dark:border-surface-dark-border/50"><td className="py-2 px-4 font-medium">{p.type}</td><td className="py-2 px-4 text-right">{formatNumber(p.reams)}</td><td className="py-2 px-4 text-right">{formatNumber(p.weight)}</td></tr>))}</tbody>
+            <tbody>{paperUsage.map(p => (<tr key={p.type} className="border-b border-surface-light-border/50 dark:border-surface-dark-border/50"><td className="py-2 px-4 font-medium">{p.type}</td><td className="py-2 px-4 text-right">{formatNumber(p.reams)}</td><td className="py-2 px-4 text-right">{formatNumber(p.weight)}</td></tr>))}</tbody>
           </table>
         </div>
       )}

@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useMachineStore } from "@/stores/machineStore";
 import { useAppStore } from "@/stores/appStore";
 import { Machine, createDefaultMachine } from "@/types/machine.types";
-import { MachineStatus } from "@/types/machine.enums";
 import { Plus } from "lucide-react";
 
 import { MachineTable } from "@/components/machines/MachineTable";

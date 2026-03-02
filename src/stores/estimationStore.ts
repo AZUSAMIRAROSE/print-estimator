@@ -4,7 +4,7 @@ import { immer } from "zustand/middleware/immer";
 import type {
   EstimationInput, BookSpec, TextSection, CoverSection, JacketSection,
   EndleavesSection, BindingSection, FinishingSection, PackingSection,
-  DeliverySection, PrePressSection, PricingSection, AdditionalCost,
+  DeliverySection, PrePressSection, PricingSection,
   EstimationResult
 } from "@/types";
 import { generateId } from "@/utils/format";
@@ -17,12 +17,12 @@ interface EstimationState {
   isCalculating: boolean;
   isCalculated: boolean;
   showResults: boolean;
-  
+
   // Actions
   setCurrentStep: (step: number) => void;
   nextStep: () => void;
   prevStep: () => void;
-  
+
   updateEstimation: (updates: Partial<EstimationInput>) => void;
   updateBookSpec: (updates: Partial<BookSpec>) => void;
   updateTextSection: (index: number, updates: Partial<TextSection>) => void;
@@ -36,11 +36,11 @@ interface EstimationState {
   updatePrePress: (updates: Partial<PrePressSection>) => void;
   updatePricing: (updates: Partial<PricingSection>) => void;
   updateQuantity: (index: number, value: number) => void;
-  
+
   setResults: (results: EstimationResult[]) => void;
   setIsCalculating: (val: boolean) => void;
   setShowResults: (val: boolean) => void;
-  
+
   resetEstimation: () => void;
   loadEstimation: (estimation: EstimationInput) => void;
 }
@@ -54,7 +54,7 @@ const createDefaultEstimation = (): EstimationInput => ({
   estimatedBy: "",
   estimationDate: new Date().toISOString().split("T")[0],
   poNumber: "",
-  
+
   bookSpec: {
     heightMM: 234,
     widthMM: 153,
@@ -65,9 +65,9 @@ const createDefaultEstimation = (): EstimationInput => ({
     spineWithBoard: 0,
     totalPages: 0,
   },
-  
+
   quantities: [3000, 5000, 0, 0, 0],
-  
+
   textSections: [
     {
       id: generateId(),
@@ -104,7 +104,7 @@ const createDefaultEstimation = (): EstimationInput => ({
       printingMethod: "sheetwise",
     },
   ],
-  
+
   cover: {
     enabled: true,
     pages: 4,
@@ -121,7 +121,7 @@ const createDefaultEstimation = (): EstimationInput => ({
     separateCover: true,
     foldType: "wrap_around",
   },
-  
+
   jacket: {
     enabled: false,
     colorsFront: 4,
@@ -140,7 +140,7 @@ const createDefaultEstimation = (): EstimationInput => ({
     spotUV: false,
     flapWidth: 90,
   },
-  
+
   endleaves: {
     enabled: false,
     pages: 4,
@@ -156,7 +156,7 @@ const createDefaultEstimation = (): EstimationInput => ({
     type: "plain",
     selfEndleaves: false,
   },
-  
+
   binding: {
     primaryBinding: "perfect_binding",
     purBinding: false,
@@ -177,7 +177,7 @@ const createDefaultEstimation = (): EstimationInput => ({
     embossingFront: false,
     roundingBacking: false,
   },
-  
+
   finishing: {
     coverLamination: { enabled: true, type: "gloss", machineId: "" },
     jacketLamination: { enabled: false, type: "gloss" },
@@ -199,7 +199,7 @@ const createDefaultEstimation = (): EstimationInput => ({
     largeFormat: { enabled: false, productType: "poster", widthMM: 594, heightMM: 841, quantity: 0, ratePerSqM: 140 },
     additionalFinishing: [],
   },
-  
+
   packing: {
     useCartons: true,
     usePallets: true,
@@ -229,7 +229,7 @@ const createDefaultEstimation = (): EstimationInput => ({
     maxPalletHeight: PACKING_RATES.maxPalletHeight,
     maxPalletWeight: PACKING_RATES.maxPalletWeight,
   },
-  
+
   delivery: {
     destinationId: "felix",
     destinationName: "Felixstowe",
@@ -246,7 +246,7 @@ const createDefaultEstimation = (): EstimationInput => ({
     insurance: true,
     insuranceRate: 0.3,
   },
-  
+
   prePress: {
     epsonProofs: 0,
     epsonRatePerPage: EPSON_PROOF_RATE,
@@ -257,7 +257,7 @@ const createDefaultEstimation = (): EstimationInput => ({
     designCharges: 0,
     originationType: "from_pdf",
   },
-  
+
   pricing: {
     marginPercent: 25,
     commissionPercent: 0,
@@ -272,7 +272,7 @@ const createDefaultEstimation = (): EstimationInput => ({
     taxRate: 0,
     includesTax: false,
   },
-  
+
   additionalCosts: [],
   notes: "",
   internalNotes: "",
@@ -284,75 +284,75 @@ const createDefaultEstimation = (): EstimationInput => ({
 export const useEstimationStore = create<EstimationState>()(
   persist(
     immer((set) => ({
-    estimation: createDefaultEstimation(),
-    currentStep: 1,
-    results: [],
-    isCalculating: false,
-    isCalculated: false,
-    showResults: false,
-    
-    setCurrentStep: (step) => set((state) => { state.currentStep = step; }),
-    nextStep: () => set((state) => { if (state.currentStep < 15) state.currentStep++; }),
-    prevStep: () => set((state) => { if (state.currentStep > 1) state.currentStep--; }),
-    
-    updateEstimation: (updates) => set((state) => { Object.assign(state.estimation, updates); }),
-    
-    updateBookSpec: (updates) => set((state) => { Object.assign(state.estimation.bookSpec, updates); }),
-    
-    updateTextSection: (index, updates) => set((state) => {
-      if (state.estimation.textSections[index]) {
-        Object.assign(state.estimation.textSections[index], updates);
-      }
-    }),
-    
-    updateCover: (updates) => set((state) => { Object.assign(state.estimation.cover, updates); }),
-    updateJacket: (updates) => set((state) => { Object.assign(state.estimation.jacket, updates); }),
-    updateEndleaves: (updates) => set((state) => { Object.assign(state.estimation.endleaves, updates); }),
-    updateBinding: (updates) => set((state) => { Object.assign(state.estimation.binding, updates); }),
-    updateFinishing: (updates) => set((state) => {
-      // Deep merge for nested finishing objects
-      const f = state.estimation.finishing;
-      for (const [key, value] of Object.entries(updates)) {
-        if (typeof value === "object" && value !== null && !Array.isArray(value)) {
-          (f as any)[key] = { ...(f as any)[key], ...value };
-        } else {
-          (f as any)[key] = value;
+      estimation: createDefaultEstimation(),
+      currentStep: 1,
+      results: [],
+      isCalculating: false,
+      isCalculated: false,
+      showResults: false,
+
+      setCurrentStep: (step) => set((state) => { state.currentStep = step; }),
+      nextStep: () => set((state) => { if (state.currentStep < 15) state.currentStep++; }),
+      prevStep: () => set((state) => { if (state.currentStep > 1) state.currentStep--; }),
+
+      updateEstimation: (updates) => set((state) => { Object.assign(state.estimation, updates); }),
+
+      updateBookSpec: (updates) => set((state) => { Object.assign(state.estimation.bookSpec, updates); }),
+
+      updateTextSection: (index, updates) => set((state) => {
+        if (state.estimation.textSections[index]) {
+          Object.assign(state.estimation.textSections[index], updates);
         }
-      }
-    }),
-    updatePacking: (updates) => set((state) => { Object.assign(state.estimation.packing, updates); }),
-    updateDelivery: (updates) => set((state) => { Object.assign(state.estimation.delivery, updates); }),
-    updatePrePress: (updates) => set((state) => { Object.assign(state.estimation.prePress, updates); }),
-    updatePricing: (updates) => set((state) => { Object.assign(state.estimation.pricing, updates); }),
-    
-    updateQuantity: (index, value) => set((state) => {
-      state.estimation.quantities[index] = value;
-    }),
-    
-    setResults: (results) => set((state) => {
-      state.results = results;
-      state.isCalculated = true;
-    }),
-    
-    setIsCalculating: (val) => set((state) => { state.isCalculating = val; }),
-    setShowResults: (val) => set((state) => { state.showResults = val; }),
-    
-    resetEstimation: () => set((state) => {
-      state.estimation = createDefaultEstimation();
-      state.currentStep = 1;
-      state.results = [];
-      state.isCalculating = false;
-      state.isCalculated = false;
-      state.showResults = false;
-    }),
-    
-    loadEstimation: (estimation) => set((state) => {
-      state.estimation = estimation;
-      state.currentStep = 1;
-      state.results = [];
-      state.isCalculated = false;
-      state.showResults = false;
-    }),
+      }),
+
+      updateCover: (updates) => set((state) => { Object.assign(state.estimation.cover, updates); }),
+      updateJacket: (updates) => set((state) => { Object.assign(state.estimation.jacket, updates); }),
+      updateEndleaves: (updates) => set((state) => { Object.assign(state.estimation.endleaves, updates); }),
+      updateBinding: (updates) => set((state) => { Object.assign(state.estimation.binding, updates); }),
+      updateFinishing: (updates) => set((state) => {
+        // Deep merge for nested finishing objects
+        const f = state.estimation.finishing;
+        for (const [key, value] of Object.entries(updates)) {
+          if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+            (f as any)[key] = { ...(f as any)[key], ...value };
+          } else {
+            (f as any)[key] = value;
+          }
+        }
+      }),
+      updatePacking: (updates) => set((state) => { Object.assign(state.estimation.packing, updates); }),
+      updateDelivery: (updates) => set((state) => { Object.assign(state.estimation.delivery, updates); }),
+      updatePrePress: (updates) => set((state) => { Object.assign(state.estimation.prePress, updates); }),
+      updatePricing: (updates) => set((state) => { Object.assign(state.estimation.pricing, updates); }),
+
+      updateQuantity: (index, value) => set((state) => {
+        state.estimation.quantities[index] = value;
+      }),
+
+      setResults: (results) => set((state) => {
+        state.results = results;
+        state.isCalculated = true;
+      }),
+
+      setIsCalculating: (val) => set((state) => { state.isCalculating = val; }),
+      setShowResults: (val) => set((state) => { state.showResults = val; }),
+
+      resetEstimation: () => set((state) => {
+        state.estimation = createDefaultEstimation();
+        state.currentStep = 1;
+        state.results = [];
+        state.isCalculating = false;
+        state.isCalculated = false;
+        state.showResults = false;
+      }),
+
+      loadEstimation: (estimation) => set((state) => {
+        state.estimation = estimation;
+        state.currentStep = 1;
+        state.results = [];
+        state.isCalculated = false;
+        state.showResults = false;
+      }),
     })),
     {
       name: "print-estimator-estimation-store",

@@ -1,10 +1,10 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { useInventoryStore } from "@/stores/inventoryStore";
 import { useAppStore } from "@/stores/appStore";
 import { cn } from "@/utils/cn";
 import { formatCurrency } from "@/utils/format";
 import type { InventoryTransfer, TransferStatus } from "@/types";
-import { Plus, Edit3, Trash2, CheckCircle, X, Truck, ArrowRight, MapPin } from "lucide-react";
+import { Plus, Edit3, Trash2, CheckCircle, X, ArrowRight, MapPin } from "lucide-react";
 
 const STATUS_COLORS: Record<TransferStatus, string> = {
     pending: "bg-warning-100 dark:bg-warning-500/20 text-warning-700 dark:text-warning-400",

@@ -343,7 +343,7 @@ export function EstimationResults({ estimation, results, spineThickness, onBackT
               Cost Distribution — {formatNumber(primaryResult.quantity)} copies
             </h3>
             <div className="h-64 min-w-0">
-              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={1}>
+              <ResponsiveContainer width="99%" height="100%" minWidth={0} minHeight={1}>
                 <RechartsPie>
                   <Pie
                     data={costBreakdown}
@@ -643,7 +643,7 @@ export function EstimationResults({ estimation, results, spineThickness, onBackT
               Cost Per Copy Comparison
             </h3>
             <div className="h-72 min-w-0">
-              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={1}>
+              <ResponsiveContainer width="99%" height="100%" minWidth={0} minHeight={1}>
                 <BarChart data={comparisonData}>
                   <CartesianGrid strokeDasharray="3 3" stroke={theme === "dark" ? "#334155" : "#e2e8f0"} />
                   <XAxis dataKey="quantity" tick={{ fontSize: 12, fill: theme === "dark" ? "#94a3b8" : "#64748b" }} />
@@ -661,7 +661,7 @@ export function EstimationResults({ estimation, results, spineThickness, onBackT
               Volume Savings
             </h3>
             <div className="h-72 min-w-0">
-              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={1}>
+              <ResponsiveContainer width="99%" height="100%" minWidth={0} minHeight={1}>
                 <BarChart data={savingsData}>
                   <CartesianGrid strokeDasharray="3 3" stroke={theme === "dark" ? "#334155" : "#e2e8f0"} />
                   <XAxis dataKey="quantity" tick={{ fontSize: 12, fill: theme === "dark" ? "#94a3b8" : "#64748b" }} />

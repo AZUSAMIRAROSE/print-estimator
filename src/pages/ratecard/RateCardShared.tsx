@@ -1,11 +1,9 @@
 import { useState } from "react";
-import { useAppStore } from "@/stores/appStore";
 import { cn } from "@/utils/cn";
-import { saveTextFilePortable } from "@/utils/fileSave";
 import { formatCurrency, formatNumber } from "@/utils/format";
 import {
     Plus, Edit3, Trash2, Save, X, Check, Copy, Download,
-    RotateCcw, ChevronDown, ChevronUp, MoreHorizontal, FileCheck, AlertTriangle, Settings
+    RotateCcw, AlertTriangle, Settings
 } from "lucide-react";
 import type { RateStatus } from "@/stores/rateCardStore";
 
@@ -280,33 +278,3 @@ export function FormField({ label, required, children, hint }: {
     );
 }
 
-// ── Export helper ─────────────────────────────────────────────────────────────
-export async function exportTabCSV(filename: string, headers: string[], rows: string[][], customSuccessMessage?: string) {
-    try {
-        const csv = [headers.join(","), ...rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(","))].join("\n");
-        const filePath = await saveTextFilePortable(
-            {
-                filters: [{ name: "CSV File", extensions: ["csv"] }],
-                defaultPath: filename,
-            },
-            csv
-        );
-
-        if (!filePath) return;
-        const { addNotification } = useAppStore.getState();
-        addNotification({
-            type: "success",
-            title: "Exported Successfully",
-            message: customSuccessMessage || `Saved to ${filePath}`,
-            category: "export"
-        });
-    } catch (error: any) {
-        const { addNotification } = useAppStore.getState();
-        addNotification({
-            type: "error",
-            title: "Export Failed",
-            message: error.message || "Failed to export CSV.",
-            category: "system"
-        });
-    }
-}

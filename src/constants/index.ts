@@ -4,6 +4,8 @@
 
 import type { WizardStep, WastageEntry, ImpressionRate, BindingRate, HardcaseBindingDetail, PaperSize, CurrencyRate } from "@/types";
 
+export type { ImpressionRate, BindingRate };
+
 // ── Trim Size Presets ────────────────────────────────────────────────────────
 export const TRIM_SIZE_PRESETS = [
   { label: "A4 (210 × 297mm)", width: 210, height: 297, category: "ISO" },
@@ -117,18 +119,18 @@ export const IMPRESSION_RATES_BY_SIZE: {
   range: [number, number];
   rates: Record<string, Record<string, number>>;
 }[] = [
-  {
-    range: [0, 1000],
-    rates: {
-      "28x38": { fourColor: 229, twoColor: 91 },
-      "23x36": { fourColor: 199, twoColor: 79 },
-      "22x28": { fourColor: 199, twoColor: 79 },
-      "20x30": { fourColor: 199, twoColor: 79 },
-      "18x23": { fourColor: 169, twoColor: 67 },
+    {
+      range: [0, 1000],
+      rates: {
+        "28x38": { fourColor: 229, twoColor: 91 },
+        "23x36": { fourColor: 199, twoColor: 79 },
+        "22x28": { fourColor: 199, twoColor: 79 },
+        "20x30": { fourColor: 199, twoColor: 79 },
+        "18x23": { fourColor: 169, twoColor: 67 },
+      },
     },
-  },
-  // ... more entries follow the same pattern from the PDF
-];
+    // ... more entries follow the same pattern from the PDF
+  ];
 
 // ── Machine Defaults ─────────────────────────────────────────────────────────
 export const DEFAULT_MACHINES = [

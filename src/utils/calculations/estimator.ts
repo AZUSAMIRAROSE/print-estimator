@@ -17,14 +17,8 @@ import { calculateFinishingCostGodLevel, type FinishingOperationDef } from "./fi
 import { calculatePackingCostGodLevel } from "./packing";
 import { calculateFreightCostGodLevel } from "./freight";
 import { generateId } from "@/utils/format";
-import { DEFAULT_MACHINES } from "@/constants";
-import { useMachineStore } from "@/stores/machineStore";
 
-function safelyFindMachine(id: string): any {
-  const { machines } = useMachineStore.getState();
-  const machine = Array.from(machines.values()).find((m) => m.id === id);
-  return machine || DEFAULT_MACHINES.find((m) => m.id === id) || { name: "Unknown", speedSPH: 5000, hourlyRate: 3000 };
-}
+
 
 function normalizePrintMethod(method: string): "SHEETWISE" | "WORK_AND_TURN" | "WORK_AND_TUMBLE" | "PERFECTING" {
   const m = (method || "").toLowerCase();

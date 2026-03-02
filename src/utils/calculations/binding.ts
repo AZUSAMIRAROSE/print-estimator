@@ -11,8 +11,6 @@
 // - Machine kinematics for gathering, sewing, and binding lines
 // ============================================================================
 
-import { useMachineStore } from "@/stores/machineStore";
-import { useRateCardStore } from "@/stores/rateCardStore";
 import { ENGINE_CONSTANTS } from "./constants";
 import type { SubstratePhysicalModel } from "./paper";
 

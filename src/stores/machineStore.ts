@@ -3,7 +3,7 @@ import { enableMapSet, produce } from 'immer';
 import {
     Machine, createDefaultMachine, MachineChangeLogEntry
 } from '../types/machine.types';
-import { MachineType, MachineStatus, SpeedUnit } from '../types/machine.enums';
+import { MachineType, MachineStatus } from '../types/machine.enums';
 import { validateMachine } from '../types/machine.validators';
 import { recalculateMachineComputedFields } from '../types/machine.computed';
 
@@ -545,7 +545,7 @@ export const useMachineStore = create<MachineStoreState & MachineStoreActions>((
         };
     },
 
-    exportMachines: (ids, format, includeComputed) => {
+    exportMachines: (_ids, _format, _includeComputed) => {
         // Serialize to Blob logic placeholder
         return new Blob(['[]'], { type: 'application/json' });
     },

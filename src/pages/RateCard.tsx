@@ -11,8 +11,8 @@ import { ImpressionRatesTab, WastageChartTab, BindingRatesTab, FinishingRatesTab
 import { TransferTab } from "./ratecard/TransferTab";
 import {
   CreditCard, Search, Upload, Download, FileText, Printer, Layers,
-  BookMarked, Sparkles, Package, Truck, AlertCircle, Settings,
-  ArrowLeftRight, Cpu, BarChart3
+  BookMarked, Sparkles, Package, Truck, AlertCircle,
+  ArrowLeftRight, Cpu
 } from "lucide-react";
 
 type RateTab = "paper" | "machines" | "machine_details" | "impressions" | "wastage" | "binding" | "finishing" | "covering" | "board" | "freight" | "packing" | "transfers";

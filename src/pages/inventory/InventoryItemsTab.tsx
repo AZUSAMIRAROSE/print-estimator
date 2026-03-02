@@ -63,9 +63,10 @@ export function InventoryItemsTab() {
             addNotification({ type: "success", title: "Item Updated", message: `${form.name} updated.`, category: "system" });
             addActivityLog({ action: "INVENTORY_UPDATED", category: "inventory", description: `Updated: ${form.name}`, user: "Current User", entityType: "inventory", entityId: editId, level: "info" });
         } else {
-            addItem(form as Omit<InventoryItem, "id" | "lastUpdated">);
+            const newItemId = generateId();
+            addItem({ ...form, id: newItemId } as unknown as Omit<InventoryItem, "id" | "lastUpdated">);
             addNotification({ type: "success", title: "Item Added", message: `${form.name} added to inventory.`, category: "system" });
-            addActivityLog({ action: "INVENTORY_ADDED", category: "inventory", description: `Added: ${form.name}`, user: "Current User", entityType: "inventory", entityId: "", level: "info" });
+            addActivityLog({ action: "INVENTORY_ADDED", category: "inventory", description: `Added: ${form.name}`, user: "Current User", entityType: "inventory", entityId: newItemId, level: "info" });
         }
         setShowModal(false); setEditId(null);
     };
@@ -111,6 +112,7 @@ export function InventoryItemsTab() {
                     <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search items..." className="input-field pl-9 text-sm" />
                 </div>
                 <div className="flex items-center gap-1.5 p-1 bg-surface-light-tertiary dark:bg-surface-dark-tertiary rounded-lg overflow-x-auto">
+                    <Filter className="w-4 h-4 text-text-light-tertiary" />
                     {["all", ...CATEGORIES].map(c => (
                         <button key={c} onClick={() => { setCatFilter(c); setPage(1); }} className={cn("px-2.5 py-1.5 rounded-md text-[11px] font-medium transition-all capitalize whitespace-nowrap", catFilter === c ? "bg-white dark:bg-surface-dark-secondary shadow-sm text-text-light-primary dark:text-text-dark-primary" : "text-text-light-secondary dark:text-text-dark-secondary")}>{c.replace("_", " ")}</button>
                     ))}
@@ -146,6 +148,7 @@ export function InventoryItemsTab() {
                                 <tr key={item.id} className="border-b border-surface-light-border/50 dark:border-surface-dark-border/50 hover:bg-surface-light-secondary dark:hover:bg-surface-dark-tertiary transition-colors">
                                     <td className="py-2.5 px-3">
                                         <div className="flex items-center gap-2.5">
+                                            <Package className="w-4 h-4 text-text-light-tertiary" />
                                             <div className="w-1.5 h-8 rounded-full" style={{ backgroundColor: CAT_COLORS[item.category] }} />
                                             <div>
                                                 <p className="font-medium text-text-light-primary dark:text-text-dark-primary text-xs">{item.name}</p>
@@ -191,7 +194,7 @@ export function InventoryItemsTab() {
                 </div>
                 {/* Pagination */}
                 <div className="flex items-center justify-between p-3 border-t border-surface-light-border dark:border-surface-dark-border text-xs text-text-light-tertiary">
-                    <span>Showing {(page - 1) * perPage + 1}–{Math.min(page * perPage, filtered.length)} of {filtered.length}</span>
+                    <span>Showing {formatNumber((page - 1) * perPage + 1)}–{formatNumber(Math.min(page * perPage, filtered.length))} of {formatNumber(filtered.length)}</span>
                     <div className="flex items-center gap-1">
                         <button disabled={page <= 1} onClick={() => setPage(p => p - 1)} className="px-2 py-1 rounded bg-surface-light-tertiary dark:bg-surface-dark-tertiary disabled:opacity-40">Prev</button>
                         {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => i + 1).map(p => (

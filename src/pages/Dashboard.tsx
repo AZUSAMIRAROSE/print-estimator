@@ -15,30 +15,7 @@ import {
   Line, AreaChart, Area
 } from "recharts";
 
-const MONTHLY_DATA = [
-  { month: "Jan", jobs: 12, revenue: 3200000, quotations: 18 },
-  { month: "Feb", jobs: 15, revenue: 3800000, quotations: 22 },
-  { month: "Mar", jobs: 11, revenue: 2900000, quotations: 16 },
-  { month: "Apr", jobs: 18, revenue: 4500000, quotations: 25 },
-  { month: "May", jobs: 22, revenue: 5200000, quotations: 30 },
-  { month: "Jun", jobs: 19, revenue: 4850000, quotations: 23 },
-];
 
-const BINDING_DISTRIBUTION = [
-  { name: "Perfect Binding", value: 42, color: "#3b82f6" },
-  { name: "Hardcase", value: 28, color: "#8b5cf6" },
-  { name: "Saddle Stitch", value: 15, color: "#22c55e" },
-  { name: "Wire-O", value: 8, color: "#f59e0b" },
-  { name: "Others", value: 7, color: "#64748b" },
-];
-
-const MOCK_RECENT_JOBS = [
-  { id: "1", title: "Oxford English Dictionary", customer: "OUP", status: "in_production", value: 850000, date: new Date(Date.now() - 3600000).toISOString() },
-  { id: "2", title: "Cambridge Mathematics", customer: "CUP", status: "quoted", value: 420000, date: new Date(Date.now() - 7200000).toISOString() },
-  { id: "3", title: "Penguin Classics Collection", customer: "Penguin", status: "estimated", value: 1200000, date: new Date(Date.now() - 86400000).toISOString() },
-  { id: "4", title: "National Geographic Atlas", customer: "NatGeo", status: "completed", value: 2300000, date: new Date(Date.now() - 172800000).toISOString() },
-  { id: "5", title: "Harper Collins Novel Set", customer: "HarperCollins", status: "draft", value: 560000, date: new Date(Date.now() - 259200000).toISOString() },
-];
 
 const STATUS_COLORS: Record<string, string> = {
   draft: "bg-gray-100 text-gray-700 dark:bg-gray-500/20 dark:text-gray-400",
@@ -53,22 +30,33 @@ export function Dashboard() {
   const { user, theme } = useAppStore();
   const { jobs, quotations, customers } = useDataStore();
 
-  // Compute real stats, fallback to mock
   const stats = useMemo(() => {
-    const totalJobs = jobs.length || 147;
-    const activeQuotations = quotations.filter(q => q.status === "sent" || q.status === "draft").length || 23;
-    const totalCustomers = customers.length || 89;
+    const totalJobs = jobs.length;
+    const activeQuotations = quotations.filter(q => q.status === "sent" || q.status === "draft").length;
+    const totalCustomers = customers.length;
+
     const totalRevenue = jobs.reduce((s, j) => s + (j.totalValue || 0), 0);
-    const monthlyRevenue = totalRevenue > 0 ? totalRevenue / 6 : 4850000;
-    const avgJobValue = jobs.length > 0 ? totalRevenue / jobs.length : 325000;
+    const now = new Date();
+
+    const currentMonthJobs = jobs.filter(j => {
+      const d = new Date(j.createdAt || j.updatedAt || Date.now());
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    });
+    const monthlyRevenue = currentMonthJobs.reduce((s, j) => s + (j.totalValue || 0), 0);
+
+    const avgJobValue = jobs.length > 0 ? totalRevenue / jobs.length : 0;
+
     const accepted = quotations.filter(q => q.status === "accepted").length;
-    const conversionRate = quotations.length > 0 ? (accepted / quotations.length) * 100 : 67.3;
-    const pendingApprovals = quotations.filter(q => q.status === "sent").length || 8;
-    const overdueJobs = 2;
+    const conversionRate = quotations.length > 0 ? (accepted / quotations.length) * 100 : 0;
+
+    const pendingApprovals = quotations.filter(q => q.status === "sent").length;
+
+    const overdueJobs = jobs.filter(j => j.status !== "completed" && j.status !== "cancelled" && j.dueDate && new Date(j.dueDate) < now).length;
+
     return { totalJobs, activeQuotations, totalCustomers, monthlyRevenue, avgJobValue, conversionRate, pendingApprovals, overdueJobs };
   }, [jobs, quotations, customers]);
 
-  // Recent jobs from real data or mock
+  // Recent jobs from real data or mock if empty to prevent empty screen feeling
   const recentJobs = useMemo(() => {
     if (jobs.length > 0) {
       return jobs
@@ -77,14 +65,66 @@ export function Dashboard() {
         .slice(0, 5)
         .map(j => ({
           id: j.id,
-          title: j.title,
-          customer: j.customerName,
+          title: j.title || `Job #${j.jobNumber}`,
+          customer: j.customerName || "Unknown",
           status: j.status,
-          value: j.totalValue,
-          date: j.updatedAt,
+          value: j.totalValue || 0,
+          date: j.updatedAt || j.createdAt || new Date().toISOString(),
         }));
     }
-    return MOCK_RECENT_JOBS;
+    return [];
+  }, [jobs]);
+
+  const dynamicMonthlyData = useMemo(() => {
+
+    const data = [];
+    const now = new Date();
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const monthName = d.toLocaleString('default', { month: 'short' });
+      const mJobs = jobs.filter(j => {
+        const jd = new Date(j.createdAt || j.updatedAt);
+        return jd.getMonth() === d.getMonth() && jd.getFullYear() === d.getFullYear();
+      });
+      const mQuots = quotations.filter(q => {
+        const qd = new Date(q.createdAt || q.updatedAt);
+        return qd.getMonth() === d.getMonth() && qd.getFullYear() === d.getFullYear();
+      });
+      const revenue = mJobs.reduce((sum, j) => sum + (j.totalValue || 0), 0);
+      data.push({
+        month: monthName,
+        jobs: mJobs.length,
+        revenue,
+        quotations: mQuots.length
+      });
+    }
+    return data;
+  }, [jobs, quotations]);
+
+  const dynamicStatusDistribution = useMemo(() => {
+    if (jobs.length === 0) return [{ name: "No Jobs Yet", value: 100, color: "#94a3b8" }];
+
+    const statuses = {
+      draft: { name: "Draft", value: 0, color: "#94a3b8" },
+      estimated: { name: "Estimated", value: 0, color: "#3b82f6" },
+      quoted: { name: "Quoted", value: 0, color: "#f59e0b" },
+      in_production: { name: "Production", value: 0, color: "#a855f7" },
+      completed: { name: "Completed", value: 0, color: "#22c55e" },
+    };
+
+    let total = 0;
+    jobs.forEach(j => {
+      if (statuses[j.status as keyof typeof statuses]) {
+        statuses[j.status as keyof typeof statuses].value++;
+        total++;
+      }
+    });
+
+    if (total === 0) return [{ name: "No Jobs Yet", value: 100, color: "#94a3b8" }];
+
+    return Object.values(statuses)
+      .filter(s => s.value > 0)
+      .map(s => ({ ...s, value: Math.round((s.value / total) * 100) }));
   }, [jobs]);
 
   const StatCard = ({ title, value, change, icon, color, onClick }: {
@@ -221,8 +261,8 @@ export function Dashboard() {
             </div>
           </div>
           <div className="h-64 min-w-0">
-            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={1}>
-              <AreaChart data={MONTHLY_DATA}>
+            <ResponsiveContainer width="99%" height="100%" minWidth={0} minHeight={1}>
+              <AreaChart data={dynamicMonthlyData}>
                 <defs>
                   <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.15} />
@@ -231,7 +271,12 @@ export function Dashboard() {
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke={theme === "dark" ? "#334155" : "#e2e8f0"} />
                 <XAxis dataKey="month" tick={{ fontSize: 12, fill: theme === "dark" ? "#94a3b8" : "#64748b" }} />
-                <YAxis tick={{ fontSize: 12, fill: theme === "dark" ? "#94a3b8" : "#64748b" }} tickFormatter={(v) => `₹${(v / 100000).toFixed(0)}L`} />
+                <YAxis tick={{ fontSize: 12, fill: theme === "dark" ? "#94a3b8" : "#64748b" }} tickFormatter={(v) => {
+                  if (v >= 10000000) return `₹${(v / 10000000).toFixed(1)}Cr`;
+                  if (v >= 100000) return `₹${(v / 100000).toFixed(0)}L`;
+                  if (v >= 1000) return `₹${(v / 1000).toFixed(0)}K`;
+                  return `₹${v}`;
+                }} />
                 <Tooltip
                   contentStyle={{
                     backgroundColor: theme === "dark" ? "#1e293b" : "#fff",
@@ -257,13 +302,13 @@ export function Dashboard() {
         {/* Binding Distribution Pie */}
         <div className="card p-5 min-w-0">
           <h3 className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary mb-4">
-            Binding Type Distribution
+            Job Status Distribution
           </h3>
           <div className="h-48 min-w-0">
-            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={1}>
+            <ResponsiveContainer width="99%" height="100%" minWidth={0} minHeight={1}>
               <RechartsPie>
                 <Pie
-                  data={BINDING_DISTRIBUTION}
+                  data={dynamicStatusDistribution}
                   cx="50%"
                   cy="50%"
                   innerRadius={45}
@@ -271,7 +316,7 @@ export function Dashboard() {
                   paddingAngle={3}
                   dataKey="value"
                 >
-                  {BINDING_DISTRIBUTION.map((entry, index) => (
+                  {dynamicStatusDistribution.map((entry, index) => (
                     <Cell key={index} fill={entry.color} />
                   ))}
                 </Pie>
@@ -288,7 +333,7 @@ export function Dashboard() {
             </ResponsiveContainer>
           </div>
           <div className="space-y-2 mt-2">
-            {BINDING_DISTRIBUTION.map((item) => (
+            {dynamicStatusDistribution.map((item) => (
               <div key={item.name} className="flex items-center justify-between text-xs">
                 <div className="flex items-center gap-2">
                   <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
@@ -314,26 +359,34 @@ export function Dashboard() {
             </button>
           </div>
           <div className="space-y-3">
-            {recentJobs.map((job) => (
-              <div key={job.id} className="flex items-center justify-between p-3 rounded-lg bg-surface-light-secondary dark:bg-surface-dark-tertiary">
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-text-light-primary dark:text-text-dark-primary truncate">
-                    {job.title}
-                  </p>
-                  <p className="text-xs text-text-light-tertiary dark:text-text-dark-tertiary mt-0.5">
-                    {job.customer} • {getRelativeTime(job.date)}
-                  </p>
-                </div>
-                <div className="flex items-center gap-3 ml-3">
-                  <span className={cn("badge text-[10px]", STATUS_COLORS[job.status] || STATUS_COLORS.draft)}>
-                    {job.status.replace(/_/g, " ")}
-                  </span>
-                  <div className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary whitespace-nowrap">
-                    {formatCurrency(job.value)}
+            {recentJobs.length === 0 ? (
+              <div className="text-center p-6 text-text-light-tertiary dark:text-text-dark-tertiary">
+                <Briefcase className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                <p className="text-sm">No recent jobs available</p>
+                <button onClick={() => navigate("/estimate/new")} className="text-xs text-primary-600 font-medium hover:underline mt-2">Create an estimate to get started</button>
+              </div>
+            ) : (
+              recentJobs.map((job) => (
+                <div key={job.id} className="flex items-center justify-between p-3 rounded-lg bg-surface-light-secondary dark:bg-surface-dark-tertiary">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-text-light-primary dark:text-text-dark-primary truncate">
+                      {job.title}
+                    </p>
+                    <p className="text-xs text-text-light-tertiary dark:text-text-dark-tertiary mt-0.5">
+                      {job.customer} • {getRelativeTime(job.date)}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3 ml-3">
+                    <span className={cn("badge text-[10px]", STATUS_COLORS[job.status] || STATUS_COLORS.draft)}>
+                      {job.status.replace(/_/g, " ")}
+                    </span>
+                    <div className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary whitespace-nowrap">
+                      {formatCurrency(job.value)}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
 

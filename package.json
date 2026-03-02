@@ -61,6 +61,7 @@
   "devDependencies": {
     "@tauri-apps/cli": "^2.10.0",
     "@types/lodash-es": "latest",
+    "@types/node": "^20.0.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@types/uuid": "^10.0.0",

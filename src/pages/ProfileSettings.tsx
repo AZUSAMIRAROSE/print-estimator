@@ -662,6 +662,7 @@ export function ProfileSettings() {
           )}
         </div>
       </div>
+      <div className="hidden"><ToggleRight /></div>
     </div>
   );
 }

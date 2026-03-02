@@ -74,7 +74,7 @@ export function MachinesTab() {
                             <p className="text-[10px] uppercase font-semibold text-text-light-tertiary dark:text-text-dark-tertiary tracking-wider">{c.label}</p>
                         </div>
                         <div className="flex items-end gap-2">
-                            <p className={`text-xl font-bold ${c.color}`}>{c.value}</p>
+                            <p className={cn("text-xl font-bold", c.color)}>{c.value}</p>
                             <span className="text-[10px] text-text-light-tertiary mb-1">{c.sub}</span>
                         </div>
                     </div>

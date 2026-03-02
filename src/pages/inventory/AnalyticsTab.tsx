@@ -59,6 +59,8 @@ export function AnalyticsTab() {
         return Object.entries(map).map(([wh, d]) => ({ warehouse: wh, ...d }));
     }, [items]);
 
+    const activeNmiRecordsCount = useMemo(() => formatNumber(nmiRecords.filter(r => r.status === "approved").length), [nmiRecords]);
+
     const machineStatusData = useMemo(() => {
         const map: Record<string, number> = {};
         Array.from(machines.values()).forEach(m => { map[m.status] = (map[m.status] || 0) + 1; });
@@ -74,9 +76,9 @@ export function AnalyticsTab() {
             <div className="grid grid-cols-5 gap-3">
                 {[
                     { label: "Total Inventory Value", value: formatCurrency(totalValue), icon: <TrendingUp className="w-5 h-5" />, color: "text-primary-600 dark:text-primary-400", bg: "bg-primary-50 dark:bg-primary-500/10" },
-                    { label: "Total Items", value: items.length, icon: <Package className="w-5 h-5" />, color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-50 dark:bg-blue-500/10" },
-                    { label: "Low Stock Items", value: lowStock.length, icon: <AlertTriangle className="w-5 h-5" />, color: "text-danger-600 dark:text-danger-400", bg: "bg-danger-50 dark:bg-danger-500/10" },
-                    { label: "Active Machines", value: Array.from(machines.values()).filter(m => m.status === "ACTIVE").length, icon: <Package className="w-5 h-5" />, color: "text-success-600 dark:text-success-400", bg: "bg-success-50 dark:bg-success-500/10" },
+                    { label: "Total Items", value: formatNumber(items.length), icon: <Package className="w-5 h-5" />, color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-50 dark:bg-blue-500/10" },
+                    { label: "Low Stock Items", value: formatNumber(lowStock.length), icon: <AlertTriangle className="w-5 h-5" />, color: "text-danger-600 dark:text-danger-400", bg: "bg-danger-50 dark:bg-danger-500/10" },
+                    { label: "Active NMI Records", value: activeNmiRecordsCount, icon: <Package className="w-5 h-5" />, color: "text-success-600 dark:text-success-400", bg: "bg-success-50 dark:bg-success-500/10" },
                     { label: "Transfer Costs", value: formatCurrency(totalTransferCost), icon: <ArrowRightLeft className="w-5 h-5" />, color: "text-purple-600 dark:text-purple-400", bg: "bg-purple-50 dark:bg-purple-500/10" },
                 ].map(c => (
                     <div key={c.label} className="card p-3">
@@ -94,7 +96,7 @@ export function AnalyticsTab() {
                 <div className="card p-4">
                     <h3 className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary mb-3">Value by Category</h3>
                     <div className="h-56">
-                        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={1}>
+                        <ResponsiveContainer width="99%" height="100%" minWidth={0} minHeight={1}>
                             <BarChart data={categoryValues} layout="vertical">
                                 <CartesianGrid strokeDasharray="3 3" stroke={theme === "dark" ? "#334155" : "#e2e8f0"} />
                                 <XAxis type="number" tick={{ fontSize: 10, fill: theme === "dark" ? "#94a3b8" : "#64748b" }} tickFormatter={v => `₹${(v / 100000).toFixed(0)}L`} />
@@ -110,7 +112,7 @@ export function AnalyticsTab() {
                 <div className="card p-4">
                     <h3 className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary mb-3">Movement Classification</h3>
                     <div className="h-56 flex items-center justify-center">
-                        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={1}>
+                        <ResponsiveContainer width="99%" height="100%" minWidth={0} minHeight={1}>
                             <PieChart>
                                 <Pie data={movementClassData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={5} dataKey="value" label={({ name, value }) => `${name}: ${value}`}>
                                     {movementClassData.map((entry, idx) => <Cell key={idx} fill={entry.fill} />)}
@@ -125,7 +127,7 @@ export function AnalyticsTab() {
                 <div className="card p-4">
                     <h3 className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary mb-3">Items per Category</h3>
                     <div className="h-52">
-                        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={1}>
+                        <ResponsiveContainer width="99%" height="100%" minWidth={0} minHeight={1}>
                             <BarChart data={categoryStockData}>
                                 <CartesianGrid strokeDasharray="3 3" stroke={theme === "dark" ? "#334155" : "#e2e8f0"} />
                                 <XAxis dataKey="name" tick={{ fontSize: 10 }} />
@@ -142,7 +144,7 @@ export function AnalyticsTab() {
                     <h3 className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary mb-3">Machine Status Distribution</h3>
                     <div className="h-52 flex items-center justify-center">
                         {machines.size > 0 ? (
-                            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={1}>
+                            <ResponsiveContainer width="99%" height="100%" minWidth={0} minHeight={1}>
                                 <PieChart>
                                     <Pie data={machineStatusData} cx="50%" cy="50%" innerRadius={45} outerRadius={75} paddingAngle={5} dataKey="value" label={({ name, value }) => `${name}: ${value}`}>
                                         {machineStatusData.map((entry, idx) => <Cell key={idx} fill={entry.fill} />)}
