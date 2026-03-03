@@ -205,7 +205,7 @@ export function TransferTab({ search, canEdit }: { search: string; canEdit: bool
                     "Transfers exported."
                 );
             }}
-                onReset={() => { resetToDefaults("transfers"); addNotification({ type: "info", title: "Cleared", message: "All transfers cleared.", category: "system" }); }}
+                onReset={() => { if (window.confirm("Are you sure you want to clear ALL transfer records? This action cannot be undone.")) { resetToDefaults("transfers"); addNotification({ type: "info", title: "Cleared", message: "All transfers cleared.", category: "system" }); } }}
                 canEdit={canEdit} itemCount={filtered.length} tabName="transfer"
             />
 

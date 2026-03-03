@@ -177,14 +177,22 @@ export const useInventoryStore = create<InventoryState>()(
                     state.transfers[idx].actualArrivalDate = new Date().toISOString();
                     state.transfers[idx].updatedAt = new Date().toISOString();
 
-                    // Update the inventory item location
+                    // Update the inventory item
                     const transfer = state.transfers[idx];
                     const itemIdx = state.items.findIndex((i) => i.id === transfer.inventoryItemId);
                     if (itemIdx !== -1) {
-                        state.items[itemIdx].warehouse = transfer.toWarehouse;
-                        state.items[itemIdx].zone = transfer.toZone;
-                        state.items[itemIdx].lastMovedDate = new Date().toISOString();
-                        state.items[itemIdx].lastUpdated = new Date().toISOString();
+                        const item = state.items[itemIdx];
+                        // Only update the item's primary location for FULL transfers
+                        // (partial transfers can't be represented in a single-location model)
+                        if (transfer.quantity >= item.stock) {
+                            item.warehouse = transfer.toWarehouse;
+                            item.zone = transfer.toZone;
+                        }
+                        // Always update movement tracking
+                        item.lastMovedDate = new Date().toISOString();
+                        item.lastUpdated = new Date().toISOString();
+                        // Refresh movement class since item just moved
+                        item.movementClass = "fast_moving";
                     }
                 }
             }),

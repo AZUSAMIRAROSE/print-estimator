@@ -2,7 +2,6 @@ import { useState, useRef } from "react";
 import { cn } from "@/utils/cn";
 import { useAppStore } from "@/stores/appStore";
 import { useRateCardStore } from "@/stores/rateCardStore";
-import { useInventoryStore } from "@/stores/inventoryStore";
 import { useMachineStore } from "@/stores/machineStore";
 import { saveTextFilePortable } from "@/utils/fileSave";
 import { PaperRatesTab } from "./ratecard/PaperRatesTab";
@@ -35,7 +34,6 @@ const TABS: { key: RateTab; label: string; icon: React.ReactNode }[] = [
 export function RateCard() {
   const { addNotification, addActivityLog, user } = useAppStore();
   const store = useRateCardStore();
-  const invStore = useInventoryStore();
   const machineStore = useMachineStore();
   const [activeTab, setActiveTab] = useState<RateTab>("paper");
   const [search, setSearch] = useState("");
@@ -93,10 +91,10 @@ export function RateCard() {
     sections.push("", "=== PACKING RATES ===");
     Object.entries(store.packingRates).forEach(([k, v]) => sections.push(`"${k}",${v}`));
 
-    if (invStore.transfers.length > 0) {
+    if (store.transfers.length > 0) {
       sections.push("", "=== TRANSFERS ===");
       sections.push("Item,SKU,Qty,From,To,Status,Total Cost,Date");
-      invStore.transfers.forEach(t => sections.push(`"${t.itemName}","${t.sku}",${t.quantity},"${t.fromWarehouse}","${t.toWarehouse}","${t.status}",${t.totalTransferCost},"${t.transferDate}"`));
+      store.transfers.forEach(t => sections.push(`"${t.itemName}","${t.itemSku}",${t.quantity},"${t.fromWarehouse}","${t.toWarehouse}","${t.status}",${t.totalTransferCost},"${t.transferDate}"`));
     }
 
     const csv = sections.join("\n");
@@ -265,7 +263,7 @@ export function RateCard() {
       case "board": return store.boardTypes.length;
       case "freight": return store.freightDestinations.length;
       case "packing": return Object.keys(store.packingRates).length;
-      case "transfers": return invStore.transfers.length;
+      case "transfers": return store.transfers.length;
       default: return 0;
     }
   };
@@ -279,7 +277,7 @@ export function RateCard() {
             <CreditCard className="w-6 h-6" /> Rate Card
           </h1>
           <p className="text-sm text-text-light-secondary dark:text-text-dark-secondary mt-1">
-            Manage all pricing rates, machine details, cost tables & inventory transfers — {store.paperRates.length + machineStore.machines.size + store.impressionRates.length + invStore.transfers.length} total entries
+            Manage all pricing rates, machine details, cost tables & inventory transfers — {store.paperRates.length + machineStore.machines.size + store.impressionRates.length + store.transfers.length} total entries
           </p>
         </div>
         <div className="flex items-center gap-2">

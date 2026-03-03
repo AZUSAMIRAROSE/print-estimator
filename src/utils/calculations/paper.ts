@@ -273,7 +273,7 @@ function resolveSubstrate(gsm: number, paperType: string, paperCode: string, siz
   }
 
   // Try rate card
-  const rMatch = paperRates.find(r => (r.paperType === paperType || r.code === paperCode) && r.gsm === gsm && r.size === sizeLabel);
+  const rMatch = paperRates.find(r => r.status === 'active' && (r.paperType === paperType || r.code === paperCode) && r.gsm === gsm && r.size === sizeLabel);
   if (rMatch) {
     // If we have chargeRate and it's per ream
     const sizeAreaSqM = (sheetWidthMM / 1000) * (sheetHeightMM / 1000);
@@ -281,11 +281,15 @@ function resolveSubstrate(gsm: number, paperType: string, paperCode: string, siz
     costPerKg = rMatch.chargeRate / reamWeightKg;
   } else {
     // Try inventory
-    const iMatch = items.find(i => i.category === "paper" && (i.sku === paperCode || i.name.toLowerCase().includes(paperType.toLowerCase())) && i.name.includes(gsm.toString()));
-    if (iMatch && iMatch.costPerUnit > 0) {
+    const iMatch = items.find(i => i.category === "paper" && i.status === "active" && (i.sku === paperCode || i.name.toLowerCase().includes(paperType.toLowerCase())) && i.name.includes(gsm.toString()));
+    if (iMatch) {
       const sizeAreaSqM = (sheetWidthMM / 1000) * (sheetHeightMM / 1000);
       const reamWeightKg = sizeAreaSqM * gsm / 1000 * 500;
-      costPerKg = (iMatch.costPerUnit * 1.2) / reamWeightKg; // 20% margin on avg cost
+      // Use sellingPrice if available (already includes margin), else costPerUnit directly
+      const usableRate = (iMatch.sellingPrice > 0) ? iMatch.sellingPrice : iMatch.costPerUnit;
+      if (usableRate > 0) {
+        costPerKg = usableRate / reamWeightKg;
+      }
     }
   }
 

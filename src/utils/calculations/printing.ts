@@ -342,12 +342,41 @@ export function calculatePrintingCostGodLevel(input: PrintingCostInput): Section
   // 5. Facility (Energy & Depreciation)
   const facility = calculateFacility(machine, totalMachineHours, activeUnits);
 
-  // 6. Direct Labor & Overhead (from machine hourly rate)
-  // Usually hourly rate includes labor. If machine.totalHourlyCost is comprehensive, we use it.
-  // But God-Level splits it. If totalHourlyCost is all-in, we just do:
+  // 6. Direct Labor & Overhead — Impression Rate Lookup
+  // Try to use the Rate Card impression rate table first (per 1000 impressions).
+  // If no matching rate is found, fall back to the machine hourly rate.
+  const { impressionRates = [] } = useRateCardStore.getState();
+  const totalMachineImpressions = kinematics.runningTime_hours * kinematics.effectiveSpeed_sph;
+
+  let timeRunningCost: number;
+  let timeMakereadyCost: number;
   const hrRate = machine.totalHourlyCost || 2500;
-  const timeRunningCost = kinematics.runningTime_hours * hrRate;
-  const timeMakereadyCost = makeready.totalMakereadyTime_hours * hrRate;
+
+  // Determine which impression rate column matches this machine
+  const machineLower = ((machine as any).nickname || machine.name || '').toLowerCase();
+  type ImpCol = 'fav' | 'rekordAQ' | 'rekordNoAQ' | 'rmgt' | 'rmgtPerfecto';
+  let impColumn: ImpCol | null = null;
+  if (machineLower.includes('perfecto') || machineLower.includes('perfector')) impColumn = 'rmgtPerfecto';
+  else if (machineLower.includes('rmgt')) impColumn = 'rmgt';
+  else if (machineLower.includes('rekord') && (machineLower.includes('+aq') || machineLower.includes('aq'))) impColumn = 'rekordAQ';
+  else if (machineLower.includes('rekord')) impColumn = 'rekordNoAQ';
+  else if (machineLower.includes('fav')) impColumn = 'fav';
+
+  const impRateEntry = impColumn
+    ? impressionRates.find(r => r.status === 'active' && Math.round(totalMachineImpressions) >= r.rangeMin && Math.round(totalMachineImpressions) <= r.rangeMax)
+    : null;
+
+  if (impRateEntry && impColumn && impRateEntry[impColumn] > 0) {
+    // Use impression-based pricing for running cost
+    const ratePer1000 = impRateEntry[impColumn];
+    timeRunningCost = (totalMachineImpressions / 1000) * ratePer1000;
+    // Makeready is still time-based (impression rates don't cover setup)
+    timeMakereadyCost = makeready.totalMakereadyTime_hours * hrRate;
+  } else {
+    // Fallback: hourly rate × time
+    timeRunningCost = kinematics.runningTime_hours * hrRate;
+    timeMakereadyCost = makeready.totalMakereadyTime_hours * hrRate;
+  }
 
   // Plates cost
   const platesCost = totalPlates * (machine.plateCost_each || 350);
@@ -355,7 +384,7 @@ export function calculatePrintingCostGodLevel(input: PrintingCostInput): Section
   // Assemble Total
   const totalCost = timeRunningCost + timeMakereadyCost + platesCost + chemistry.inkCost + chemistry.washupSolventCost + facility.electricityCost + facility.totalDepreciationCost;
 
-  const totalMachineImpressions = kinematics.runningTime_hours * kinematics.effectiveSpeed_sph;
+
 
   return {
     sectionName: input.sectionName,

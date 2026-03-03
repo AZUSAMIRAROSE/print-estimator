@@ -335,11 +335,32 @@ function seedPacking(): PackingRatesEntry {
 
 // ── Store Interface ──────────────────────────────────────────────────────────
 
+// ── Helper: recalculate derived paper fields ─────────────────────────────────
+function recalcPaperDerived(r: PaperRateEntry): void {
+    // Margin
+    if (r.chargeRate > 0 && r.landedCost > 0) {
+        r.marginPercent = Math.round(((r.chargeRate - r.landedCost) / r.landedCost) * 100);
+    } else {
+        r.marginPercent = 0;
+    }
+    r.effectiveRate = r.chargeRate;
+    // Auto-derive ratePerKg from chargeRate + gsm + size
+    const parts = (r.size || "").split("x").map(Number);
+    if (parts.length === 2 && parts[0] > 0 && parts[1] > 0 && r.gsm > 0 && r.chargeRate > 0) {
+        const widthM = (parts[0] * 25.4) / 1000;
+        const heightM = (parts[1] * 25.4) / 1000;
+        const sheetsPerReam = r.gsm > 200 ? 250 : 500;
+        const reamWeightKg = widthM * heightM * r.gsm / 1000 * sheetsPerReam;
+        if (reamWeightKg > 0) {
+            r.ratePerKg = Math.round((r.chargeRate / reamWeightKg) * 100) / 100;
+        }
+    }
+}
+
 interface RateCardState {
     paperRates: PaperRateEntry[];
     wastageChart: WastageEntry[];
     perfectBinding: PerfectBindingEntry[];
-    bindingRates: PerfectBindingEntry[];
     saddleStitch: SaddleStitchEntry[];
     wireO: WireOEntry[];
     lamination: LaminationEntry[];
@@ -423,7 +444,6 @@ export const useRateCardStore = create<RateCardState>()(
             paperRates: seedPaperRates(),
             wastageChart: seedWastage(),
             perfectBinding: seedPerfectBinding(),
-            bindingRates: seedPerfectBinding(),
             saddleStitch: seedSaddleStitch(),
             wireO: seedWireO(),
             lamination: seedLamination(),
@@ -439,20 +459,25 @@ export const useRateCardStore = create<RateCardState>()(
             // ── Paper ──────────────────────────────────────────────────────────
             addPaperRate(data) {
                 set(s => {
-                    s.paperRates.push({
+                    const entry: PaperRateEntry = {
                         id: generateId(), paperType: "", code: "", gsm: 0, size: "23x36",
                         landedCost: 0, chargeRate: 0, ratePerKg: 0, supplier: "", moq: 0,
                         hsnCode: "4802", marginPercent: 0, effectiveRate: 0,
                         validFrom: "", validTo: "", notes: "",
                         status: "active", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
                         ...data,
-                    } as PaperRateEntry);
+                    } as PaperRateEntry;
+                    recalcPaperDerived(entry);
+                    s.paperRates.push(entry);
                 });
             },
             updatePaperRate(id, updates) {
                 set(s => {
                     const idx = s.paperRates.findIndex(r => r.id === id);
-                    if (idx >= 0) Object.assign(s.paperRates[idx], updates, { updatedAt: new Date().toISOString() });
+                    if (idx >= 0) {
+                        Object.assign(s.paperRates[idx], updates, { updatedAt: new Date().toISOString() });
+                        recalcPaperDerived(s.paperRates[idx]);
+                    }
                 });
             },
             deletePaperRate(id) { set(s => { s.paperRates = s.paperRates.filter(r => r.id !== id); }); },

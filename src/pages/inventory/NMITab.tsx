@@ -28,6 +28,13 @@ const AGING_BANDS = [
     { label: "365+ days", min: 365, max: 99999, color: "#991b1b" },
 ];
 
+const NMI_DEPRECIATION_RATE: Record<NMICategory, number> = {
+    slow_moving: 0.85,  // 15% depreciation
+    non_moving: 0.70,   // 30% depreciation
+    dead_stock: 0.40,   // 60% depreciation
+    obsolete: 0.15,     // 85% depreciation
+};
+
 export function NMITab() {
     const { nmiRecords, items, addNMI, updateNMI, deleteNMI } = useInventoryStore();
     const { addNotification } = useAppStore();
@@ -88,12 +95,14 @@ export function NMITab() {
         const item = items.find(i => i.id === itemId);
         if (!item) return;
         const daysSinceMove = item.lastMovedDate ? Math.floor((Date.now() - new Date(item.lastMovedDate).getTime()) / (1000 * 60 * 60 * 24)) : 999;
+        const nmiCat: NMICategory = daysSinceMove > 365 ? "dead_stock" : daysSinceMove > 180 ? "non_moving" : "slow_moving";
+        const depRate = NMI_DEPRECIATION_RATE[nmiCat];
         addNMI({
             inventoryItemId: item.id, itemName: item.name, sku: item.sku, category: item.category,
             daysWithoutMovement: daysSinceMove, lastMovementDate: item.lastMovedDate,
             currentStock: item.stock, unit: item.unit,
-            currentValue: item.stock * item.costPerUnit, depreciatedValue: item.stock * item.costPerUnit * 0.7,
-            nmiCategory: daysSinceMove > 365 ? "dead_stock" : daysSinceMove > 180 ? "non_moving" : "slow_moving",
+            currentValue: item.stock * item.costPerUnit, depreciatedValue: item.stock * item.costPerUnit * depRate,
+            nmiCategory: nmiCat,
             action: "hold", actionDate: "", actionNotes: "", approvedBy: "", location: `${item.warehouse} / ${item.zone}`,
             status: "pending",
         });

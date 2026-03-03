@@ -136,6 +136,19 @@ export function WastageChartTab({ canEdit }: { canEdit: boolean }) {
                         </select>
                     </FormField>
                 </div>
+                {/* Warn if mixing types in overlapping ranges */}
+                {(() => {
+                    const overlapping = wastageChart.filter(w =>
+                        newItem.minQuantity != null && newItem.maxQuantity != null &&
+                        w.minQuantity <= (newItem.maxQuantity || 0) && w.maxQuantity >= (newItem.minQuantity || 0)
+                    );
+                    const hasMixed = overlapping.length > 0 && overlapping.some(w => w.isPercentage !== (newItem.isPercentage || false));
+                    return hasMixed ? (
+                        <div className="mt-3 p-2.5 bg-warning-50 dark:bg-warning-500/10 rounded-lg border border-warning-200 dark:border-warning-500/30">
+                            <p className="text-xs text-warning-700 dark:text-warning-400 font-medium">⚠️ Warning: This range overlaps with existing entries that use a different wastage type (Fixed vs Percentage). The engine will pick the first matching row — mixing types may cause unexpected results.</p>
+                        </div>
+                    ) : null;
+                })()}
                 <div className="flex justify-end gap-2 mt-6 pt-4 border-t"><button onClick={() => setShowAdd(false)} className="btn-secondary text-sm px-4">Cancel</button><button onClick={() => { addWastageEntry(newItem); setNewItem({}); setShowAdd(false); }} className="btn-primary text-sm px-6">Add Entry</button></div>
             </AddItemModal>
         </div>
