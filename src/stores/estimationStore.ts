@@ -188,6 +188,7 @@ const createDefaultEstimation = (): EstimationInput => ({
     embossing: { enabled: false, type: "single", location: ["front"] },
     goldBlocking: { enabled: false, location: ["front"], foilType: "gold" },
     dieCutting: { enabled: false, complexity: "simple" },
+    foilStamping: { enabled: false, foilType: "gold", location: ["front"] },
     edgeGilding: { enabled: false, edges: [] },
     perforation: { enabled: false },
     scoring: { enabled: false },

@@ -672,6 +672,11 @@ export interface FinishingSection {
     enabled: boolean;
     complexity: "simple" | "medium" | "complex";
   };
+  foilStamping: {
+    enabled: boolean;
+    foilType: "gold" | "silver" | "copper" | "holographic";
+    location: ("front" | "spine" | "back")[];
+  };
   edgeGilding: {
     enabled: boolean;
     edges: ("top" | "bottom" | "fore_edge")[];
