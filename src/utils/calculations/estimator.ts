@@ -402,16 +402,32 @@ export function calculateFullEstimation(estimation: EstimationInput): Estimation
         bindingCost: round2(bindingRaw.costBreakdown.totalCost),
         bindingCostPerCopy: round3(bindingRaw.costBreakdown.totalCost / Math.max(1, quantity)),
         bindingBreakdown: {
-          adhesive: bindingRaw.costBreakdown.adhesiveCost,
-          case: bindingRaw.costBreakdown.hardcoverMaterialsCost,
-          machine: bindingRaw.costBreakdown.machineTimeCost,
+          "Adhesive Cost": round2(bindingRaw.costBreakdown.adhesiveCost),
+          "Thread / Sewing": round2(bindingRaw.costBreakdown.threadCost),
+          "Hardcover Materials": round2(bindingRaw.costBreakdown.hardcoverMaterialsCost),
+          "Machine Time": round2(bindingRaw.costBreakdown.machineTimeCost),
+          "Setup Cost": round2(bindingRaw.costBreakdown.setupCost),
+          ...(bindingRaw.costBreakdown.subcontractorCost > 0 ? { "Subcontractor": round2(bindingRaw.costBreakdown.subcontractorCost) } : {}),
         },
 
         finishingCost: round2(finTotal),
         finishingCostPerCopy: round3(finTotal / Math.max(1, quantity)),
-        finishingBreakdown: {
-          total: finTotal,
-        },
+        finishingBreakdown: Object.fromEntries(
+          finishingSteps.map(step => [
+            `${step.operationType.replace(/_/g, ' ')} — Material`,
+            round2(step.materialCost),
+          ]).concat(
+            finishingSteps.filter(s => s.toolingCost > 0).map(step => [
+              `${step.operationType.replace(/_/g, ' ')} — Tooling`,
+              round2(step.toolingCost),
+            ])
+          ).concat(
+            finishingSteps.map(step => [
+              `${step.operationType.replace(/_/g, ' ')} — Machine & Energy`,
+              round2(step.machineCost + step.energyCost),
+            ])
+          ).filter(([, v]) => (v as number) > 0)
+        ),
 
         packingCost: round2(packingRaw.materialCosts.total),
         packingCostPerCopy: round3(packingRaw.materialCosts.total / Math.max(1, quantity)),
@@ -420,8 +436,9 @@ export function calculateFullEstimation(estimation: EstimationInput): Estimation
         freightCost: round2(freightRaw.totalFreightCost),
         freightCostPerCopy: round2(freightRaw.totalFreightCost / Math.max(1, quantity)),
         freightBreakdown: {
-          baseTariff: freightRaw.baseTariffCost,
-          fuel: freightRaw.fuelSurchargeAmount,
+          "Base Tariff": round2(freightRaw.baseTariffCost),
+          "Fuel Surcharge": round2(freightRaw.fuelSurchargeAmount),
+          ...(freightRaw.accessorialCharges > 0 ? { "Accessorial Charges": round2(freightRaw.accessorialCharges) } : {}),
         },
 
         prePressCost: round2(prePressCost),

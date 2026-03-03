@@ -741,78 +741,430 @@ export function EstimationResults({ estimation, results, spineThickness, onBackT
             <p className="text-xs text-text-light-tertiary dark:text-text-dark-tertiary mt-1">
               Generated: {new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" })}
               {" • "}Estimated by: {estimation.estimatedBy || "—"}
+              {" • "}Ref: {estimation.referenceNumber || "—"}
             </p>
           </div>
 
-          {/* Job Specifications */}
+          {/* ── 1. JOB SPECIFICATIONS ──────────────────────────────────────── */}
           <div>
             <h3 className="text-base font-bold text-text-light-primary dark:text-text-dark-primary border-b-2 border-primary-500 pb-1 mb-3">
-              JOB SPECIFICATIONS
+              1. JOB SPECIFICATIONS
             </h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
               <DetailRow label="Trim Size" value={`${estimation.bookSpec.widthMM} × ${estimation.bookSpec.heightMM} mm`} />
               <DetailRow label="Total Pages" value={`${estimation.textSections.reduce((s, t) => t.enabled ? s + t.pages : s, 0)}pp`} />
               <DetailRow label="Spine Thickness" value={`${spineThickness.toFixed(2)} mm`} />
+              <DetailRow label="Spine with Board" value={`${primaryResult.spineWithBoard.toFixed(2)} mm`} />
+              <DetailRow label="Book Weight" value={`${primaryResult.weightPerBook.toFixed(0)}g`} />
               <DetailRow label="Binding" value={estimation.binding.primaryBinding.replace(/_/g, " ")} />
-              <DetailRow label="Text Paper" value={`${estimation.textSections[0]?.gsm}gsm ${estimation.textSections[0]?.paperTypeName}`} />
-              <DetailRow label="Cover Paper" value={`${estimation.cover.gsm}gsm ${estimation.cover.paperTypeName}`} />
-              <DetailRow label="Destination" value={estimation.delivery.destinationName} />
-              <DetailRow label="Delivery" value={`${estimation.delivery.deliveryType.toUpperCase()} ${estimation.delivery.freightMode}`} />
+              <DetailRow label="Customer" value={estimation.customerName || "—"} />
+              <DetailRow label="Quantities" value={results.map(r => formatNumber(r.quantity)).join(", ")} />
+            </div>
+
+            {/* Text sections detail */}
+            <div className="mt-4">
+              <p className="text-xs font-bold text-text-light-tertiary dark:text-text-dark-tertiary uppercase tracking-wider mb-2">Text Sections</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {estimation.textSections.filter(s => s.enabled).map((s, i) => (
+                  <div key={i} className="p-3 bg-surface-light-secondary dark:bg-surface-dark-tertiary rounded-lg text-xs space-y-1">
+                    <p className="font-semibold text-sm">{s.label}</p>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
+                      <span className="text-text-light-tertiary">Pages:</span><span className="font-medium">{s.pages}pp</span>
+                      <span className="text-text-light-tertiary">Paper:</span><span className="font-medium">{s.gsm}gsm {s.paperTypeName}</span>
+                      <span className="text-text-light-tertiary">Colors F/B:</span><span className="font-medium">{s.colorsFront}/{s.colorsBack}</span>
+                      <span className="text-text-light-tertiary">Method:</span><span className="font-medium">{s.printingMethod?.replace(/_/g, " ") || "Sheetwise"}</span>
+                      <span className="text-text-light-tertiary">Machine:</span><span className="font-medium">{s.machineId}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Cover detail */}
+            {estimation.cover.enabled && !estimation.cover.selfCover && (
+              <div className="mt-3">
+                <p className="text-xs font-bold text-text-light-tertiary dark:text-text-dark-tertiary uppercase tracking-wider mb-2">Cover Section</p>
+                <div className="p-3 bg-surface-light-secondary dark:bg-surface-dark-tertiary rounded-lg text-xs">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-0.5">
+                    <span className="text-text-light-tertiary">Paper:</span><span className="font-medium">{estimation.cover.gsm}gsm {estimation.cover.paperTypeName}</span>
+                    <span className="text-text-light-tertiary">Colors F/B:</span><span className="font-medium">{estimation.cover.colorsFront}/{estimation.cover.colorsBack}</span>
+                    <span className="text-text-light-tertiary">Machine:</span><span className="font-medium">{estimation.cover.machineId}</span>
+                    <span className="text-text-light-tertiary">Pages:</span><span className="font-medium">{estimation.cover.pages}pp</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Finishing/Delivery specs */}
+            <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              <DetailRow label="Lamination" value={estimation.finishing.coverLamination.enabled ? estimation.finishing.coverLamination.type : "None"} />
+              <DetailRow label="Destination" value={estimation.delivery.destinationName || "—"} />
+              <DetailRow label="Delivery Terms" value={`${estimation.delivery.deliveryType.toUpperCase()} ${estimation.delivery.freightMode}`} />
+              <DetailRow label="Currency" value={`${estimation.pricing.currency} (1 INR = ${estimation.pricing.exchangeRate})`} />
             </div>
           </div>
 
-          {/* Per-Quantity Results */}
+          {/* ── PER-QUANTITY RESULTS ───────────────────────────────────────── */}
           {results.map((r) => (
-            <div key={r.quantity}>
+            <div key={r.quantity} className="space-y-5">
               <h3 className="text-base font-bold text-text-light-primary dark:text-text-dark-primary border-b-2 border-primary-500 pb-1 mb-3">
                 COST ANALYSIS — {formatNumber(r.quantity)} COPIES
               </h3>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-surface-light-tertiary dark:bg-surface-dark-tertiary text-text-light-primary dark:text-text-dark-primary">
-                      <th className="py-2 px-3 text-left font-semibold">Cost Category</th>
-                      <th className="py-2 px-3 text-right font-semibold">Amount (₹)</th>
-                      <th className="py-2 px-3 text-right font-semibold">Per Copy (₹)</th>
-                      <th className="py-2 px-3 text-right font-semibold">% of Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[
-                      { cat: "Paper", cost: r.totalPaperCost },
-                      { cat: "Printing", cost: r.totalPrintingCost },
-                      { cat: "CTP / Plates", cost: r.totalCTPCost },
-                      { cat: "Binding", cost: r.bindingCost },
-                      { cat: "Finishing", cost: r.finishingCost },
-                      { cat: "Packing", cost: r.packingCost },
-                      { cat: "Freight", cost: r.freightCost },
-                      { cat: "Pre-Press", cost: r.prePressCost },
-                      { cat: "Additional", cost: r.additionalCost },
-                    ].filter(c => c.cost > 0).map(c => (
-                      <tr key={c.cat} className="border-b border-surface-light-border/50 dark:border-surface-dark-border/50 text-text-light-primary dark:text-text-dark-primary">
-                        <td className="py-2 px-3">{c.cat}</td>
-                        <td className="py-2 px-3 text-right font-medium">{formatCurrency(c.cost)}</td>
-                        <td className="py-2 px-3 text-right">{formatCurrency(r.quantity > 0 ? c.cost / r.quantity : 0)}</td>
-                        <td className="py-2 px-3 text-right">{formatPercent(r.totalProductionCost > 0 ? (c.cost / r.totalProductionCost) * 100 : 0)}</td>
+
+              {/* ── 2. PAPER ANALYSIS ─────────────────────────────────────── */}
+              <div>
+                <h4 className="text-sm font-bold text-text-light-primary dark:text-text-dark-primary mb-2 flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-blue-500" /> 2. Paper Analysis
+                </h4>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-blue-50 dark:bg-blue-500/10 text-text-light-primary dark:text-text-dark-primary">
+                        <th className="py-2 px-2 text-left font-semibold">Section</th>
+                        <th className="py-2 px-2 text-left font-semibold">Paper / GSM</th>
+                        <th className="py-2 px-2 text-center font-semibold">Size</th>
+                        <th className="py-2 px-2 text-center font-semibold">Format</th>
+                        <th className="py-2 px-2 text-right font-semibold">PP/Form</th>
+                        <th className="py-2 px-2 text-right font-semibold">Forms</th>
+                        <th className="py-2 px-2 text-right font-semibold">Ups</th>
+                        <th className="py-2 px-2 text-right font-semibold">Net Sht</th>
+                        <th className="py-2 px-2 text-right font-semibold">Waste Sht</th>
+                        <th className="py-2 px-2 text-right font-semibold">Gross</th>
+                        <th className="py-2 px-2 text-right font-semibold">Reams</th>
+                        <th className="py-2 px-2 text-right font-semibold">Wt kg</th>
+                        <th className="py-2 px-2 text-right font-semibold">₹/Ream</th>
+                        <th className="py-2 px-2 text-right font-semibold">Cost</th>
                       </tr>
+                    </thead>
+                    <tbody>
+                      {r.paperCosts.map((pc, i) => (
+                        <tr key={i} className="border-b border-surface-light-border/50 dark:border-surface-dark-border/50">
+                          <td className="py-1.5 px-2 font-medium">{pc.sectionName}</td>
+                          <td className="py-1.5 px-2">{pc.paperType} {pc.gsm}gsm</td>
+                          <td className="py-1.5 px-2 text-center">{pc.paperSize}</td>
+                          <td className="py-1.5 px-2 text-center">{pc.formatSize || "—"}</td>
+                          <td className="py-1.5 px-2 text-right">{pc.ppPerForm}</td>
+                          <td className="py-1.5 px-2 text-right">{pc.numberOfForms}</td>
+                          <td className="py-1.5 px-2 text-right">{pc.ups}</td>
+                          <td className="py-1.5 px-2 text-right">{formatNumber(pc.netSheets)}</td>
+                          <td className="py-1.5 px-2 text-right text-amber-600 dark:text-amber-400">{formatNumber(pc.wastageSheets)}</td>
+                          <td className="py-1.5 px-2 text-right font-medium">{formatNumber(pc.grossSheets)}</td>
+                          <td className="py-1.5 px-2 text-right">{pc.reams.toFixed(2)}</td>
+                          <td className="py-1.5 px-2 text-right">{(pc.totalWeight || 0).toFixed(1)}</td>
+                          <td className="py-1.5 px-2 text-right">{formatCurrency(pc.ratePerReam)}</td>
+                          <td className="py-1.5 px-2 text-right font-semibold">{formatCurrency(pc.totalCost)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="font-bold bg-blue-50/50 dark:bg-blue-500/5">
+                        <td colSpan={13} className="py-2 px-2 text-right">Total Paper:</td>
+                        <td className="py-2 px-2 text-right text-primary-600 dark:text-primary-400">{formatCurrency(r.totalPaperCost)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+
+              {/* ── 3. PRINTING ANALYSIS ──────────────────────────────────── */}
+              <div>
+                <h4 className="text-sm font-bold text-text-light-primary dark:text-text-dark-primary mb-2 flex items-center gap-2">
+                  <PrinterIcon className="w-4 h-4 text-purple-500" /> 3. Printing Analysis
+                </h4>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-purple-50 dark:bg-purple-500/10 text-text-light-primary dark:text-text-dark-primary">
+                        <th className="py-2 px-2 text-left font-semibold">Section</th>
+                        <th className="py-2 px-2 text-left font-semibold">Machine</th>
+                        <th className="py-2 px-2 text-right font-semibold">Plates</th>
+                        <th className="py-2 px-2 text-right font-semibold">Imp/Form</th>
+                        <th className="py-2 px-2 text-right font-semibold">Total Imp</th>
+                        <th className="py-2 px-2 text-right font-semibold">₹/1000</th>
+                        <th className="py-2 px-2 text-right font-semibold">Run Hrs</th>
+                        <th className="py-2 px-2 text-right font-semibold">MR Hrs</th>
+                        <th className="py-2 px-2 text-right font-semibold">Print Cost</th>
+                        <th className="py-2 px-2 text-right font-semibold">MR Cost</th>
+                        <th className="py-2 px-2 text-right font-semibold">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {r.printingCosts.map((pc, i) => (
+                        <tr key={i} className="border-b border-surface-light-border/50 dark:border-surface-dark-border/50">
+                          <td className="py-1.5 px-2 font-medium">{pc.sectionName}</td>
+                          <td className="py-1.5 px-2">{pc.machineName}</td>
+                          <td className="py-1.5 px-2 text-right">{pc.totalPlates}</td>
+                          <td className="py-1.5 px-2 text-right">{formatNumber(pc.impressionsPerForm)}</td>
+                          <td className="py-1.5 px-2 text-right">{formatNumber(pc.totalImpressions)}</td>
+                          <td className="py-1.5 px-2 text-right">{pc.ratePer1000}</td>
+                          <td className="py-1.5 px-2 text-right">{pc.runningHours.toFixed(2)}</td>
+                          <td className="py-1.5 px-2 text-right">{pc.makereadyHours.toFixed(2)}</td>
+                          <td className="py-1.5 px-2 text-right">{formatCurrency(pc.printingCost)}</td>
+                          <td className="py-1.5 px-2 text-right">{formatCurrency(pc.makeReadyCost)}</td>
+                          <td className="py-1.5 px-2 text-right font-semibold">{formatCurrency(pc.totalCost)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="font-bold bg-purple-50/50 dark:bg-purple-500/5">
+                        <td colSpan={10} className="py-2 px-2 text-right">Total Printing:</td>
+                        <td className="py-2 px-2 text-right text-primary-600 dark:text-primary-400">{formatCurrency(r.totalPrintingCost)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+
+                {/* CTP Detail */}
+                <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {r.ctpCosts.map((c, i) => (
+                    <div key={i} className="flex justify-between text-xs p-2 bg-surface-light-secondary dark:bg-surface-dark-tertiary rounded-lg">
+                      <span>{c.sectionName} CTP: {c.totalPlates} plates × {formatCurrency(c.ratePerPlate)}</span>
+                      <span className="font-semibold">{formatCurrency(c.totalCost)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* ── 4. BINDING & FINISHING ────────────────────────────────── */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <h4 className="text-sm font-bold text-text-light-primary dark:text-text-dark-primary mb-2 flex items-center gap-2">
+                    <BookMarked className="w-4 h-4 text-amber-500" /> 4a. Binding
+                  </h4>
+                  <div className="p-3 bg-surface-light-secondary dark:bg-surface-dark-tertiary rounded-lg text-xs space-y-1.5">
+                    <div className="flex justify-between"><span className="text-text-light-tertiary">Method:</span><span className="font-medium">{estimation.binding.primaryBinding.replace(/_/g, " ")}</span></div>
+                    {Object.entries(r.bindingBreakdown).map(([key, value]) => (
+                      <div key={key} className="flex justify-between"><span className="text-text-light-tertiary capitalize">{key}:</span><span className="font-medium">{formatCurrency(value)}</span></div>
                     ))}
-                    <tr className="font-bold bg-primary-50 dark:bg-primary-500/10 text-text-light-primary dark:text-text-dark-primary">
-                      <td className="py-2 px-3">TOTAL PRODUCTION COST</td>
-                      <td className="py-2 px-3 text-right">{formatCurrency(r.totalProductionCost)}</td>
-                      <td className="py-2 px-3 text-right">{formatCurrency(r.totalCostPerCopy)}</td>
-                      <td className="py-2 px-3 text-right">100%</td>
-                    </tr>
-                    <tr className="border-t-2 border-primary-500 font-bold text-text-light-primary dark:text-text-dark-primary">
-                      <td className="py-2 px-3">SELLING PRICE (Inc. Margin)</td>
-                      <td className="py-2 px-3 text-right">{formatCurrency(r.totalSellingPrice)}</td>
-                      <td className="py-2 px-3 text-right">{formatCurrency(r.sellingPricePerCopy)}</td>
-                      <td className="py-2 px-3 text-right">—</td>
-                    </tr>
-                  </tbody>
-                </table>
+                    <div className="flex justify-between pt-1 border-t border-surface-light-border dark:border-surface-dark-border font-bold">
+                      <span>Total Binding:</span><span className="text-primary-600 dark:text-primary-400">{formatCurrency(r.bindingCost)}</span>
+                    </div>
+                    <div className="flex justify-between text-text-light-tertiary"><span>Per Copy:</span><span>{formatCurrency(r.bindingCostPerCopy)}</span></div>
+                  </div>
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-text-light-primary dark:text-text-dark-primary mb-2 flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-pink-500" /> 4b. Finishing
+                  </h4>
+                  <div className="p-3 bg-surface-light-secondary dark:bg-surface-dark-tertiary rounded-lg text-xs space-y-1.5">
+                    {r.finishingCost > 0 ? (
+                      <>
+                        {Object.entries(r.finishingBreakdown).filter(([, v]) => v > 0).map(([key, value]) => (
+                          <div key={key} className="flex justify-between"><span className="text-text-light-tertiary capitalize">{key}:</span><span className="font-medium">{formatCurrency(value)}</span></div>
+                        ))}
+                        <div className="flex justify-between pt-1 border-t border-surface-light-border dark:border-surface-dark-border font-bold">
+                          <span>Total Finishing:</span><span className="text-primary-600 dark:text-primary-400">{formatCurrency(r.finishingCost)}</span>
+                        </div>
+                        <div className="flex justify-between text-text-light-tertiary"><span>Per Copy:</span><span>{formatCurrency(r.finishingCostPerCopy)}</span></div>
+                      </>
+                    ) : (
+                      <p className="text-text-light-tertiary italic">No finishing operations applied</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* ── 5. PACKING & LOGISTICS ────────────────────────────────── */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <h4 className="text-sm font-bold text-text-light-primary dark:text-text-dark-primary mb-2 flex items-center gap-2">
+                    <Package className="w-4 h-4 text-teal-500" /> 5a. Packing
+                  </h4>
+                  <div className="p-3 bg-surface-light-secondary dark:bg-surface-dark-tertiary rounded-lg text-xs space-y-1.5">
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                      <span className="text-text-light-tertiary">Books/Carton:</span><span className="font-medium">{r.packingBreakdown.booksPerCarton}</span>
+                      <span className="text-text-light-tertiary">Total Cartons:</span><span className="font-medium">{formatNumber(r.packingBreakdown.totalCartons)}</span>
+                      <span className="text-text-light-tertiary">Carton Cost:</span><span className="font-medium">{formatCurrency(r.packingBreakdown.cartonCost)}</span>
+                      <span className="text-text-light-tertiary">Pallets:</span><span className="font-medium">{r.packingBreakdown.totalPallets}</span>
+                      <span className="text-text-light-tertiary">Pallet Cost:</span><span className="font-medium">{formatCurrency(r.packingBreakdown.palletCost)}</span>
+                      <span className="text-text-light-tertiary">Stretch Wrap:</span><span className="font-medium">{formatCurrency(r.packingBreakdown.stretchWrapCost)}</span>
+                      <span className="text-text-light-tertiary">Strapping:</span><span className="font-medium">{formatCurrency(r.packingBreakdown.strappingCost)}</span>
+                      <span className="text-text-light-tertiary">Total Weight:</span><span className="font-medium">{formatNumber(r.packingBreakdown.totalWeight)}kg</span>
+                    </div>
+                    <div className="flex justify-between pt-1 border-t border-surface-light-border dark:border-surface-dark-border font-bold">
+                      <span>Total Packing:</span><span className="text-primary-600 dark:text-primary-400">{formatCurrency(r.packingCost)}</span>
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-text-light-primary dark:text-text-dark-primary mb-2 flex items-center gap-2">
+                    <Truck className="w-4 h-4 text-indigo-500" /> 5b. Freight
+                  </h4>
+                  <div className="p-3 bg-surface-light-secondary dark:bg-surface-dark-tertiary rounded-lg text-xs space-y-1.5">
+                    {r.freightCost > 0 ? (
+                      <>
+                        {Object.entries(r.freightBreakdown).filter(([, v]) => v > 0).map(([key, value]) => (
+                          <div key={key} className="flex justify-between"><span className="text-text-light-tertiary capitalize">{key.replace(/([A-Z])/g, " $1")}:</span><span className="font-medium">{formatCurrency(value)}</span></div>
+                        ))}
+                        <div className="flex justify-between pt-1 border-t border-surface-light-border dark:border-surface-dark-border font-bold">
+                          <span>Total Freight:</span><span className="text-primary-600 dark:text-primary-400">{formatCurrency(r.freightCost)}</span>
+                        </div>
+                      </>
+                    ) : (
+                      <p className="text-text-light-tertiary italic">Ex Works — No freight charges</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* ── 6. FULL PRICING CHAIN ─────────────────────────────────── */}
+              <div>
+                <h4 className="text-sm font-bold text-text-light-primary dark:text-text-dark-primary mb-2 flex items-center gap-2">
+                  <DollarSign className="w-4 h-4 text-green-500" /> 6. Pricing & Financial Summary
+                </h4>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-green-50 dark:bg-green-500/10 text-text-light-primary dark:text-text-dark-primary">
+                        <th className="py-2 px-3 text-left font-semibold">Line Item</th>
+                        <th className="py-2 px-3 text-right font-semibold">Total (₹)</th>
+                        <th className="py-2 px-3 text-right font-semibold">Per Copy (₹)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-text-light-primary dark:text-text-dark-primary">
+                      <tr className="border-b border-surface-light-border/50"><td className="py-2 px-3">Paper</td><td className="py-2 px-3 text-right">{formatCurrency(r.totalPaperCost)}</td><td className="py-2 px-3 text-right">{formatCurrency(r.totalPaperCost / r.quantity)}</td></tr>
+                      <tr className="border-b border-surface-light-border/50"><td className="py-2 px-3">Printing</td><td className="py-2 px-3 text-right">{formatCurrency(r.totalPrintingCost)}</td><td className="py-2 px-3 text-right">{formatCurrency(r.totalPrintingCost / r.quantity)}</td></tr>
+                      <tr className="border-b border-surface-light-border/50"><td className="py-2 px-3">CTP</td><td className="py-2 px-3 text-right">{formatCurrency(r.totalCTPCost)}</td><td className="py-2 px-3 text-right">{formatCurrency(r.totalCTPCost / r.quantity)}</td></tr>
+                      <tr className="border-b border-surface-light-border/50"><td className="py-2 px-3">Binding</td><td className="py-2 px-3 text-right">{formatCurrency(r.bindingCost)}</td><td className="py-2 px-3 text-right">{formatCurrency(r.bindingCostPerCopy)}</td></tr>
+                      {r.finishingCost > 0 && <tr className="border-b border-surface-light-border/50"><td className="py-2 px-3">Finishing</td><td className="py-2 px-3 text-right">{formatCurrency(r.finishingCost)}</td><td className="py-2 px-3 text-right">{formatCurrency(r.finishingCostPerCopy)}</td></tr>}
+                      {r.packingCost > 0 && <tr className="border-b border-surface-light-border/50"><td className="py-2 px-3">Packing</td><td className="py-2 px-3 text-right">{formatCurrency(r.packingCost)}</td><td className="py-2 px-3 text-right">{formatCurrency(r.packingCostPerCopy)}</td></tr>}
+                      {r.freightCost > 0 && <tr className="border-b border-surface-light-border/50"><td className="py-2 px-3">Freight</td><td className="py-2 px-3 text-right">{formatCurrency(r.freightCost)}</td><td className="py-2 px-3 text-right">{formatCurrency(r.freightCostPerCopy)}</td></tr>}
+                      {r.prePressCost > 0 && <tr className="border-b border-surface-light-border/50"><td className="py-2 px-3">Pre-Press</td><td className="py-2 px-3 text-right">{formatCurrency(r.prePressCost)}</td><td className="py-2 px-3 text-right">{formatCurrency(r.prePressCost / r.quantity)}</td></tr>}
+                      {r.additionalCost > 0 && <tr className="border-b border-surface-light-border/50"><td className="py-2 px-3">Additional</td><td className="py-2 px-3 text-right">{formatCurrency(r.additionalCost)}</td><td className="py-2 px-3 text-right">{formatCurrency(r.additionalCost / r.quantity)}</td></tr>}
+                      <tr className="font-bold bg-gray-100 dark:bg-gray-800"><td className="py-2 px-3">TOTAL PRODUCTION COST</td><td className="py-2 px-3 text-right">{formatCurrency(r.totalProductionCost)}</td><td className="py-2 px-3 text-right">{formatCurrency(r.totalCostPerCopy)}</td></tr>
+                      <tr className="border-b border-surface-light-border/50"><td className="py-2 px-3">+ Margin ({estimation.pricing.marginPercent}%)</td><td className="py-2 px-3 text-right text-green-600 dark:text-green-400">{formatCurrency(r.marginAmount)}</td><td className="py-2 px-3 text-right">{formatCurrency(r.marginAmount / r.quantity)}</td></tr>
+                      {r.commission > 0 && <tr className="border-b border-surface-light-border/50"><td className="py-2 px-3">+ Commission ({estimation.pricing.commissionPercent}%)</td><td className="py-2 px-3 text-right">{formatCurrency(r.commission)}</td><td className="py-2 px-3 text-right">{formatCurrency(r.commission / r.quantity)}</td></tr>}
+                      <tr className="font-bold bg-blue-50 dark:bg-blue-500/10"><td className="py-2 px-3">SELLING PRICE (Before Tax)</td><td className="py-2 px-3 text-right">{formatCurrency(r.totalSellingPrice)}</td><td className="py-2 px-3 text-right">{formatCurrency(r.sellingPricePerCopy)}</td></tr>
+                      {r.taxAmount > 0 && <tr className="border-b border-surface-light-border/50"><td className="py-2 px-3">+ Tax ({estimation.pricing.taxRate}% {estimation.pricing.taxType})</td><td className="py-2 px-3 text-right">{formatCurrency(r.taxAmount)}</td><td className="py-2 px-3 text-right">{formatCurrency(r.taxAmount / r.quantity)}</td></tr>}
+                      <tr className="font-bold text-lg bg-primary-50 dark:bg-primary-500/10 text-primary-700 dark:text-primary-300"><td className="py-3 px-3">GRAND TOTAL</td><td className="py-3 px-3 text-right">{formatCurrency(r.grandTotal)}</td><td className="py-3 px-3 text-right">{formatCurrency(r.grandTotal / r.quantity)}</td></tr>
+                      {estimation.pricing.currency !== "INR" && (
+                        <tr className="font-bold bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300">
+                          <td className="py-2 px-3">GRAND TOTAL ({estimation.pricing.currency})</td>
+                          <td className="py-2 px-3 text-right">{formatCurrency(r.totalSellingPriceForeign, estimation.pricing.currency)}</td>
+                          <td className="py-2 px-3 text-right">{formatCurrency(r.sellingPriceForeignCurrency, estimation.pricing.currency, 3)}</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* ── 7. PRODUCTION METRICS ─────────────────────────────────── */}
+              <div>
+                <h4 className="text-sm font-bold text-text-light-primary dark:text-text-dark-primary mb-2 flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4 text-cyan-500" /> 7. Production Metrics
+                </h4>
+                <div className="grid grid-cols-3 md:grid-cols-6 gap-3 text-xs">
+                  <div className="p-2 bg-surface-light-secondary dark:bg-surface-dark-tertiary rounded-lg text-center"><p className="text-text-light-tertiary">TPH</p><p className="font-bold text-sm">₹{formatNumber(r.tph)}</p></div>
+                  <div className="p-2 bg-surface-light-secondary dark:bg-surface-dark-tertiary rounded-lg text-center"><p className="text-text-light-tertiary">Machine Hrs</p><p className="font-bold text-sm">{r.totalMachineHours.toFixed(1)}h</p></div>
+                  <div className="p-2 bg-surface-light-secondary dark:bg-surface-dark-tertiary rounded-lg text-center"><p className="text-text-light-tertiary">Make Ready</p><p className="font-bold text-sm">{r.makeReadyHours.toFixed(1)}h</p></div>
+                  <div className="p-2 bg-surface-light-secondary dark:bg-surface-dark-tertiary rounded-lg text-center"><p className="text-text-light-tertiary">Running</p><p className="font-bold text-sm">{r.runningHours.toFixed(1)}h</p></div>
+                  <div className="p-2 bg-surface-light-secondary dark:bg-surface-dark-tertiary rounded-lg text-center"><p className="text-text-light-tertiary">Cartons</p><p className="font-bold text-sm">{formatNumber(r.totalCartons)}</p></div>
+                  <div className="p-2 bg-surface-light-secondary dark:bg-surface-dark-tertiary rounded-lg text-center"><p className="text-text-light-tertiary">Pallets</p><p className="font-bold text-sm">{r.totalPallets}</p></div>
+                </div>
+              </div>
+
+              {/* ── 8. PROFITABILITY ANALYSIS ───────────────────────────────── */}
+              <div>
+                <h4 className="text-sm font-bold text-text-light-primary dark:text-text-dark-primary mb-2 flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-emerald-500" /> 8. Profitability Analysis
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Profitability Metrics */}
+                  <div className="p-3 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded-lg text-xs space-y-2">
+                    <p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">Margin & Profitability</p>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                      <span className="text-text-light-tertiary dark:text-text-dark-tertiary">Applied Margin:</span>
+                      <span className="font-bold text-emerald-700 dark:text-emerald-400">{estimation.pricing.marginPercent}%</span>
+                      <span className="text-text-light-tertiary dark:text-text-dark-tertiary">Actual Margin Amount:</span>
+                      <span className="font-bold">{formatCurrency(r.marginAmount)}</span>
+                      <span className="text-text-light-tertiary dark:text-text-dark-tertiary">Markup % (on cost):</span>
+                      <span className="font-bold">{r.totalProductionCost > 0 ? ((r.marginAmount / r.totalProductionCost) * 100).toFixed(1) : 0}%</span>
+                      <span className="text-text-light-tertiary dark:text-text-dark-tertiary">Margin Per Copy:</span>
+                      <span className="font-bold">{formatCurrency(r.marginAmount / Math.max(1, r.quantity))}</span>
+                      <span className="text-text-light-tertiary dark:text-text-dark-tertiary">Margin % of Selling:</span>
+                      <span className="font-bold">{r.totalSellingPrice > 0 ? ((r.marginAmount / r.totalSellingPrice) * 100).toFixed(1) : 0}%</span>
+                      {estimation.pricing.volumeDiscount > 0 && (
+                        <>
+                          <span className="text-text-light-tertiary dark:text-text-dark-tertiary">Volume Discount:</span>
+                          <span className="font-bold text-amber-600 dark:text-amber-400">−{estimation.pricing.volumeDiscount}%</span>
+                          <span className="text-text-light-tertiary dark:text-text-dark-tertiary">Discount Amount:</span>
+                          <span className="font-bold text-amber-600 dark:text-amber-400">
+                            −{formatCurrency(r.totalProductionCost * (estimation.pricing.volumeDiscount / 100))}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  {/* Revenue & ROI */}
+                  <div className="p-3 bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 rounded-lg text-xs space-y-2">
+                    <p className="text-[10px] font-bold text-blue-700 dark:text-blue-400 uppercase tracking-wider">Revenue & Financial</p>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                      <span className="text-text-light-tertiary dark:text-text-dark-tertiary">Total Production Cost:</span>
+                      <span className="font-bold">{formatCurrency(r.totalProductionCost)}</span>
+                      <span className="text-text-light-tertiary dark:text-text-dark-tertiary">Revenue (Selling):</span>
+                      <span className="font-bold text-emerald-700 dark:text-emerald-400">{formatCurrency(r.totalSellingPrice)}</span>
+                      {r.commission > 0 && (
+                        <>
+                          <span className="text-text-light-tertiary dark:text-text-dark-tertiary">Commission ({estimation.pricing.commissionPercent}%):</span>
+                          <span className="font-bold text-red-500">{formatCurrency(r.commission)}</span>
+                        </>
+                      )}
+                      <span className="text-text-light-tertiary dark:text-text-dark-tertiary">Tax ({estimation.pricing.taxRate}% {estimation.pricing.taxType}):</span>
+                      <span className="font-bold">{formatCurrency(r.taxAmount)}</span>
+                      <span className="text-text-light-tertiary dark:text-text-dark-tertiary">Grand Total:</span>
+                      <span className="font-bold text-lg text-primary-600 dark:text-primary-400">{formatCurrency(r.grandTotal)}</span>
+                      {estimation.pricing.currency !== "INR" && (
+                        <>
+                          <span className="text-text-light-tertiary dark:text-text-dark-tertiary">Rate (1 {estimation.pricing.currency}):</span>
+                          <span className="font-bold">₹{estimation.pricing.exchangeRate}</span>
+                          <span className="text-text-light-tertiary dark:text-text-dark-tertiary">Foreign Total:</span>
+                          <span className="font-bold text-amber-700 dark:text-amber-400">{formatCurrency(r.totalSellingPriceForeign, estimation.pricing.currency)}</span>
+                          <span className="text-text-light-tertiary dark:text-text-dark-tertiary">Foreign Per Copy:</span>
+                          <span className="font-bold text-amber-700 dark:text-amber-400">{formatCurrency(r.sellingPriceForeignCurrency, estimation.pricing.currency, 3)}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           ))}
+
+          {/* ── 9. ESTIMATION METADATA ───────────────────────────────────── */}
+          <div className="border-t-2 border-surface-light-border dark:border-surface-dark-border pt-4">
+            <h3 className="text-base font-bold text-text-light-primary dark:text-text-dark-primary border-b-2 border-primary-500 pb-1 mb-3">
+              9. ESTIMATION METADATA
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              <DetailRow label="Estimation ID" value={estimation.id.substring(0, 12)} />
+              <DetailRow label="Reference" value={estimation.referenceNumber || "—"} />
+              <DetailRow label="PO Number" value={estimation.poNumber || "—"} />
+              <DetailRow label="Estimated By" value={estimation.estimatedBy || "—"} />
+              <DetailRow label="Date" value={estimation.estimationDate || new Date().toLocaleDateString("en-GB")} />
+              <DetailRow label="Payment Terms" value={estimation.pricing.paymentTerms || "—"} />
+              <DetailRow label="Payment Days" value={`${estimation.pricing.paymentDays || 0} days`} />
+              <DetailRow label="Quotation Validity" value={`${estimation.pricing.quotationValidity || 15} days`} />
+            </div>
+            {/* Finishing Operations Summary */}
+            <div className="mt-3 p-3 bg-surface-light-secondary dark:bg-surface-dark-tertiary rounded-lg text-xs">
+              <p className="text-[10px] font-bold text-text-light-tertiary dark:text-text-dark-tertiary uppercase tracking-wider mb-1.5">Finishing Operations Applied</p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-0.5">
+                <span className="text-text-light-tertiary">Lamination:</span>
+                <span className="font-medium">{estimation.finishing.coverLamination.enabled ? estimation.finishing.coverLamination.type.replace(/_/g, " ") : "None"}</span>
+                <span className="text-text-light-tertiary">UV Varnish:</span>
+                <span className="font-medium">{estimation.finishing.uvVarnish.enabled ? "Yes" : "None"}</span>
+                <span className="text-text-light-tertiary">Spot UV:</span>
+                <span className="font-medium">{estimation.finishing.spotUVCover.enabled ? "Yes" : "None"}</span>
+                <span className="text-text-light-tertiary">Die Cutting:</span>
+                <span className="font-medium">{estimation.finishing.dieCutting.enabled ? estimation.finishing.dieCutting.complexity : "None"}</span>
+                <span className="text-text-light-tertiary">Embossing:</span>
+                <span className="font-medium">{estimation.finishing.embossing.enabled ? estimation.finishing.embossing.type?.replace(/_/g, " ") : "None"}</span>
+                <span className="text-text-light-tertiary">Foil Stamp:</span>
+                <span className="font-medium">{estimation.finishing.foilStamping?.enabled ? "Yes" : "None"}</span>
+              </div>
+            </div>
+          </div>
 
           {/* Notes */}
           {estimation.notes && (

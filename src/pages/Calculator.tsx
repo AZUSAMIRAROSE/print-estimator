@@ -4,6 +4,8 @@ import { formatCurrency, formatNumber } from "@/utils/format";
 import { calculateSpineThickness } from "@/utils/calculations/spine";
 import { calculateBookWeight } from "@/utils/calculations/weight";
 import { useDataStore } from "@/stores/dataStore";
+import { useRateCardStore } from "@/stores/rateCardStore";
+import { useMachineStore } from "@/stores/machineStore";
 import {
   Calculator as CalcIcon, Book, DollarSign, RefreshCcw, AlertTriangle,
   Printer, Settings2, Sparkles, BarChart3,
@@ -42,14 +44,48 @@ const BINDING_TYPES = Object.keys(BINDING_LABELS) as BindingType[];
 
 export function Calculator() {
   const { customers } = useDataStore();
+  const rateCardStore = useRateCardStore();
+  const machineStore = useMachineStore();
   const [form, setForm] = useState<QuickCalcForm>(ADVANCED_DEFAULT_FORM);
   const [activeSection, setActiveSection] = useState(0);
   const [showAudit, setShowAudit] = useState(false);
   const [showMultiQty, setShowMultiQty] = useState(false);
   const [compactResults, setCompactResults] = useState(false);
 
-  const paperTypes = useMemo(() => [...new Set(DEFAULT_PAPER_RATES.map(r => r.paperType))], []);
-  const paperSizes = useMemo(() => STANDARD_PAPER_SIZES.map(ps => ps.label), []);
+  // Live data from stores (fallback to constants when stores are empty)
+  const paperTypes = useMemo(() => {
+    const storeTypes = [...new Set(rateCardStore.paperRates.filter(r => r.status === 'active').map(r => r.paperType))];
+    return storeTypes.length > 0 ? storeTypes : [...new Set(DEFAULT_PAPER_RATES.map(r => r.paperType))];
+  }, [rateCardStore.paperRates]);
+
+  const paperSizes = useMemo(() => {
+    const storeSizes = [...new Set(rateCardStore.paperRates.filter(r => r.status === 'active').map(r => r.size))];
+    return storeSizes.length > 0 ? storeSizes : STANDARD_PAPER_SIZES.map(ps => ps.label);
+  }, [rateCardStore.paperRates]);
+
+  const liveMachines = useMemo(() => {
+    const active = Array.from(machineStore.machines.values()).filter((m: any) => m.status !== 'decommissioned');
+    if (active.length > 0) {
+      return active.map((m: any) => ({ id: m.id, name: m.name || m.nickname || m.id }));
+    }
+    return DEFAULT_MACHINES.map(m => ({ id: m.id, name: m.name }));
+  }, [machineStore.machines]);
+
+  const liveDestinations = useMemo(() => {
+    const storeDest = rateCardStore.freightDestinations.filter(r => r.isActive);
+    return storeDest.length > 0
+      ? storeDest.map(d => ({ id: d.id, name: d.name, country: d.country }))
+      : DEFAULT_DESTINATIONS.map(d => ({ id: d.id, name: d.name, country: d.country }));
+  }, [rateCardStore.freightDestinations]);
+
+  const liveLamOptions = useMemo(() => {
+    const storeRates = rateCardStore.lamination.filter(r => r.status === 'active');
+    if (storeRates.length > 0) {
+      return storeRates.map(r => ({ key: r.type, label: `${r.type.replace("_", " ")} (₹${r.ratePerCopy}/copy)` }));
+    }
+    return Object.keys(LAMINATION_RATES).map(k => ({ key: k, label: `${k.replace("_", " ")} (₹${(LAMINATION_RATES as any)[k].ratePerCopy}/copy)` }));
+  }, [rateCardStore.lamination]);
+
   const { parsed, errors } = useMemo(() => validateAndParseQuickCalc(form), [form]);
 
   // ── Compute result ─────────────────────────────────────────────────────────
@@ -298,8 +334,8 @@ export function Calculator() {
                     label="Machine"
                     value={form.machineId}
                     onChange={v => updateForm({ machineId: v })}
-                    options={DEFAULT_MACHINES.map(m => m.id)}
-                    labels={DEFAULT_MACHINES.map(m => m.name)}
+                    options={liveMachines.map(m => m.id)}
+                    labels={liveMachines.map(m => m.name)}
                   />
                   <Field label="Front Colors" value={form.colorsFront} onChange={v => updateForm({ colorsFront: v })} hint={<span className="flex items-center gap-1"><Palette className="w-3 h-3" /> CMYK</span> as any} />
                   <Field label="Back Colors" value={form.colorsBack} onChange={v => updateForm({ colorsBack: v })} />
@@ -325,8 +361,8 @@ export function Calculator() {
                     label="Cover Machine"
                     value={form.coverMachineId}
                     onChange={v => updateForm({ coverMachineId: v })}
-                    options={DEFAULT_MACHINES.map(m => m.id)}
-                    labels={DEFAULT_MACHINES.map(m => m.name)}
+                    options={liveMachines.map(m => m.id)}
+                    labels={liveMachines.map(m => m.name)}
                   />
                 </div>
               </div>
@@ -374,8 +410,8 @@ export function Calculator() {
                       label="Lamination"
                       value={form.laminationType}
                       onChange={v => updateForm({ laminationType: v as QuickCalcForm["laminationType"] })}
-                      options={Object.keys(LAMINATION_RATES).concat("none")}
-                      labels={Object.keys(LAMINATION_RATES).map(k => `${k.replace("_", " ")} (₹${(LAMINATION_RATES as any)[k].ratePerCopy}/copy)`).concat("None")}
+                      options={[...liveLamOptions.map(l => l.key), "none"]}
+                      labels={[...liveLamOptions.map(l => l.label), "None"]}
                     />
                     <div className="grid grid-cols-2 gap-3">
                       <ToggleOption label="Spot UV" checked={form.spotUV} onChange={v => updateForm({ spotUV: v })} />
@@ -446,8 +482,8 @@ export function Calculator() {
                   label="Destination"
                   value={form.destinationId}
                   onChange={v => updateForm({ destinationId: v })}
-                  options={DEFAULT_DESTINATIONS.map(d => d.id)}
-                  labels={DEFAULT_DESTINATIONS.map(d => `${d.name} (${d.country})`)}
+                  options={liveDestinations.map(d => d.id)}
+                  labels={liveDestinations.map(d => `${d.name} (${d.country})`)}
                 />
               </div>
             </div>

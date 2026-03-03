@@ -1,8 +1,8 @@
 // ============================================================================
 // ADVANCED QUICK QUOTE ENGINE — FULL-PRECISION PRINT ESTIMATION
 // ============================================================================
-// Uses the same industry-grade calculation modules as the full estimation
-// wizard, but exposed through a streamlined single-page interface.
+// Uses LIVE data from Rate Card, Machine, and Inventory stores.
+// Falls back to hardcoded constants only when stores are empty.
 // ============================================================================
 
 import { DEFAULT_PAPER_RATES, LAMINATION_RATES, DEFAULT_MACHINES } from "../../constants/index.ts";
@@ -13,6 +13,75 @@ import { calculateBindingCostGodLevel } from "./binding.ts";
 import { calculateSpineThickness, calculateSpineWithBoard } from "./spine.ts";
 import { calculateBookWeight, type BookWeightResult } from "./weight.ts";
 import type { BindingType, SectionPaperCost, SectionPrintingCost, SectionCTPCost } from "@/types";
+import { useRateCardStore } from "@/stores/rateCardStore";
+import { useMachineStore } from "@/stores/machineStore";
+
+// ── Live Store Accessors (with fallback) ─────────────────────────────────────
+function getLivePaperRates() {
+  const storeRates = useRateCardStore.getState().paperRates.filter(r => r.status === 'active');
+  return storeRates.length > 0 ? storeRates : DEFAULT_PAPER_RATES.map(r => ({ ...r, status: 'active' as const }));
+}
+
+function getLiveMachines() {
+  const { machines } = useMachineStore.getState();
+  const active = Array.from(machines.values()).filter((m: any) => m.status !== 'decommissioned');
+  if (active.length > 0) {
+    return active.map((m: any) => ({
+      id: m.id,
+      code: m.code || m.id.toUpperCase(),
+      name: m.name || m.nickname || m.id,
+      type: 'offset' as const,
+      maxSheetWidth: m.maxSheetWidth_inches || m.maxSheetWidth || 23,
+      maxSheetHeight: m.maxSheetHeight_inches || m.maxSheetHeight || 36,
+      minSheetWidth: m.minSheetWidth_inches || m.minSheetWidth || 12,
+      minSheetHeight: m.minSheetHeight_inches || m.minSheetHeight || 18,
+      maxColors: m.maxColors || 4,
+      hasAQUnit: m.hasCoatingUnit || false,
+      hasPerfector: m.canPerfect || false,
+      speedSPH: m.effectiveSpeed || m.ratedSpeed || 8000,
+      makeReadyCost: m.makeReadyCost_per || 1200,
+      makeReadyTime: m.makeReadyTime_hours || 0.3,
+      washingCost: m.washingCost_per || 200,
+      plateSize: `${m.maxSheetWidth_inches || m.maxSheetWidth || 23}x${m.maxSheetHeight_inches || m.maxSheetHeight || 36}`,
+      gripperMargin: m.gripperMargin_mm || 12,
+      tailMargin: m.tailMargin_mm || 8,
+      sideMargin: m.sideMargin_mm || 5,
+      ctpRate: m.plateCost_each || 271,
+      hourlyRate: m.totalHourlyCost || 3200,
+      isActive: true,
+    }));
+  }
+  return DEFAULT_MACHINES;
+}
+
+function getLiveLaminationRates(): Record<string, { ratePerCopy: number; minOrder: number }> {
+  const storeRates = useRateCardStore.getState().lamination.filter(r => r.status === 'active');
+  if (storeRates.length > 0) {
+    const map: Record<string, { ratePerCopy: number; minOrder: number }> = {};
+    storeRates.forEach(r => { map[r.type] = { ratePerCopy: r.ratePerCopy, minOrder: r.minOrder }; });
+    return map;
+  }
+  return LAMINATION_RATES;
+}
+
+function getLiveSpotUVRate(qty: number): { ratePerCopy: number; blockCost: number } {
+  const storeRates = useRateCardStore.getState().spotUV.filter(r => r.status === 'active');
+  if (storeRates.length > 0) {
+    const match = storeRates.find(r => qty >= r.minQty && qty <= r.maxQty);
+    if (match) return { ratePerCopy: match.ratePerCopy, blockCost: match.blockCost };
+    // Use last entry as fallback
+    const last = storeRates[storeRates.length - 1];
+    return { ratePerCopy: last.ratePerCopy, blockCost: last.blockCost };
+  }
+  // Hardcoded fallback
+  const rate = qty >= 10000 ? 0.80 : qty >= 5000 ? 1.00 : qty >= 2000 ? 1.28 : 1.50;
+  return { ratePerCopy: rate, blockCost: 2500 };
+}
+
+function getLiveDestinations() {
+  const storeDest = useRateCardStore.getState().freightDestinations.filter(r => r.isActive);
+  return storeDest.length > 0 ? storeDest : [];
+}
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -356,8 +425,9 @@ export function calcVolumeDiscountPercent(quantity: number): number {
 
 export function calculateAdvancedCosts(input: ParsedQuickCalcInput, quantity?: number): AdvancedCostResult {
   const qty = quantity ?? input.quantity;
-  const machine = DEFAULT_MACHINES.find(m => m.id === input.machineId) ?? DEFAULT_MACHINES[3]; // RMGT default
-  const coverMachine = DEFAULT_MACHINES.find(m => m.id === input.coverMachineId) ?? machine;
+  const liveMachines = getLiveMachines();
+  const machine = liveMachines.find(m => m.id === input.machineId) ?? liveMachines[0] ?? DEFAULT_MACHINES[3];
+  const coverMachine = liveMachines.find(m => m.id === input.coverMachineId) ?? machine;
 
 
 
@@ -374,7 +444,8 @@ export function calculateAdvancedCosts(input: ParsedQuickCalcInput, quantity?: n
   );
 
   // ── Text Paper ─────────────────────────────────────────────────────────────
-  const textPaperCode = DEFAULT_PAPER_RATES.find(r => r.paperType === input.paperType)?.code ?? "";
+  const livePaperRates = getLivePaperRates();
+  const textPaperCode = livePaperRates.find(r => r.paperType === input.paperType)?.code ?? "";
   const textPaper = calculatePaperRequirement({
     sectionName: "Text",
     sectionType: "text1",
@@ -395,7 +466,7 @@ export function calculateAdvancedCosts(input: ParsedQuickCalcInput, quantity?: n
   });
 
   // ── Cover Paper ────────────────────────────────────────────────────────────
-  const coverPaperCode = DEFAULT_PAPER_RATES.find(r => r.paperType === input.coverPaper)?.code ?? "Art card";
+  const coverPaperCode = livePaperRates.find(r => r.paperType === input.coverPaper)?.code ?? "Art card";
   const coverPaper = calculatePaperRequirement({
     sectionName: "Cover",
     sectionType: "cover",
@@ -523,9 +594,11 @@ export function calculateAdvancedCosts(input: ParsedQuickCalcInput, quantity?: n
   };
 
   // ── Finishing ──────────────────────────────────────────────────────────────
+  // ── Finishing (from live Rate Card data) ──────────────────────────────────
+  const liveLamRates = getLiveLaminationRates();
   let laminationCost = 0;
   if (input.includeFinishing && input.laminationType !== "none") {
-    const lam = LAMINATION_RATES[input.laminationType];
+    const lam = liveLamRates[input.laminationType] || { ratePerCopy: 0.78, minOrder: 3500 };
     const coverAreaSqInch = ((input.bookWidth * 2 + spineWithBoard) / 25.4) * (input.bookHeight / 25.4);
     const a5AreaSqInch = 5.83 * 8.27;
     const areaFactor = Math.max(0.8, coverAreaSqInch / a5AreaSqInch);
@@ -535,9 +608,8 @@ export function calculateAdvancedCosts(input: ParsedQuickCalcInput, quantity?: n
 
   let spotUVCost = 0;
   if (input.includeFinishing && input.spotUV) {
-    // Spot UV from constants
-    const rate = qty >= 10000 ? 0.80 : qty >= 5000 ? 1.00 : qty >= 2000 ? 1.28 : 1.50;
-    spotUVCost = rate * qty + 2500; // block cost
+    const uvRate = getLiveSpotUVRate(qty);
+    spotUVCost = uvRate.ratePerCopy * qty + uvRate.blockCost;
   }
 
   let embossingCost = 0;

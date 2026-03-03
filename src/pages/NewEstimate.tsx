@@ -42,7 +42,7 @@ export function NewEstimate() {
     setResults, setIsCalculating, setShowResults, loadEstimation
   } = useEstimationStore();
   const { addNotification, addActivityLog } = useAppStore();
-  const { saveDraft, draftEstimation } = useDataStore();
+  const { saveDraft, draftEstimation, addJob, jobs } = useDataStore();
 
   const [savingDraft, setSavingDraft] = useState(false);
   const [calculationMessage, setCalculationMessage] = useState("");
@@ -139,11 +139,35 @@ export function NewEstimate() {
     setSavingDraft(true);
     setTimeout(() => {
       saveDraft(estimation);
+
+      // Also create/update a Job with "draft" status so it appears on the Jobs page
+      const existingDraftJob = jobs.find(
+        (j: any) => j.estimationId === estimation.id && j.status === "draft"
+      );
+      if (!existingDraftJob) {
+        addJob({
+          title: estimation.jobTitle || "Untitled Draft",
+          customerId: estimation.customerId || "",
+          customerName: estimation.customerName || "Unknown Customer",
+          estimationId: estimation.id,
+          status: "draft",
+          quantities: estimation.quantities.filter((q: number) => q > 0),
+          results: [],
+          bookSpec: estimation.bookSpec,
+          totalValue: 0,
+          currency: estimation.pricing.currency,
+          assignedTo: estimation.estimatedBy || "Current User",
+          dueDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString(),
+          notes: estimation.notes || "Draft estimation — not yet calculated.",
+          tags: ["draft"],
+        });
+      }
+
       setSavingDraft(false);
       addNotification({
         type: "success",
         title: "Draft Saved",
-        message: `"${estimation.jobTitle || "Untitled"}" has been saved as a draft.`,
+        message: `"${estimation.jobTitle || "Untitled"}" has been saved as a draft and appears in Jobs.`,
         category: "job",
       });
       addActivityLog({
@@ -156,7 +180,7 @@ export function NewEstimate() {
         level: "info",
       });
     }, 500);
-  }, [estimation, addNotification, addActivityLog, saveDraft]);
+  }, [estimation, addNotification, addActivityLog, saveDraft, addJob, jobs]);
 
   useEffect(() => {
     if (draftEstimation && !estimation.jobTitle && !showResults && results.length === 0) {
