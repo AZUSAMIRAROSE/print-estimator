@@ -18,11 +18,12 @@ interface EstimationState {
   isCalculated: boolean;
   showResults: boolean;
 
-  // Actions
+  // Navigation
   setCurrentStep: (step: number) => void;
   nextStep: () => void;
   prevStep: () => void;
 
+  // Updates
   updateEstimation: (updates: Partial<EstimationInput>) => void;
   updateBookSpec: (updates: Partial<BookSpec>) => void;
   updateTextSection: (index: number, updates: Partial<TextSection>) => void;
@@ -37,15 +38,17 @@ interface EstimationState {
   updatePricing: (updates: Partial<PricingSection>) => void;
   updateQuantity: (index: number, value: number) => void;
 
+  // Results
   setResults: (results: EstimationResult[]) => void;
   setIsCalculating: (val: boolean) => void;
   setShowResults: (val: boolean) => void;
 
+  // State management
   resetEstimation: () => void;
   loadEstimation: (estimation: EstimationInput) => void;
 }
 
-const createDefaultEstimation = (): EstimationInput => ({
+export const createDefaultEstimation = (): EstimationInput => ({
   id: generateId(),
   jobTitle: "",
   customerName: "",
@@ -292,26 +295,50 @@ export const useEstimationStore = create<EstimationState>()(
       isCalculated: false,
       showResults: false,
 
+      // Navigation
       setCurrentStep: (step) => set((state) => { state.currentStep = step; }),
       nextStep: () => set((state) => { if (state.currentStep < 15) state.currentStep++; }),
       prevStep: () => set((state) => { if (state.currentStep > 1) state.currentStep--; }),
 
-      updateEstimation: (updates) => set((state) => { Object.assign(state.estimation, updates); }),
+      // Updates - clean without auto-planning
+      updateEstimation: (updates) => set((state) => { 
+        Object.assign(state.estimation, updates);
+        state.estimation.updatedAt = new Date().toISOString();
+      }),
 
-      updateBookSpec: (updates) => set((state) => { Object.assign(state.estimation.bookSpec, updates); }),
+      updateBookSpec: (updates) => set((state) => { 
+        Object.assign(state.estimation.bookSpec, updates);
+        state.estimation.updatedAt = new Date().toISOString();
+      }),
 
       updateTextSection: (index, updates) => set((state) => {
         if (state.estimation.textSections[index]) {
           Object.assign(state.estimation.textSections[index], updates);
+          state.estimation.updatedAt = new Date().toISOString();
         }
       }),
 
-      updateCover: (updates) => set((state) => { Object.assign(state.estimation.cover, updates); }),
-      updateJacket: (updates) => set((state) => { Object.assign(state.estimation.jacket, updates); }),
-      updateEndleaves: (updates) => set((state) => { Object.assign(state.estimation.endleaves, updates); }),
-      updateBinding: (updates) => set((state) => { Object.assign(state.estimation.binding, updates); }),
+      updateCover: (updates) => set((state) => { 
+        Object.assign(state.estimation.cover, updates);
+        state.estimation.updatedAt = new Date().toISOString();
+      }),
+
+      updateJacket: (updates) => set((state) => { 
+        Object.assign(state.estimation.jacket, updates);
+        state.estimation.updatedAt = new Date().toISOString();
+      }),
+
+      updateEndleaves: (updates) => set((state) => { 
+        Object.assign(state.estimation.endleaves, updates);
+        state.estimation.updatedAt = new Date().toISOString();
+      }),
+
+      updateBinding: (updates) => set((state) => { 
+        Object.assign(state.estimation.binding, updates);
+        state.estimation.updatedAt = new Date().toISOString();
+      }),
+
       updateFinishing: (updates) => set((state) => {
-        // Deep merge for nested finishing objects
         const f = state.estimation.finishing;
         for (const [key, value] of Object.entries(updates)) {
           if (typeof value === "object" && value !== null && !Array.isArray(value)) {
@@ -320,16 +347,35 @@ export const useEstimationStore = create<EstimationState>()(
             (f as any)[key] = value;
           }
         }
+        state.estimation.updatedAt = new Date().toISOString();
       }),
-      updatePacking: (updates) => set((state) => { Object.assign(state.estimation.packing, updates); }),
-      updateDelivery: (updates) => set((state) => { Object.assign(state.estimation.delivery, updates); }),
-      updatePrePress: (updates) => set((state) => { Object.assign(state.estimation.prePress, updates); }),
-      updatePricing: (updates) => set((state) => { Object.assign(state.estimation.pricing, updates); }),
+
+      updatePacking: (updates) => set((state) => { 
+        Object.assign(state.estimation.packing, updates);
+        state.estimation.updatedAt = new Date().toISOString();
+      }),
+
+      updateDelivery: (updates) => set((state) => { 
+        Object.assign(state.estimation.delivery, updates);
+        state.estimation.updatedAt = new Date().toISOString();
+      }),
+
+      updatePrePress: (updates) => set((state) => { 
+        Object.assign(state.estimation.prePress, updates);
+        state.estimation.updatedAt = new Date().toISOString();
+      }),
+
+      updatePricing: (updates) => set((state) => { 
+        Object.assign(state.estimation.pricing, updates);
+        state.estimation.updatedAt = new Date().toISOString();
+      }),
 
       updateQuantity: (index, value) => set((state) => {
         state.estimation.quantities[index] = value;
+        state.estimation.updatedAt = new Date().toISOString();
       }),
 
+      // Results
       setResults: (results) => set((state) => {
         state.results = results;
         state.isCalculated = true;
@@ -338,6 +384,7 @@ export const useEstimationStore = create<EstimationState>()(
       setIsCalculating: (val) => set((state) => { state.isCalculating = val; }),
       setShowResults: (val) => set((state) => { state.showResults = val; }),
 
+      // State management
       resetEstimation: () => set((state) => {
         state.estimation = createDefaultEstimation();
         state.currentStep = 1;
@@ -368,3 +415,4 @@ export const useEstimationStore = create<EstimationState>()(
     }
   )
 );
+

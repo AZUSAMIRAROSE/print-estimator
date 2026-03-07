@@ -423,315 +423,266 @@ export function calcVolumeDiscountPercent(quantity: number): number {
 
 // ── Advanced Full-Precision Calculator ───────────────────────────────────────
 
+import { calculateFullEstimation } from "./estimator";
+import { type EstimationInput } from "@/types";
+
 export function calculateAdvancedCosts(input: ParsedQuickCalcInput, quantity?: number): AdvancedCostResult {
   const qty = quantity ?? input.quantity;
-  const liveMachines = getLiveMachines();
-  const machine = liveMachines.find(m => m.id === input.machineId) ?? liveMachines[0] ?? DEFAULT_MACHINES[3];
-  const coverMachine = liveMachines.find(m => m.id === input.coverMachineId) ?? machine;
 
+  const spec: EstimationInput = {
+    id: "quick-calc",
+    jobTitle: "Quick Calc",
+    customerName: "Quick Calc User",
+    referenceNumber: "",
+    estimatedBy: "quick-calc",
+    estimationDate: new Date().toISOString(),
+    poNumber: "",
 
-
-  // ── Spine ──────────────────────────────────────────────────────────────────
-  const spineThickness = calculateSpineThickness({
-    textSections: [{ pages: input.pages, gsm: input.gsm, paperType: input.paperType }],
-  });
-
-  const isHardcase = input.bindingType === "section_sewn_hardcase" || input.bindingType === "case_binding";
-  const spineWithBoard = calculateSpineWithBoard(
-    spineThickness,
-    isHardcase ? input.boardThickness : 0,
-    input.bindingType,
-  );
-
-  // ── Text Paper ─────────────────────────────────────────────────────────────
-  const livePaperRates = getLivePaperRates();
-  const textPaperCode = livePaperRates.find(r => r.paperType === input.paperType)?.code ?? "";
-  const textPaper = calculatePaperRequirement({
-    sectionName: "Text",
-    sectionType: "text1",
-    totalPages: input.pages,
-    trimWidthMM: input.bookWidth,
-    trimHeightMM: input.bookHeight,
-    gsm: input.gsm,
-    paperType: input.paperType,
-    paperCode: textPaperCode,
-    paperSizeLabel: input.paperSize,
-    quantity: qty,
-    colorsFront: input.colorsFront,
-    colorsBack: input.colorsBack,
-    machineMaxWidth: machine.maxSheetWidth,
-    machineMaxHeight: machine.maxSheetHeight,
-    gripperMM: machine.gripperMargin,
-    bleedMM: 3,
-  });
-
-  // ── Cover Paper ────────────────────────────────────────────────────────────
-  const coverPaperCode = livePaperRates.find(r => r.paperType === input.coverPaper)?.code ?? "Art card";
-  const coverPaper = calculatePaperRequirement({
-    sectionName: "Cover",
-    sectionType: "cover",
-    totalPages: 4,
-    trimWidthMM: input.bookWidth,
-    trimHeightMM: input.bookHeight,
-    gsm: input.coverGSM,
-    paperType: input.coverPaper,
-    paperCode: coverPaperCode,
-    paperSizeLabel: input.paperSize,
-    quantity: qty,
-    colorsFront: input.coverColorsFront,
-    colorsBack: input.coverColorsBack,
-    machineMaxWidth: coverMachine.maxSheetWidth,
-    machineMaxHeight: coverMachine.maxSheetHeight,
-    spineThickness: spineWithBoard,
-  });
-
-  // ── Printing ───────────────────────────────────────────────────────────────
-  const textPrintRaw = calculatePrintingCostGodLevel({
-    sectionName: "Text",
-    sectionType: "text1",
-    machineId: input.machineId,
-    colorsFront: input.colorsFront,
-    colorsBack: input.colorsBack,
-    quantity: qty,
-    imposition: textPaper.imposition,
-    wastageResult: textPaper.wastageResult as any,
-    substrate: textPaper.substrate,
-    printingMethod: input.printingMethod.toUpperCase().replace("PERFECTOR", "PERFECTING") as any,
-  });
-
-  const textPrinting: SectionPrintingCost = {
-    sectionName: textPrintRaw.sectionName,
-    sectionType: textPrintRaw.sectionType,
-    machineId: textPrintRaw.machineId,
-    machineName: textPrintRaw.machineName,
-    totalPlates: textPrintRaw.totalPlates,
-    impressionsPerForm: textPrintRaw.impressionsPerForm,
-    totalImpressions: textPrintRaw.totalImpressions,
-    ratePer1000: textPrintRaw.effectiveRatePer1000,
-    printingCost: textPrintRaw.timeRunningCost + textPrintRaw.energyCost + textPrintRaw.depreciationCost,
-    makeReadyCost: textPrintRaw.timeMakereadyCost,
-    runningHours: textPrintRaw.kinematics.runningTime_hours,
-    makereadyHours: textPrintRaw.makeready.totalMakereadyTime_hours,
-    totalCost: textPrintRaw.totalCost
+    bookSpec: {
+      widthMM: input.bookWidth,
+      heightMM: input.bookHeight,
+      orientation: input.bookHeight > input.bookWidth ? "portrait" : input.bookHeight < input.bookWidth ? "landscape" : "square",
+      trimSizePreset: "custom",
+      customSize: true,
+      spineThickness: 0,
+      spineWithBoard: 0,
+      totalPages: input.pages
+    },
+    quantities: [qty],
+    textSections: [
+      {
+        id: "tx1",
+        enabled: true,
+        label: "Text",
+        pages: input.pages,
+        gsm: input.gsm,
+        paperTypeId: input.paperType,
+        paperTypeName: input.paperType,
+        paperSizeId: input.paperSize,
+        paperSizeLabel: input.paperSize,
+        colorsFront: input.colorsFront,
+        colorsBack: input.colorsBack,
+        machineId: input.machineId,
+        machineName: input.machineId,
+        plateChanges: 0,
+        printingMethod: input.printingMethod.toUpperCase().replace("PERFECTOR", "PERFECTING") as any
+      }
+    ],
+    cover: {
+      enabled: true,
+      pages: 4,
+      gsm: input.coverGSM,
+      paperTypeName: input.coverPaper,
+      paperTypeId: input.coverPaper,
+      paperSizeId: input.paperSize,
+      paperSizeLabel: input.paperSize,
+      colorsFront: input.coverColorsFront,
+      colorsBack: input.coverColorsBack,
+      machineId: input.coverMachineId,
+      machineName: input.coverMachineId,
+      selfCover: false,
+      separateCover: true,
+      foldType: "none",
+    },
+    jacket: { enabled: false, gsm: 130, paperTypeName: "", paperTypeId: "", paperSizeId: "", paperSizeLabel: "", colorsFront: 0, colorsBack: 0, machineId: "", machineName: "", laminationType: "none", extraJacketsPercent: 0, goldBlockingFront: false, goldBlockingSpine: false, spotUV: false, flapWidth: 0 },
+    endleaves: { enabled: false, type: "plain", pages: 0, gsm: 130, paperTypeName: "", paperTypeId: "", paperSizeId: "", paperSizeLabel: "", colorsFront: 0, colorsBack: 0, machineId: "", machineName: "", selfEndleaves: false },
+    binding: {
+      primaryBinding: input.bindingType,
+      purBinding: false,
+      backShape: "square",
+      boardType: "",
+      boardThickness: input.boardThickness,
+      boardOrigin: input.boardOrigin,
+      coveringMaterialId: "",
+      coveringMaterialName: "",
+      caseMaterial: "printed_paper",
+      ribbonMarker: 0,
+      headTailBand: false,
+      giltEdging: false,
+      foamPadding: false,
+      roundCornering: false,
+      goldBlockingFront: false,
+      goldBlockingSpine: false,
+      embossingFront: false,
+      roundingBacking: false,
+    },
+    finishing: {
+      coverLamination: { enabled: input.includeFinishing && input.laminationType !== "none", type: input.laminationType as any, machineId: "" },
+      jacketLamination: { enabled: false, type: "none" },
+      spotUVCover: { enabled: input.includeFinishing && input.spotUV, type: "front" },
+      spotUVJacket: { enabled: false },
+      uvVarnish: { enabled: false, sections: [] },
+      aqueousVarnish: { enabled: false, freeOnRekord: false },
+      embossing: { enabled: input.includeFinishing && input.embossing, type: "single", location: ["front"] },
+      goldBlocking: { enabled: false, location: [], foilType: "gold" },
+      dieCutting: { enabled: input.includeFinishing && input.dieCutting, complexity: "simple" },
+      foilStamping: { enabled: input.includeFinishing && input.foilBlocking, foilType: "gold", location: ["front"] },
+      edgeGilding: { enabled: false, edges: [] },
+      perforation: { enabled: false },
+      scoring: { enabled: false },
+      numbering: { enabled: false },
+      collation: { enabled: false, mode: "standard", ratePerCopy: 0, setupCost: 0 },
+      holePunch: { enabled: false, holes: 2, ratePerCopy: 0, setupCost: 0 },
+      trimming: { enabled: false, sides: 3, ratePerCopy: 0 },
+      envelopePrinting: { enabled: false, envelopeSize: "custom", quantity: 0, colors: 1, ratePerEnvelope: 0, setupCost: 0 },
+      largeFormat: { enabled: false, productType: "poster", widthMM: 0, heightMM: 0, quantity: 0, ratePerSqM: 0 },
+      additionalFinishing: []
+    },
+    packing: {
+      useCartons: input.includePacking,
+      usePallets: false,
+      cartonType: "5_ply",
+      cartonRate: 0,
+      customBooksPerCarton: 0,
+      palletType: "standard",
+      palletRate: 0,
+      stretchWrap: false,
+      stretchWrapRate: 0,
+      shrinkWrap: false,
+      shrinkWrapRate: 0,
+      strapping: false,
+      strappingRate: 0,
+      cornerProtectors: false,
+      cornerProtectorRate: 0,
+      innerPartition: false,
+      customPrinting: false,
+      kraftWrapping: false,
+      polybagIndividual: false,
+      polybagRate: 0,
+      bandingPerPack: 0,
+      insertSlipSheet: false,
+      containerization: "none",
+      containerType: "none",
+      maxCartonWeight: 15,
+      maxPalletHeight: 1200,
+      maxPalletWeight: 1000
+    },
+    delivery: {
+      destinationId: input.destinationId || "mumbai",
+      destinationName: input.destinationId,
+      deliveryType: "domestic",
+      freightMode: input.freightMode === "none" ? "road" : input.freightMode,
+      portOfLoading: "",
+      numberOfDespatches: 1,
+      localDespatches: 1,
+      overseasDespatches: 0,
+      advanceCopies: 0,
+      advanceCopiesAirFreight: false,
+      advanceCopiesRate: 0,
+      customsClearance: 0,
+      insurance: false,
+      insuranceRate: 0
+    },
+    prePress: { epsonProofs: 0, epsonRatePerPage: 0, wetProofs: 0, wetProofRatePerForm: 0, filmOutput: false, filmRatePerPlate: 0, designCharges: 0, originationType: "from_pdf" },
+    pricing: {
+      marginPercent: input.pricingPercent,
+      commissionPercent: 0,
+      targetTPH: 0,
+      exchangeRate: 1,
+      volumeDiscount: 0,
+      paymentTerms: "",
+      paymentDays: 0,
+      quotationValidity: 30,
+      taxType: "none",
+      taxRate: input.taxRate,
+      includesTax: false,
+      currency: "INR"
+    },
+    additionalCosts: [],
+    notes: "",
+    internalNotes: "",
+    status: "draft",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
   };
 
-  const coverPrintRaw = calculatePrintingCostGodLevel({
-    sectionName: "Cover",
-    sectionType: "cover",
-    machineId: input.coverMachineId,
-    colorsFront: input.coverColorsFront,
-    colorsBack: input.coverColorsBack,
-    quantity: qty,
-    imposition: coverPaper.imposition,
-    wastageResult: coverPaper.wastageResult,
-    substrate: coverPaper.substrate,
-    printingMethod: "SHEETWISE",
-  });
+  const estResultList = calculateFullEstimation(spec);
+  const out = estResultList[0];
 
-  const coverPrinting: SectionPrintingCost = {
-    sectionName: coverPrintRaw.sectionName,
-    sectionType: coverPrintRaw.sectionType,
-    machineId: coverPrintRaw.machineId,
-    machineName: coverPrintRaw.machineName,
-    totalPlates: coverPrintRaw.totalPlates,
-    impressionsPerForm: coverPrintRaw.impressionsPerForm,
-    totalImpressions: coverPrintRaw.totalImpressions,
-    ratePer1000: coverPrintRaw.effectiveRatePer1000,
-    printingCost: coverPrintRaw.timeRunningCost + coverPrintRaw.energyCost + coverPrintRaw.depreciationCost,
-    makeReadyCost: coverPrintRaw.timeMakereadyCost,
-    runningHours: coverPrintRaw.kinematics.runningTime_hours,
-    makereadyHours: coverPrintRaw.makeready.totalMakereadyTime_hours,
-    totalCost: coverPrintRaw.totalCost
-  };
+  const textPaper = out.paperCosts.find(p => p.sectionName === "Text");
+  const coverPaper = out.paperCosts.find(p => p.sectionName === "Cover");
+  const textPrinting = out.printingCosts.find(p => p.sectionName === "Text");
+  const coverPrinting = out.printingCosts.find(p => p.sectionName === "Cover");
+  const textCTP = out.ctpCosts.find(p => p.sectionName === "Text");
+  const coverCTP = out.ctpCosts.find(p => p.sectionName === "Cover");
 
-  // ── CTP ────────────────────────────────────────────────────────────────────
-  const textCTP = calculateCTPCost({
-    sectionName: "Text",
-    sectionType: "text1",
-    machineId: input.machineId,
-    totalPlates: textPrinting.totalPlates,
-  });
+  const rushMultiplier = input.turnaround === "standard" ? 0 : input.turnaround === "rush" ? 0.15 : 0.30;
+  const rushSurcharge = out.totalProductionCost * rushMultiplier;
 
-  const coverCTP = calculateCTPCost({
-    sectionName: "Cover",
-    sectionType: "cover",
-    machineId: input.coverMachineId,
-    totalPlates: coverPrinting.totalPlates,
-  });
-
-  // ── Binding ────────────────────────────────────────────────────────────────
-
-
-  const bindingRaw = calculateBindingCostGodLevel({
-    jobType: 'BOOK',
-    bindingMethod: input.bindingType.includes('perfect') ? 'PERFECT' :
-      (input.bindingType.includes('case') ? 'CASE' : 'SECTION_SEWN'),
-    quantity: qty,
-    bookWidth_mm: input.bookWidth,
-    bookHeight_mm: input.bookHeight,
-    textSections: [{
-      pages: input.pages,
-      substrate: textPaper.substrate,
-      signatures: textPaper.imposition.numberOfForms
-    }],
-    hardcoverSpecs: isHardcase ? {
-      boardThickness_mm: input.boardThickness,
-      clothMaterial: "Printed Paper",
-      headTailBands: true,
-      ribbonMarker: false,
-      foilStamping_sqcm: input.foilBlocking ? 50 : 0
-    } : undefined
-  });
-
-  const bindingResult = {
-    totalCost: bindingRaw.costBreakdown.totalCost,
-    costPerCopy: bindingRaw.unitCost,
-    breakdown: {
-      adhesive: bindingRaw.costBreakdown.adhesiveCost,
-      case: bindingRaw.costBreakdown.hardcoverMaterialsCost,
-      machine: bindingRaw.costBreakdown.machineTimeCost
-    }
-  };
-
-  // ── Finishing ──────────────────────────────────────────────────────────────
-  // ── Finishing (from live Rate Card data) ──────────────────────────────────
-  const liveLamRates = getLiveLaminationRates();
-  let laminationCost = 0;
-  if (input.includeFinishing && input.laminationType !== "none") {
-    const lam = liveLamRates[input.laminationType] || { ratePerCopy: 0.78, minOrder: 3500 };
-    const coverAreaSqInch = ((input.bookWidth * 2 + spineWithBoard) / 25.4) * (input.bookHeight / 25.4);
-    const a5AreaSqInch = 5.83 * 8.27;
-    const areaFactor = Math.max(0.8, coverAreaSqInch / a5AreaSqInch);
-    const coverSheets = coverPaper.grossSheets;
-    laminationCost = Math.max(lam.ratePerCopy * areaFactor * coverSheets, lam.minOrder);
-  }
-
-  let spotUVCost = 0;
-  if (input.includeFinishing && input.spotUV) {
-    const uvRate = getLiveSpotUVRate(qty);
-    spotUVCost = uvRate.ratePerCopy * qty + uvRate.blockCost;
-  }
-
-  let embossingCost = 0;
-  if (input.includeFinishing && input.embossing) {
-    embossingCost = 0.45 * qty + 2500; // die cost
-  }
-
-  let foilBlockingCost = 0;
-  if (input.includeFinishing && input.foilBlocking) {
-    foilBlockingCost = 0.30 * qty + 3500; // die cost
-  }
-
-  let dieCuttingCost = 0;
-  if (input.includeFinishing && input.dieCutting) {
-    dieCuttingCost = 0.20 * qty + 4000; // simple die
-  }
-
-  const totalFinishingCost = laminationCost + spotUVCost + embossingCost + foilBlockingCost + dieCuttingCost;
-
-  // ── Book Weight ────────────────────────────────────────────────────────────
-  const bookWeight = calculateBookWeight({
-    trimHeightMM: input.bookHeight,
-    trimWidthMM: input.bookWidth,
-    textSections: [{ pages: input.pages, gsm: input.gsm }],
-    coverGSM: input.coverGSM,
-    spineThickness,
-    hasEndleaves: false,
-    endleavesPages: 0,
-    endleavesGSM: 0,
-    hasJacket: false,
-    jacketGSM: 0,
-    boardThicknessMM: isHardcase ? input.boardThickness : 0,
-    hasBoard: isHardcase,
-  });
-
-  // ── Totals ─────────────────────────────────────────────────────────────────
-  const totalPaperCost = textPaper.totalCost + coverPaper.totalCost;
-  const totalPrintingCost = textPrinting.totalCost + coverPrinting.totalCost;
-  const totalCTPCost = textCTP.totalCost + coverCTP.totalCost;
-
-  const productionCost = totalPaperCost + totalPrintingCost + totalCTPCost + bindingResult.totalCost + totalFinishingCost;
-
-  if (!Number.isFinite(productionCost)) throw new Error("Calculation produced invalid result.");
-
-  // Rush surcharge
-  const rushMultiplier = input.turnaround === "standard" ? 1 : input.turnaround === "rush" ? 1.15 : 1.30;
-  const rushedCost = productionCost * rushMultiplier;
-  const rushSurcharge = rushedCost - productionCost;
-
-  // Customer discount
-  const customerDiscountPercent = input.customerDiscount;
-  const customerDiscountAmount = rushedCost * (customerDiscountPercent / 100);
-
-  // Volume discount
   const volumeDiscountPercent = calcVolumeDiscountPercent(qty);
-  const volumeDiscountAmount = rushedCost * (volumeDiscountPercent / 100);
+  const volumeDiscountAmount = out.totalProductionCost * (volumeDiscountPercent / 100);
 
-  const discountedCost = rushedCost - volumeDiscountAmount - customerDiscountAmount;
+  const customerDiscountAmount = out.totalProductionCost * (input.customerDiscount / 100);
 
-  // Minimum order
-  const minimumOrderValue = 25000;
-  const minimumOrderAdjustment = Math.max(0, minimumOrderValue - discountedCost);
-  const floorCost = discountedCost + minimumOrderAdjustment;
+  const discountedCost = out.totalProductionCost + rushSurcharge - volumeDiscountAmount - customerDiscountAmount;
+  const minimumOrderAdjustment = Math.max(0, 25000 - discountedCost);
 
-  // Selling price
-  const sellingBeforeTax = input.pricingMode === "margin"
-    ? floorCost / (1 - input.pricingPercent / 100)
-    : floorCost * (1 + input.pricingPercent / 100);
-
-  const taxAmount = sellingBeforeTax * (input.taxRate / 100);
-  const grandTotal = sellingBeforeTax + taxAmount;
-  const costPerCopy = qty > 0 ? floorCost / qty : 0;
-  const sellPerCopy = qty > 0 ? grandTotal / qty : 0;
-  const marginAmount = sellingBeforeTax - floorCost;
-
+  // Return mapped structure format suitable for AdvancedCostResult
   return {
     quantity: qty,
-    textPaper: textPaper as unknown as SectionPaperCost,
-    coverPaper: coverPaper as unknown as SectionPaperCost,
-    totalPaperCost: round2(totalPaperCost),
-    textPrinting,
-    coverPrinting,
-    totalPrintingCost: round2(totalPrintingCost),
-    textCTP,
-    coverCTP,
-    totalCTPCost: round2(totalCTPCost),
-    bindingCost: round2(bindingResult.totalCost),
-    bindingCostPerCopy: round2(bindingResult.costPerCopy),
-    bindingBreakdown: bindingResult.breakdown,
-    laminationCost: round2(laminationCost),
-    spotUVCost: round2(spotUVCost),
-    embossingCost: round2(embossingCost),
-    foilBlockingCost: round2(foilBlockingCost),
-    dieCuttingCost: round2(dieCuttingCost),
-    totalFinishingCost: round2(totalFinishingCost),
-    productionCost: round2(productionCost),
-    rushSurcharge: round2(rushSurcharge),
+    textPaper: textPaper!,
+    coverPaper: (coverPaper || textPaper)!,
+    totalPaperCost: out.totalPaperCost,
+
+    textPrinting: textPrinting!,
+    coverPrinting: (coverPrinting || textPrinting)!,
+    totalPrintingCost: out.totalPrintingCost,
+
+    textCTP: textCTP!,
+    coverCTP: (coverCTP || textCTP)!,
+    totalCTPCost: out.totalCTPCost,
+
+    bindingCost: out.bindingCost,
+    bindingCostPerCopy: out.bindingCostPerCopy,
+    bindingBreakdown: out.bindingBreakdown,
+
+    laminationCost: Object.entries(out.finishingBreakdown).filter(([k]) => k.includes("lamination")).reduce((sum, [, v]) => sum + v, 0),
+    spotUVCost: Object.entries(out.finishingBreakdown).filter(([k]) => k.includes("spot UV")).reduce((sum, [, v]) => sum + v, 0),
+    embossingCost: Object.entries(out.finishingBreakdown).filter(([k]) => k.includes("embossing")).reduce((sum, [, v]) => sum + v, 0),
+    foilBlockingCost: Object.entries(out.finishingBreakdown).filter(([k]) => k.includes("stamping")).reduce((sum, [, v]) => sum + v, 0),
+    dieCuttingCost: Object.entries(out.finishingBreakdown).filter(([k]) => k.includes("die cutting")).reduce((sum, [, v]) => sum + v, 0),
+    totalFinishingCost: out.finishingCost,
+
+    productionCost: out.totalProductionCost,
+    rushSurcharge,
     volumeDiscountPercent,
-    volumeDiscountAmount: round2(volumeDiscountAmount),
-    customerDiscountPercent,
-    customerDiscountAmount: round2(customerDiscountAmount),
-    minimumOrderAdjustment: round2(minimumOrderAdjustment),
-    sellingBeforeTax: round2(sellingBeforeTax),
-    taxAmount: round2(taxAmount),
-    grandTotal: round2(grandTotal),
-    costPerCopy: round2(costPerCopy),
-    sellPerCopy: round2(sellPerCopy),
-    marginAmount: round2(marginAmount),
-    spineThickness,
-    spineWithBoard,
-    bookWeight,
-    totalReams: round2(textPaper.reams + coverPaper.reams),
-    totalPlates: textPrinting.totalPlates + coverPrinting.totalPlates,
-    totalImpressions: textPrinting.totalImpressions + coverPrinting.totalImpressions,
-    totalForms: textPaper.imposition.numberOfForms + coverPaper.imposition.numberOfForms,
-    ups: textPaper.imposition.ups,
-    formatSize: textPaper.imposition.formatLabel,
-    paperSizeUsed: textPaper.imposition.paperSizeLabel,
-    textPPPerForm: textPaper.imposition.ppPerForm,
-    textWastageSheets: textPaper.wastageResult.totalWasteSheets,
-    machineUsed: machine.name,
-    coverMachineUsed: coverMachine.name,
+    volumeDiscountAmount,
+    customerDiscountPercent: input.customerDiscount,
+    customerDiscountAmount,
+    minimumOrderAdjustment,
+
+    sellingBeforeTax: out.totalSellingPrice - out.taxAmount,
+    taxAmount: out.taxAmount,
+    grandTotal: out.totalSellingPrice,
+    costPerCopy: out.totalCostPerCopy,
+    sellPerCopy: out.sellingPricePerCopy,
+    marginAmount: out.marginAmount,
+
+    spineThickness: out.spineThickness,
+    spineWithBoard: out.spineWithBoard,
+    bookWeight: {
+      textWeight: 0,
+      coverWeight: 0,
+      boardWeight: 0,
+      endleavesWeight: 0,
+      jacketWeight: 0,
+      miscWeight: 0,
+      totalWeight: out.totalWeight / Math.max(1, out.quantity) * 1000,
+      totalWeightKg: out.totalWeight / Math.max(1, out.quantity),
+    },
+    totalReams: out.paperCosts.reduce((s, p) => s + p.reams, 0),
+    totalPlates: out.printingCosts.reduce((s, p) => s + p.totalPlates, 0),
+    totalImpressions: out.printingCosts.reduce((s, p) => s + p.totalImpressions, 0),
+    totalForms: textPaper ? textPaper.numberOfForms : 0,
+    ups: textPaper ? textPaper.ups : 1,
+    formatSize: textPaper ? textPaper.formatSize : "",
+    paperSizeUsed: textPaper ? textPaper.paperSize : "",
+
+    textPPPerForm: textPaper ? textPaper.ppPerForm : 16,
+    textWastageSheets: textPaper ? textPaper.wastageSheets : 0,
+
+    machineUsed: textPrinting ? textPrinting.machineName : "Unknown",
+    coverMachineUsed: coverPrinting ? coverPrinting.machineName : "Unknown",
   };
 }
 

@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { useAppStore } from "@/stores/appStore";
 import { setApiToken } from "@/api/client";
 import { MainLayout } from "@/layouts/MainLayout";
@@ -18,6 +18,7 @@ import { ProfileSettings } from "@/pages/ProfileSettings";
 
 export default function App() {
   const { isOnboarded, theme } = useAppStore();
+  const navigate = useNavigate();
 
   // Apply theme to document
   useEffect(() => {
@@ -32,6 +33,25 @@ export default function App() {
   useEffect(() => {
     setApiToken(localStorage.getItem("print-estimator-api-token") || "");
   }, []);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+N or Cmd+N - New Estimate
+      if ((e.ctrlKey || e.metaKey) && e.key === "n") {
+        e.preventDefault();
+        navigate("/estimate/new");
+      }
+      // Ctrl+S or Cmd+S - Save (handled by stores)
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault();
+        // Trigger save action
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [navigate]);
 
   // Not onboarded — show onboarding
   if (!isOnboarded) {

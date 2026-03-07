@@ -1,22 +1,34 @@
+﻿// ============================================================================
+// PAPER PHYSICS & AUTO-PLANNING ENGINE — THOMSON PRESS CALIBRATED (REWRITE)
 // ============================================================================
-// PAPER PHYSICS & MICRO-WASTAGE ENGINE (GOD-LEVEL)
-// ============================================================================
-// Model: Directed Acyclic Graph Node
-// 
-// This module models paper as a physical material with measurable properties:
-// - Grain direction & fold cracking thermodynamics
-// - Moisture-adjusted weight precision (3 decimals)
-// - Compound, sequential spoilage cascading
-// - Constraint-satisfaction imposition optimization
+// This module:
+//   1. Resolves paper substrate (type, GSM, cost, bulk factor)
+//   2. AUTO-PLANS: Evaluates ALL standard paper sizes to find optimal fit
+//      with correct grain direction and minimal wastage
+//   3. Calculates imposition (pages per form, ups, format)
+//   4. Computes wastage using Thomson Press EXACT additive wastage method:
+//      total_waste = M/R_waste_sheets + running_waste_sheets (ADDITIVE)
+//   5. Precision weight & cost calculation
+//
+// CALIBRATION TARGET:
+//   Text 1: 32pp 150GSM Matt at Rs 14.454/copy
+//   Endleaves: 140GSM White Uncoated
+//   Cover: 150GSM Matt
+//   TOTAL PAPER: Rs 21.53/copy (Rs 43,051 for 2000 copies)
+//
+// CRITICAL WASTAGE RULE:
+//   WRONG: qty × (1 + waste1%) × (1 + waste2%) = MULTIPLICATIVE (INFLATED)
+//   RIGHT: qty + waste1_sheets + waste2_sheets = ADDITIVE (CORRECT)
 // ============================================================================
 
-import { STANDARD_PAPER_SIZES } from "@/constants";
+import { STANDARD_PAPER_SIZES, BULK_FACTORS } from "@/constants";
 import { mmToInch } from "@/utils/format";
 import { useInventoryStore } from "@/stores/inventoryStore";
 import { useRateCardStore } from "@/stores/rateCardStore";
-import { ENGINE_CONSTANTS } from "./constants";
+import type { ProcurementRecommendation } from "@/types";
+import { lookupTPWastagePercent, lookupTPMachineReadyWastage, TP_BIBLE_PAPER_SURCHARGES } from "./constants";
 
-// ─── TYPES & INTERFACES ─────────────────────────────────────────────────────
+// â”€â”€â”€ TYPES & INTERFACES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export interface SubstratePhysicalModel {
   grammage_gsm: number;
@@ -56,6 +68,21 @@ export interface SubstratePhysicalModel {
   reamsPerPallet: number;
   kgPerPallet: number;
   minimumOrderQty_kg: number;
+  sourceSelection?: {
+    source: 'rate_card' | 'inventory' | 'fallback';
+    reference?: string;
+    inStock: boolean;
+    confidence: number;
+  };
+  candidateMatches?: Array<{
+    source: 'rate_card' | 'inventory';
+    reference: string;
+    paperType: string;
+    gsm: number;
+    size: string;
+    costPerKg: number;
+    inStock: boolean;
+  }>;
 }
 
 export interface SheetLayout {
@@ -223,9 +250,10 @@ export interface PaperCalculationInput {
   gripperMM?: number;
   bleedMM?: number;
   spineThickness?: number;
-  operations?: SpoilageOperation[]; // List of downstream ops to include in compound waste
+  operations?: SpoilageOperation[];
   bindingMethod?: string;
   printingMethod?: 'SHEETWISE' | 'WORK_AND_TURN' | 'WORK_AND_TUMBLE' | 'PERFECTING';
+  machineCode?: string; // Machine code for M/R wastage lookup
 }
 
 export interface PaperCalculationResult {
@@ -251,75 +279,181 @@ export interface PaperCalculationResult {
   grainAnalysis: GrainAnalysisResult;
   weightCalculation: PaperWeightCalculation;
   substrate: SubstratePhysicalModel;
+  sourceSelection?: {
+    source: 'rate_card' | 'inventory' | 'fallback';
+    reference?: string;
+    confidence: number;
+    inStock: boolean;
+  };
+  procurementRecommendation?: ProcurementRecommendation;
+  autoPlanning?: {
+    bestPaperSize: string;
+    allEvaluated: { paperSize: string; ups: number; wastagePercent: number; grainOk: boolean; totalCost: number; selected: boolean }[];
+  };
 }
 
-// ─── 1. SUBSTRATE MODEL RESOLVER ─────────────────────────────────────────────
+// â”€â”€â”€ 1. SUBSTRATE MODEL RESOLVER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function resolveSubstrate(gsm: number, paperType: string, paperCode: string, sizeLabel: string): SubstratePhysicalModel {
   const { items = [] } = useInventoryStore.getState();
   const { paperRates = [] } = useRateCardStore.getState();
 
-  // Default fallback physics
-
   const isCoated = paperType.toLowerCase().includes('coated') || paperType.toLowerCase().includes('art') || paperType.toLowerCase().includes('gloss') || paperType.toLowerCase().includes('matt');
+  const wantsAutoSize = !sizeLabel || sizeLabel === 'auto' || sizeLabel === '';
 
-  let costPerKg = 80; // default fallback (INR)
+  // Default costPerKg based on Thomson Press rates
+  let costPerKg = 80; // Default: Matt Art Paper
+  if (paperType.toLowerCase().includes('uncoated') || paperCode.toLowerCase() === 'map') {
+    costPerKg = 82;
+  } else if (paperType.toLowerCase().includes('gloss')) {
+    costPerKg = 82;
+  } else if (paperCode.toLowerCase() === 'cw') {
+    costPerKg = 76.5;
+  } else if (paperCode.toLowerCase() === 'hb') {
+    costPerKg = 73;
+  } else if (paperCode.toLowerCase() === 'sp') {
+    costPerKg = 91;
+  }
+
   let sheetWidthMM = 585; // 23"
   let sheetHeightMM = 915; // 36"
 
-  const sizeObj = STANDARD_PAPER_SIZES.find(s => s.label === sizeLabel);
+  const normalizeSizeLabel = (raw: string): string => raw.replace("x", "×");
+  const toSize = (label: string) => STANDARD_PAPER_SIZES.find((s) => s.label === label || s.label.replace("×", "x") === label);
+  const sizeObj = toSize(sizeLabel);
   if (sizeObj) {
     sheetWidthMM = sizeObj.widthMM;
     sheetHeightMM = sizeObj.heightMM;
   }
 
-  // Try rate card
-  const rMatch = paperRates.find(r => r.status === 'active' && (r.paperType === paperType || r.code === paperCode) && r.gsm === gsm && r.size === sizeLabel);
-  if (rMatch) {
-    // If we have chargeRate and it's per ream
-    const sizeAreaSqM = (sheetWidthMM / 1000) * (sheetHeightMM / 1000);
-    const reamWeightKg = sizeAreaSqM * gsm / 1000 * 500;
-    costPerKg = rMatch.chargeRate / reamWeightKg;
-  } else {
-    // Try inventory
-    const iMatch = items.find(i => i.category === "paper" && i.status === "active" && (i.sku === paperCode || i.name.toLowerCase().includes(paperType.toLowerCase())) && i.name.includes(gsm.toString()));
-    if (iMatch) {
-      const sizeAreaSqM = (sheetWidthMM / 1000) * (sheetHeightMM / 1000);
-      const reamWeightKg = sizeAreaSqM * gsm / 1000 * 500;
-      // Use sellingPrice if available (already includes margin), else costPerUnit directly
-      const usableRate = (iMatch.sellingPrice > 0) ? iMatch.sellingPrice : iMatch.costPerUnit;
-      if (usableRate > 0) {
-        costPerKg = usableRate / reamWeightKg;
-      }
-    }
-  }
-
-  // Physics inference
-  const grainDir = sheetWidthMM > sheetHeightMM ? 'SHORT_GRAIN' : 'LONG_GRAIN'; // Standard assumption if not specified
-
-  const bulkMap: Record<string, number> = {
-    matt: 1.0, gloss: 0.9, CW: 1.4, HB: 2.3, Hcream: 2.3, map: 1.3, SP: 1.3, ML70: 2.0, "Art card": 1.2, C1s: 1.6, Scream: 2.4, Wib: 1.25, "Bible Paper": 0.7
+  type Candidate = {
+    source: 'rate_card' | 'inventory';
+    reference: string;
+    paperType: string;
+    gsm: number;
+    sizeLabel: string;
+    widthMM: number;
+    heightMM: number;
+    costPerKg: number;
+    inStock: boolean;
   };
 
+  const computeCostPerKg = (reamRate: number, width: number, height: number) => {
+    const sizeAreaSqM = (width / 1000) * (height / 1000);
+    const reamWeightKg = sizeAreaSqM * gsm / 1000 * (gsm > 200 ? 250 : 500);
+    return reamRate > 0 && reamWeightKg > 0 ? reamRate / reamWeightKg : 0;
+  };
+
+  const rateCandidates: Candidate[] = paperRates
+    .filter((r) => {
+      if (r.status !== 'active') return false;
+      if (!(r.paperType === paperType || r.code === paperCode)) return false;
+      if (r.gsm !== gsm) return false;
+      if (wantsAutoSize) return true;
+      return normalizeSizeLabel(r.size) === normalizeSizeLabel(sizeLabel);
+    })
+    .map((r) => {
+      const size = toSize(r.size) || sizeObj || STANDARD_PAPER_SIZES[0];
+      return {
+        source: 'rate_card' as const,
+        reference: r.itemCode || r.code || r.id,
+        paperType: r.paperType,
+        gsm: r.gsm,
+        sizeLabel: size.label,
+        widthMM: size.widthMM,
+        heightMM: size.heightMM,
+        costPerKg: computeCostPerKg(r.chargeRate, size.widthMM, size.heightMM),
+        inStock: true,
+      };
+    })
+    .filter((candidate) => candidate.costPerKg > 0);
+
+  const inventoryCandidates: Candidate[] = items
+    .filter((item) => item.category === 'paper' && item.status === 'active')
+    .filter((item) => {
+      const lower = item.name.toLowerCase();
+      const paperTypeMatch = lower.includes(paperType.toLowerCase()) || item.sku === paperCode || item.itemCode === paperCode;
+      const gsmMatch = lower.includes(gsm.toString());
+      return paperTypeMatch && gsmMatch;
+    })
+    .map((item) => {
+      const size = sizeObj || STANDARD_PAPER_SIZES[0];
+      const usableRate = item.sellingPrice > 0 ? item.sellingPrice : item.costPerUnit;
+      return {
+        source: 'inventory' as const,
+        reference: item.itemCode || item.sku || item.id,
+        paperType: item.name || paperType,
+        gsm,
+        sizeLabel: size.label,
+        widthMM: size.widthMM,
+        heightMM: size.heightMM,
+        costPerKg: computeCostPerKg(usableRate, size.widthMM, size.heightMM),
+        inStock: (item.stock || 0) > 0,
+      };
+    })
+    .filter((candidate) => candidate.costPerKg > 0);
+
+  const candidates = [...rateCandidates, ...inventoryCandidates];
+  let sourceSelection: SubstratePhysicalModel['sourceSelection'] = {
+    source: 'fallback',
+    inStock: false,
+    confidence: 0.2,
+  };
+
+  if (candidates.length > 0) {
+    const sortedByCost = [...candidates].sort((a, b) => a.costPerKg - b.costPerKg);
+    const cheapest = sortedByCost[0];
+    const inventoryPreferred = sortedByCost.find((candidate) =>
+      candidate.inStock && candidate.costPerKg <= cheapest.costPerKg * 1.07
+    );
+    const selected = inventoryPreferred || cheapest;
+
+    costPerKg = selected.costPerKg;
+    sheetWidthMM = selected.widthMM;
+    sheetHeightMM = selected.heightMM;
+    sourceSelection = {
+      source: selected.source,
+      reference: selected.reference,
+      inStock: selected.inStock,
+      confidence: selected.source === 'inventory' ? 0.9 : 0.86,
+    };
+  }
+
+  // Grain direction: Standard convention â€” long dimension is grain direction
+  const grainDir = sheetHeightMM > sheetWidthMM ? 'LONG_GRAIN' : 'SHORT_GRAIN';
+
+  // Bulk factor from Thomson Press table
   let bulkFactor = 1.1; // Default
-  for (const [key, val] of Object.entries(bulkMap)) {
-    if (paperCode.toLowerCase().includes(key.toLowerCase()) || paperType.toLowerCase().includes(key.toLowerCase())) {
+  for (const [key, val] of Object.entries(BULK_FACTORS)) {
+    if (paperCode.toLowerCase() === key.toLowerCase() || paperType.toLowerCase() === key.toLowerCase()) {
       bulkFactor = val;
       break;
     }
   }
+  // Partial match fallback
+  if (bulkFactor === 1.1) {
+    for (const [key, val] of Object.entries(BULK_FACTORS)) {
+      if (paperCode.toLowerCase().includes(key.toLowerCase()) || paperType.toLowerCase().includes(key.toLowerCase())) {
+        bulkFactor = val;
+        break;
+      }
+    }
+  }
+
+  // Sheets per ream: 500 standard (250 for heavy stock)
+  const sheetsPerReam = gsm > 200 ? 250 : 500;
 
   return {
     grammage_gsm: gsm,
-    actualGrammage_gsm: gsm * 1.02, // +2% typical mill delivery
+    actualGrammage_gsm: gsm,
     caliper_microns: gsm * bulkFactor,
-    bulkFactor: bulkFactor,
+    bulkFactor,
     sheets_per_cm: 10000 / (gsm * bulkFactor),
     grainDirection: grainDir,
     fiberContent: 'VIRGIN',
     recycledPercent: 0,
-    moistureContent_percent: ENGINE_CONSTANTS.paper.standardMoistureContent_percent,
-    equilibriumRH_percent: ENGINE_CONSTANTS.paper.standardEquilibriumRH_percent,
-    ambientRH_percent: 55, // Typical print room RH
+    moistureContent_percent: 5.0,
+    equilibriumRH_percent: 50,
+    ambientRH_percent: 55,
     dimensionalChange_crossGrain_percentPerPercentRH: 0.1,
     dimensionalChange_withGrain_percentPerPercentRH: 0.02,
     surfaceFinish: isCoated ? (paperType.toLowerCase().includes('gloss') ? 'GLOSS_COATED' : 'MATT_COATED') : 'UNCOATED',
@@ -340,16 +474,25 @@ function resolveSubstrate(gsm: number, paperType: string, paperCode: string, siz
     dustingFactor: isCoated ? 'LOW' : 'MODERATE',
     parentSheetWidth_mm: sheetWidthMM,
     parentSheetHeight_mm: sheetHeightMM,
-    costPerKg: costPerKg,
+    costPerKg,
     costPerSheet_parent: (sheetWidthMM / 1000) * (sheetHeightMM / 1000) * (gsm / 1000) * costPerKg,
-    sheetsPerReam: gsm > 200 ? 250 : 500,
+    sheetsPerReam,
     reamsPerPallet: gsm > 200 ? 40 : 20,
     kgPerPallet: 800,
-    minimumOrderQty_kg: 500
+    minimumOrderQty_kg: 500,
+    sourceSelection,
+    candidateMatches: candidates.slice(0, 5).map((candidate) => ({
+      source: candidate.source,
+      reference: candidate.reference,
+      paperType: candidate.paperType,
+      gsm: candidate.gsm,
+      size: candidate.sizeLabel,
+      costPerKg: candidate.costPerKg,
+      inStock: candidate.inStock,
+    })),
   };
 }
-
-// ─── 2. GRAIN ANALYSIS ENGINE ────────────────────────────────────────────────
+// â”€â”€â”€ 2. GRAIN ANALYSIS ENGINE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function analyzeGrainDirection(
   pageWidthMM: number, pageHeightMM: number,
   sheetWidthMM: number, sheetHeightMM: number,
@@ -358,7 +501,6 @@ function analyzeGrainDirection(
   scoringCostPerSheet: number = 0.5
 ): GrainAnalysisResult {
 
-  // Calculate yields
   const pagesAcross_P = Math.floor(sheetWidthMM / pageWidthMM);
   const pagesDown_P = Math.floor(sheetHeightMM / pageHeightMM);
   const yield_P = pagesAcross_P * pagesDown_P;
@@ -373,48 +515,41 @@ function analyzeGrainDirection(
     pagesAcross: pagesAcross_L, pagesDown: pagesDown_L, pagesPerPressSheet: yield_L, orientation: 'LANDSCAPE', totalPressSheets_fromParent: 1, wasteArea_sqmm: (sheetWidthMM * sheetHeightMM) - (yield_L * pageWidthMM * pageHeightMM)
   };
 
-  // Determine Grain Compatibility
-  // Long Grain format means fibers parallel to Long Edge (usually Height)
-  let portraitProvidesGrainParallelToSpine = false;
-  let landscapeProvidesGrainParallelToSpine = false;
+  let portraitGrainOk = false;
+  let landscapeGrainOk = false;
 
   if (substrate.grainDirection === 'LONG_GRAIN') {
-    portraitProvidesGrainParallelToSpine = true;  // spine is pageHeight, which aligns with sheetHeight (long grain)
-    landscapeProvidesGrainParallelToSpine = false; // spine aligns with sheetWidth (short grain)
+    portraitGrainOk = true;
+    landscapeGrainOk = false;
   } else {
-    // Short grain (fibers parallel to short edge, usually Width)
-    portraitProvidesGrainParallelToSpine = false;
-    landscapeProvidesGrainParallelToSpine = true;
+    portraitGrainOk = false;
+    landscapeGrainOk = true;
   }
 
   let grainOptimalLayout: SheetLayout = yieldOptimalLayout;
   let grainCompliant = false;
 
   if (requiredGrain === 'PARALLEL_TO_SPINE') {
-    if (yieldOptimalLayout.orientation === 'PORTRAIT' && portraitProvidesGrainParallelToSpine) grainCompliant = true;
-    if (yieldOptimalLayout.orientation === 'LANDSCAPE' && landscapeProvidesGrainParallelToSpine) grainCompliant = true;
+    if (yieldOptimalLayout.orientation === 'PORTRAIT' && portraitGrainOk) grainCompliant = true;
+    if (yieldOptimalLayout.orientation === 'LANDSCAPE' && landscapeGrainOk) grainCompliant = true;
 
     if (!grainCompliant) {
-      // Force grain optimal layout
-      if (portraitProvidesGrainParallelToSpine) {
+      if (portraitGrainOk) {
         grainOptimalLayout = { pagesAcross: pagesAcross_P, pagesDown: pagesDown_P, pagesPerPressSheet: yield_P, orientation: 'PORTRAIT', totalPressSheets_fromParent: 1, wasteArea_sqmm: (sheetWidthMM * sheetHeightMM) - (yield_P * pageWidthMM * pageHeightMM) };
       } else {
         grainOptimalLayout = { pagesAcross: pagesAcross_L, pagesDown: pagesDown_L, pagesPerPressSheet: yield_L, orientation: 'LANDSCAPE', totalPressSheets_fromParent: 1, wasteArea_sqmm: (sheetWidthMM * sheetHeightMM) - (yield_L * pageWidthMM * pageHeightMM) };
       }
     }
   } else {
-    grainCompliant = true; // ANY or irrelevant
+    grainCompliant = true;
   }
 
-  // Cost analysis
   const requiresScoring = !grainCompliant && substrate.grammage_gsm >= 170;
-
-  // Actually calculate the difference in sheets for a theoretical 1000 copy run to get delta
   const theoreticalQty = 1000;
   const yieldSheets = Math.ceil(theoreticalQty / yieldOptimalLayout.pagesPerPressSheet);
   const grainSheets = Math.ceil(theoreticalQty / (grainOptimalLayout.pagesPerPressSheet || 1));
   const yieldDelta_sheets = grainSheets - yieldSheets;
-  const yieldDelta_percent = (yieldDelta_sheets / grainSheets) * 100;
+  const yieldDelta_percent = grainSheets > 0 ? (yieldDelta_sheets / grainSheets) * 100 : 0;
   const yieldDelta_cost = yieldDelta_sheets * substrate.costPerSheet_parent;
 
   let recommendation: 'COMPLY' | 'OVERRIDE_WITH_SCORING' | 'OVERRIDE_ACCEPTABLE' = 'COMPLY';
@@ -428,7 +563,7 @@ function analyzeGrainDirection(
         reason = "Paper savings exceed scoring costs. Proceed cross-grain and score.";
       } else {
         recommendation = 'COMPLY';
-        reason = "Grain compliant yield loss is cheaper than scoring operation. Use compliant layout.";
+        reason = "Grain compliant yield loss is cheaper than scoring. Use compliant layout.";
       }
     } else {
       recommendation = 'COMPLY';
@@ -452,80 +587,93 @@ function analyzeGrainDirection(
   };
 }
 
-// ─── 3. IMPOSITION CALCULATOR (CONSTRAINT SATISFACTION) ──────────────────────
-function calculateImpositionGodLevel(input: ImpositionInput, _substrate: SubstratePhysicalModel): ImpositionResult {
+// â”€â”€â”€ 3. THOMSON PRESS FORMAT / IMPOSITION CALCULATOR â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Uses Thomson Press rules:
+//   < 8pp â†’ 4pp/form, 8-16pp â†’ 8pp/form, 16-32pp â†’ 16pp/form, â‰¥32pp â†’ 32pp/form
+
+function calculatePPPerForm(totalPages: number, sectionType: string): number {
+  if (sectionType === 'cover' || sectionType === 'jacket') return totalPages; // Cover = 1 form always
+  if (sectionType === 'endleaves') return Math.min(8, totalPages); // Endleaves = typically 4 or 8
+  if (totalPages < 8) return 4;
+  if (totalPages <= 16) return 8;
+  if (totalPages <= 32) return 8;  // Thomson Press uses 8pp forms for 32pp text
+  return 16; // Larger books use 16pp forms
+}
+
+function calculateImpositionTP(input: ImpositionInput, substrate: SubstratePhysicalModel): ImpositionResult {
   const bleed = input.bleed_mm ?? 3;
   const gripper = input.gripper_mm ?? 12;
   const tail = input.machineTailMargin_mm ?? 8;
   const side = input.machineSideMargin_mm ?? 5;
 
+  // Trim size with bleed
   const trimW = input.finishedPageWidth_mm + (bleed * 2);
   const trimH = input.finishedPageHeight_mm + (bleed * 2);
 
   const sheetW = input.parentSheetWidth_mm;
   const sheetH = input.parentSheetHeight_mm;
 
-  // Imposition constraints: press sheet must fit on machine
+  // Press sheet = parent sheet (or half if too large for machine)
   let pressSheetW = sheetW;
   let pressSheetH = sheetH;
-  let maxW = (input.machineMaxWidth_mm || 9999);
-  let maxH = (input.machineMaxHeight_mm || 9999);
+  const maxW = (input.machineMaxWidth_mm || 9999);
+  const maxH = (input.machineMaxHeight_mm || 9999);
 
-  if (pressSheetW > maxW || pressSheetH > maxH) {
-    // If parent sheet is larger than machine, we must cut it.
-    // Assuming cutting in half for simplicity in this engine.
-    if (pressSheetW > maxW) pressSheetW /= 2;
-    if (pressSheetH > maxH) pressSheetH /= 2;
-  }
+  if (pressSheetW > maxW) pressSheetW = Math.floor(pressSheetW / 2);
+  if (pressSheetH > maxH) pressSheetH = Math.floor(pressSheetH / 2);
 
-  // Available printable area
+  // Available printable area (after gripper, tail, side margins)
   const printableW = pressSheetW - (side * 2);
   const printableH = pressSheetH - gripper - tail;
 
-  // Calculate ups
-  const upsAcross = Math.floor(printableW / trimW);
-  const upsDown = Math.floor(printableH / trimH);
-  let upsPortrait = upsAcross * upsDown;
+  // Calculate ups in both orientations
+  const upsAcrossP = Math.floor(printableW / trimW);
+  const upsDownP = Math.floor(printableH / trimH);
+  const upsPortrait = upsAcrossP * upsDownP;
 
   const upsAcrossL = Math.floor(printableW / trimH);
   const upsDownL = Math.floor(printableH / trimW);
-  let upsLandscape = upsAcrossL * upsDownL;
+  const upsLandscape = upsAcrossL * upsDownL;
 
   const orientation = upsPortrait >= upsLandscape ? 'PORTRAIT' : 'LANDSCAPE';
-  const ups = Math.max(upsPortrait, upsLandscape);
+  const ups = Math.max(upsPortrait, upsLandscape, 1);
 
-  // Deduce PP per form based on total pages and upset
-  let ppPerForm = Math.min(ups * 2, input.totalPages);
-  if (ppPerForm > 32) ppPerForm = 32; // Standard folding clamp
-  if (ppPerForm === 0) ppPerForm = 4;
+  // Determine pp per form using Thomson Press rules
+  let ppPerForm = calculatePPPerForm(input.totalPages, '');
+  // For sheetwise, pp per form cannot exceed ups * 2 (both sides)
+  ppPerForm = Math.min(ppPerForm, ups * 2, input.totalPages);
+  if (ppPerForm <= 0) ppPerForm = Math.min(4, input.totalPages);
 
-  const numberOfForms = Math.ceil(input.totalPages / ppPerForm);
+  const numberOfForms = Math.max(1, Math.ceil(input.totalPages / ppPerForm));
   const leavesPerForm = ppPerForm / 2;
-  const sheetsPerCopy = numberOfForms / ups;
+  const sheetsPerCopy = numberOfForms; // Each form needs 1 sheet per copy
 
   const printableArea = printableW * printableH;
   const usedArea = ups * trimW * trimH;
   const wasteArea = (pressSheetW * pressSheetH) - usedArea;
-  const areaUtilization = (usedArea / (pressSheetW * pressSheetH)) * 100;
+  const areaUtilization = ((usedArea) / (pressSheetW * pressSheetH)) * 100;
+
+  // Press sheets cut from parent
+  const pressFromParent = Math.max(1, Math.floor((sheetW * sheetH) / (pressSheetW * pressSheetH)));
 
   return {
     pagesPerPressSheet: ups,
     pressSheetWidth_mm: pressSheetW,
     pressSheetHeight_mm: pressSheetH,
-    pagesAcross: orientation === 'PORTRAIT' ? upsAcross : upsAcrossL,
-    pagesDown: orientation === 'PORTRAIT' ? upsDown : upsDownL,
+    pagesAcross: orientation === 'PORTRAIT' ? upsAcrossP : upsAcrossL,
+    pagesDown: orientation === 'PORTRAIT' ? upsDownP : upsDownL,
     orientation,
     printableArea_sqmm: printableArea,
     usedArea_sqmm: usedArea,
     wasteArea_sqmm: wasteArea,
     areaUtilization_percent: areaUtilization,
-    pressSheetsCutFromParent: Math.floor((sheetW * sheetH) / (pressSheetW * pressSheetH)),
+    pressSheetsCutFromParent: pressFromParent,
     parentSheetWaste_sqmm: 0,
     parentSheetUtilization_percent: areaUtilization,
     totalPressSheets: Math.ceil(input.totalPages / (ups * 2)),
-    totalParentSheets: Math.ceil((Math.ceil(input.totalPages / (ups * 2))) / Math.floor((sheetW * sheetH) / (pressSheetW * pressSheetH))),
+    totalParentSheets: Math.ceil(Math.ceil(input.totalPages / (ups * 2)) / pressFromParent),
     alternativeLayouts: [],
-    selectedLayoutReason: 'Highest area utilization within machine constraints',
+    selectedLayoutReason: 'Auto-planned: best yield with grain compliance',
     grainCompliant: true,
     grainPenalty_sheets: 0,
     grainPenalty_cost: 0,
@@ -533,111 +681,206 @@ function calculateImpositionGodLevel(input: ImpositionInput, _substrate: Substra
     numberOfForms,
     ups,
     paperSizeId: "ps_custom",
-    paperSizeLabel: `${sheetW}x${sheetH}mm`,
+    paperSizeLabel: `${Math.round(sheetW / 25.4)}×${Math.round(sheetH / 25.4)}`,
     paperWidthInch: mmToInch(sheetW),
     paperHeightInch: mmToInch(sheetH),
     formatWidth: mmToInch(pressSheetW),
     formatHeight: mmToInch(pressSheetH),
-    formatLabel: `${mmToInch(pressSheetW).toFixed(1)}x${mmToInch(pressSheetH).toFixed(1)}"`,
+    formatLabel: `${mmToInch(pressSheetW).toFixed(1)}×${mmToInch(pressSheetH).toFixed(1)}"`,
     leavesPerForm,
     sheetsPerCopy
   };
 }
 
-// ─── 4. COMPOUND SPOILAGE CASCADE ────────────────────────────────────────────
-function calculateCompoundSpoilage(
-  finishedQuantity: number,
-  operations: SpoilageOperation[],
-  substrate: SubstratePhysicalModel
-): CompoundSpoilageResult {
+// â”€â”€â”€ 4. AUTO PAPER PLANNING ENGINE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+interface PaperPlanOption {
+  paperSize: typeof STANDARD_PAPER_SIZES[number];
+  ups: number;
+  orientation: 'PORTRAIT' | 'LANDSCAPE';
+  grainOk: boolean;
+  wastagePercent: number;
+  totalCost: number;
+  costPerCopy: number;
+  selected: boolean;
+}
 
-  const chain: SpoilageOperationResult[] = [];
-  let currentNeeded = finishedQuantity;
-  let totalSetup = 0;
-  let totalRunning = 0;
+function autoPlanPaperSize(
+  trimWidthMM: number,
+  trimHeightMM: number,
+  gsm: number,
+  costPerKg: number,
+  quantity: number,
+  totalPages: number,
+  sectionType: string,
+  bleedMM: number = 3,
+  spineThickness: number = 0,
+): { bestSize: typeof STANDARD_PAPER_SIZES[number]; options: PaperPlanOption[] } {
 
-  // Work backwards from finished to printing
-  // Sort operations by sequence descending (highest number is last op)
-  const sortedOps = [...operations].sort((a, b) => b.operationSequence - a.operationSequence);
-
-  for (const op of sortedOps) {
-    // Apply modifiers
-    let baseRate = op.spoilageRate_percent / 100;
-
-    let effectiveRate = baseRate * op.stockWeightModifier * op.colorComplexityModifier * op.runLengthModifier * op.grainDirectionModifier * op.coatingModifier * op.repeatJobModifier;
-
-    // Safety clamp (max 50% spoilage per op to prevent infinite explosion)
-    if (effectiveRate > 0.5) effectiveRate = 0.5;
-
-    const enteringRunning = Math.ceil(currentNeeded / (1 - effectiveRate));
-    const runningWaste = enteringRunning - currentNeeded;
-    const setupWaste = op.setupSpoilage_sheets;
-
-    const sheetsExiting = currentNeeded;
-    const sheetsEntering = enteringRunning + setupWaste;
-
-    const totalWaste = runningWaste + setupWaste;
-    totalSetup += setupWaste;
-    totalRunning += runningWaste;
-
-    chain.push({
-      operationName: op.operationName,
-      sheetsEntering: sheetsEntering,
-      sheetsExiting: sheetsExiting,
-      setupWaste,
-      runningWaste,
-      totalWaste,
-      effectiveSpoilageRate: effectiveRate * 100,
-      cumulativeWasteToThisPoint: totalSetup + totalRunning
-    });
-
-    currentNeeded = sheetsEntering;
+  let effectiveWidth = trimWidthMM;
+  if (sectionType === 'cover' && spineThickness > 0) {
+    effectiveWidth = trimWidthMM * 2 + spineThickness + 20; // 2 covers + spine + bleed
+  }
+  if (sectionType === 'jacket' && spineThickness > 0) {
+    effectiveWidth = trimWidthMM * 2 + spineThickness + 180; // Flaps
   }
 
-  // The first operation's sheetsEntering is what we must procure
-  const totalSheetsRequired = currentNeeded;
-  const totalWasteSheets = totalSetup + totalRunning;
-  const wastePercent = (totalWasteSheets / totalSheetsRequired) * 100;
-  const wasteCost = totalWasteSheets * substrate.costPerSheet_parent;
+  const trimW = effectiveWidth + (bleedMM * 2);
+  const trimH = trimHeightMM + (bleedMM * 2);
 
-  // Compare to naive 5%
-  const naive5 = Math.ceil(finishedQuantity * 1.05);
-  const flatError = totalSheetsRequired - naive5;
+  const gripper = 12;
+  const tail = 8;
+  const side = 5;
+
+  const options: PaperPlanOption[] = [];
+
+  for (const size of STANDARD_PAPER_SIZES) {
+    const sheetW = size.widthMM;
+    const sheetH = size.heightMM;
+
+    const printableW = sheetW - (side * 2);
+    const printableH = sheetH - gripper - tail;
+
+    // Portrait
+    const upsP = Math.floor(printableW / trimW) * Math.floor(printableH / trimH);
+    // Landscape
+    const upsL = Math.floor(printableW / trimH) * Math.floor(printableH / trimW);
+
+    const bestUps = Math.max(upsP, upsL);
+    if (bestUps <= 0) continue; // Sheet too small
+
+    const orient = upsP >= upsL ? 'PORTRAIT' : 'LANDSCAPE';
+
+    // Grain check
+    const isLongGrain = sheetH > sheetW;
+    const grainOk = orient === 'PORTRAIT' ? isLongGrain : !isLongGrain;
+
+    // Calculate cost for this option
+    const ppPerForm = calculatePPPerForm(totalPages, sectionType);
+    const effectivePPPerForm = Math.min(ppPerForm, bestUps * 2, totalPages);
+    const numberOfForms = Math.max(1, Math.ceil(totalPages / effectivePPPerForm));
+
+    // Net sheets needed
+    const netSheets = Math.ceil((quantity * numberOfForms) / bestUps);
+
+    // Wastage (using Thomson Press chart â€” running waste only for auto-planning)
+    const wastagePercent = lookupTPWastagePercent(netSheets);
+    const wastageSheets = Math.ceil(netSheets * wastagePercent / 100);
+    const grossSheets = netSheets + wastageSheets;
+
+    // Weight and cost
+    const sheetAreaSqM = (sheetW / 1000) * (sheetH / 1000);
+    const sheetWeightKg = sheetAreaSqM * gsm / 1000;
+    const totalWeightKg = grossSheets * sheetWeightKg;
+    const totalCost = totalWeightKg * costPerKg;
+    const costPerCopy = quantity > 0 ? totalCost / quantity : 0;
+
+    // Area utilization
+    const usedArea = bestUps * trimW * trimH;
+    const totalArea = sheetW * sheetH;
+    const utilization = (usedArea / totalArea) * 100;
+
+    options.push({
+      paperSize: size,
+      ups: bestUps,
+      orientation: orient,
+      grainOk,
+      wastagePercent: 100 - utilization,
+      totalCost,
+      costPerCopy,
+      selected: false,
+    });
+  }
+
+  // Sort: prefer grain-compliant, then lowest cost
+  options.sort((a, b) => {
+    if (a.grainOk && !b.grainOk) return -1;
+    if (!a.grainOk && b.grainOk) return 1;
+    return a.totalCost - b.totalCost;
+  });
+
+  const best = options.length > 0 ? options[0] : null;
+  if (best) best.selected = true;
 
   return {
-    finishedQuantityRequired: finishedQuantity,
-    operationChain: chain.reverse(), // Put in chronological order
-    totalSheetsRequired_printing: totalSheetsRequired,
-    totalMakereadyWaste: totalSetup,
-    totalRunningWaste: totalRunning,
-    totalWasteSheets,
-    totalWastePercent: wastePercent,
-    wasteSheetsCost: wasteCost,
-    flatWasteComparison_percent: 5.0,
-    flatWasteError_sheets: flatError,
-    flatWasteError_cost: flatError * substrate.costPerSheet_parent
+    bestSize: best ? best.paperSize : STANDARD_PAPER_SIZES[0],
+    options,
   };
 }
 
-// ─── 5. PRECISION WEIGHT CALCULATOR ──────────────────────────────────────────
+// â”€â”€â”€ 5. THOMSON PRESS WASTAGE (ADDITIVE â€” CORRECT) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// CRITICAL: Wastage is ADDITIVE, not multiplicative
+//   total_waste_sheets = make_ready_waste_sheets + running_waste_sheets
+//   make_ready_waste = M/R_per_colour Ã— number_of_colours (from TP table)
+//   running_waste = net_sheets Ã— running_waste_% / 100 (from TP impression chart)
+//
+// WRONG: qty Ã— (1 + waste1) Ã— (1 + waste2)
+// RIGHT: qty + waste1_sheets + waste2_sheets
+
+function calculateTPWastage(
+  netSheets: number,
+  maxColors: number,
+  substrate: SubstratePhysicalModel,
+  machineCode: string = 'RMGT',
+): CompoundSpoilageResult {
+  // 1. Make-Ready Wastage (sheets per colour per M/R)
+  // From TP table: FAV(4col)=12.5, REK(4col)=9, RMGT(4col)=10 sheets per colour
+  const mrPerColour = lookupTPMachineReadyWastage(machineCode, maxColors);
+  const makeReadyWaste = Math.ceil(mrPerColour * maxColors);
+
+  // 2. Running Wastage (percentage of net sheets from TP chart)
+  const runningWastePct = lookupTPWastagePercent(netSheets);
+  const runningWaste = Math.ceil(netSheets * runningWastePct / 100);
+
+  // 3. Bible/thin paper extra wastage
+  let thinPaperWaste = 0;
+  const gsm = substrate.grammage_gsm;
+  for (const surcharge of TP_BIBLE_PAPER_SURCHARGES) {
+    if (gsm >= surcharge.minGSM && gsm <= surcharge.maxGSM) {
+      thinPaperWaste = Math.ceil(netSheets * surcharge.extraWastagePercent / 100);
+      break;
+    }
+  }
+
+  // 4. TOTAL wastage is ADDITIVE
+  const totalWaste = makeReadyWaste + runningWaste + thinPaperWaste;
+  const grossSheets = netSheets + totalWaste;
+  const totalWastePercent = netSheets > 0 ? (totalWaste / netSheets) * 100 : 0;
+
+  return {
+    finishedQuantityRequired: netSheets,
+    operationChain: [{
+      operationName: 'Printing + Finishing',
+      sheetsEntering: grossSheets,
+      sheetsExiting: netSheets,
+      setupWaste: makeReadyWaste,
+      runningWaste: runningWaste + thinPaperWaste,
+      totalWaste: totalWaste,
+      effectiveSpoilageRate: totalWastePercent,
+      cumulativeWasteToThisPoint: totalWaste,
+    }],
+    totalSheetsRequired_printing: grossSheets,
+    totalMakereadyWaste: makeReadyWaste,
+    totalRunningWaste: runningWaste + thinPaperWaste,
+    totalWasteSheets: totalWaste,
+    totalWastePercent,
+    wasteSheetsCost: totalWaste * substrate.costPerSheet_parent,
+    flatWasteComparison_percent: 5.0,
+    flatWasteError_sheets: totalWaste - Math.ceil(netSheets * 0.05),
+    flatWasteError_cost: (totalWaste - Math.ceil(netSheets * 0.05)) * substrate.costPerSheet_parent,
+  };
+}
+
+// â”€â”€â”€ 6. PRECISION WEIGHT CALCULATOR â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function calculatePrecisionWeight(
   sheetW_mm: number, sheetH_mm: number,
   totalSheets: number,
   goodSheets: number,
   substrate: SubstratePhysicalModel
 ): PaperWeightCalculation {
-
   const areaSqm = (sheetW_mm / 1000) * (sheetH_mm / 1000);
   const nominalGrams = areaSqm * substrate.grammage_gsm;
-  const actualGrams = areaSqm * substrate.actualGrammage_gsm;
-
-  // Moisture Adjustment
-  // SheetWeight(g) = Area × GSM × (1 + ((AmbientRH - EquilibriumRH) × 0.0001 × MoistureCoeff))
-  const coeff = substrate.surfaceFinish === 'UNCOATED' ? ENGINE_CONSTANTS.paper.moistureCoeff_uncoated : ENGINE_CONSTANTS.paper.moistureCoeff_coated;
-  const rhDelta = substrate.ambientRH_percent - substrate.equilibriumRH_percent;
-  const moistureAdj = 1 + (rhDelta * 0.0001 * coeff);
-
-  const finalSheetWeight_g = actualGrams * moistureAdj;
+  const actualGrams = nominalGrams;
+  const finalSheetWeight_g = actualGrams;
 
   const totalWeight_kg = (finalSheetWeight_g * totalSheets) / 1000;
   const goodWeight_kg = (finalSheetWeight_g * goodSheets) / 1000;
@@ -650,19 +893,75 @@ function calculatePrecisionWeight(
     nominalSheetWeight_grams: nominalGrams,
     actualSheetWeight_grams: actualGrams,
     moistureAdjustedWeight_grams: finalSheetWeight_g,
-    totalSheets: totalSheets,
-    totalWeight_kg: Math.round(totalWeight_kg * 1000) / 1000, // 3 decimal
+    totalSheets,
+    totalWeight_kg: Math.round(totalWeight_kg * 1000) / 1000,
     goodSheetsWeight_kg: Math.round(goodWeight_kg * 1000) / 1000,
     wasteWeight_kg: Math.round(wasteWeight_kg * 1000) / 1000,
     costPerKg: substrate.costPerKg,
     totalPaperCost: totalCost,
     wasteCost: wasteWeight_kg * substrate.costPerKg,
-    finishedProductWeight_kg: goodWeight_kg * 0.95, // Assumes 5% trim off final product
+    finishedProductWeight_kg: goodWeight_kg * 0.95,
     trimmingWasteWeight_kg: goodWeight_kg * 0.05
   };
 }
 
-// ─── MAIN ORCHESTRATION FUNCTION ─────────────────────────────────────────────
+function buildProcurementRecommendation(
+  input: PaperCalculationInput,
+  substrate: SubstratePhysicalModel,
+  preferredSize: string,
+  grossSheets: number,
+): ProcurementRecommendation | undefined {
+  const matches = substrate.candidateMatches || [];
+  const hasInStockMatch = matches.some((candidate) => candidate.inStock);
+  if (hasInStockMatch || substrate.sourceSelection?.source !== 'fallback') {
+    return undefined;
+  }
+
+  const nearestMatches = matches.slice(0, 3).map((candidate) => ({
+    source: candidate.source,
+    reference: candidate.reference,
+    paperType: candidate.paperType,
+    gsm: candidate.gsm,
+    size: candidate.size,
+    deltaCostPerCopy: 0,
+    stockStatus: candidate.inStock ? 'available' as const : 'not_available' as const,
+  }));
+
+  const sizeObj = STANDARD_PAPER_SIZES.find((size) => size.label === preferredSize || size.label.replace('×', 'x') === preferredSize);
+  const areaSqM = ((sizeObj?.widthMM || substrate.parentSheetWidth_mm) / 1000) * ((sizeObj?.heightMM || substrate.parentSheetHeight_mm) / 1000);
+  const reamWeightKg = areaSqM * input.gsm / 1000 * (input.gsm > 200 ? 250 : 500);
+  const estimatedRatePerReam = Math.round(substrate.costPerKg * reamWeightKg * 100) / 100;
+
+  const supplierId = nearestMatches.length > 0 ? nearestMatches[0].reference : undefined;
+  const supplierName = nearestMatches.length > 0 && nearestMatches[0].source === 'rate_card'
+    ? "Preferred Vendor (Global Rate Card)"
+    : "Standard Paper Merchant";
+
+  return {
+    section: input.sectionName,
+    requiredSpec: {
+      paperType: input.paperType,
+      gsm: input.gsm,
+      preferredSize,
+      quantitySheets: grossSheets,
+      grain: substrate.grainDirection || 'UNKNOWN',
+    },
+    nearestMatches,
+    recommendedBuy: {
+      paperType: input.paperType,
+      gsm: input.gsm,
+      size: preferredSize,
+      estimatedRatePerReam,
+      suggestedOrderQtySheets: Math.max(grossSheets, 5000),
+      supplierId,
+      supplierName,
+    },
+    impactIfNotAvailable: 'Estimate computed with provisional paper assumptions. Final costing and schedule may vary after procurement.',
+    confidence: 0.74,
+  };
+}
+
+// â”€â”€â”€ MAIN ORCHESTRATION FUNCTION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export function calculatePaperRequirement(input: PaperCalculationInput): PaperCalculationResult {
   // 1. Resolve Substrate Physics
   const substrate = resolveSubstrate(input.gsm, input.paperType, input.paperCode, input.paperSizeLabel);
@@ -671,13 +970,41 @@ export function calculatePaperRequirement(input: PaperCalculationInput): PaperCa
   let effectiveWidth = input.trimWidthMM;
   let effectiveHeight = input.trimHeightMM;
   if (input.sectionType === "cover" && input.spineThickness) {
-    effectiveWidth = input.trimWidthMM * 2 + input.spineThickness + 20; // 10mm hinge/bleed allowance
+    effectiveWidth = input.trimWidthMM * 2 + input.spineThickness + 20;
   }
   if (input.sectionType === "jacket" && input.spineThickness) {
-    effectiveWidth = input.trimWidthMM * 2 + input.spineThickness + 180; // Flaps
+    effectiveWidth = input.trimWidthMM * 2 + input.spineThickness + 180;
   }
 
-  // 3. Imposition
+  // 3. AUTO-PLAN paper size if "auto" or unspecified
+  let autoPlanning;
+  if (!input.paperSizeLabel || input.paperSizeLabel === 'auto' || input.paperSizeLabel === '') {
+    const plan = autoPlanPaperSize(
+      input.trimWidthMM, input.trimHeightMM,
+      input.gsm, substrate.costPerKg,
+      input.quantity, input.totalPages,
+      input.sectionType, input.bleedMM ?? 3,
+      input.spineThickness ?? 0
+    );
+    // Update substrate with best paper size
+    substrate.parentSheetWidth_mm = plan.bestSize.widthMM;
+    substrate.parentSheetHeight_mm = plan.bestSize.heightMM;
+    substrate.costPerSheet_parent = (plan.bestSize.widthMM / 1000) * (plan.bestSize.heightMM / 1000) * (input.gsm / 1000) * substrate.costPerKg;
+
+    autoPlanning = {
+      bestPaperSize: plan.bestSize.label,
+      allEvaluated: plan.options.map(o => ({
+        paperSize: o.paperSize.label,
+        ups: o.ups,
+        wastagePercent: Math.round(o.wastagePercent * 100) / 100,
+        grainOk: o.grainOk,
+        totalCost: Math.round(o.totalCost * 100) / 100,
+        selected: o.selected,
+      })),
+    };
+  }
+
+  // 4. Imposition
   const impoInput: ImpositionInput = {
     finishedPageWidth_mm: effectiveWidth,
     finishedPageHeight_mm: effectiveHeight,
@@ -698,80 +1025,46 @@ export function calculatePaperRequirement(input: PaperCalculationInput): PaperCa
     impositionMethod: input.printingMethod || 'SHEETWISE',
     totalPages: input.totalPages
   };
-  const imposition = calculateImpositionGodLevel(impoInput, substrate);
+  const imposition = calculateImpositionTP(impoInput, substrate);
 
-  // 4. Grain Analysis
+  // 5. Grain Analysis
   const grainAnalysis = analyzeGrainDirection(
     effectiveWidth, effectiveHeight,
     imposition.pressSheetWidth_mm, imposition.pressSheetHeight_mm,
     substrate, 'PARALLEL_TO_SPINE'
   );
 
-  // 5. Compound Spoilage Cascade
+  // 6. Calculate net sheets
   const maxColors = Math.max(input.colorsFront, input.colorsBack);
+  const netSheets = Math.ceil((input.quantity * imposition.numberOfForms) / imposition.ups);
 
-  // Default operations if none provided (Printing is always present)
-  let spoilageOps = input.operations;
-  if (!spoilageOps || spoilageOps.length === 0) {
-    spoilageOps = [
-      {
-        operationName: 'Printing',
-        operationSequence: 1,
-        spoilageRate_percent: ENGINE_CONSTANTS.spoilage.offset_printing_base_percent,
-        setupSpoilage_sheets: 150 + (maxColors * 50),
-        stockWeightModifier: substrate.grammage_gsm > 250 ? 1.3 : (substrate.grammage_gsm < 80 ? 1.4 : 1.0),
-        grainDirectionModifier: grainAnalysis.grainCompliant ? 1.0 : 1.25,
-        colorComplexityModifier: maxColors > 4 ? 1.3 : 1.0,
-        coatingModifier: substrate.surfaceFinish === 'UNCOATED' ? 1.1 : 1.0,
-        runLengthModifier: input.quantity < 1000 ? 1.5 : (input.quantity > 10000 ? 0.9 : 1.0),
-        repeatJobModifier: 1.0
-      },
-      {
-        operationName: 'Folding',
-        operationSequence: 2,
-        spoilageRate_percent: ENGINE_CONSTANTS.spoilage.folding_base_percent,
-        setupSpoilage_sheets: 20 * imposition.numberOfForms,
-        stockWeightModifier: substrate.grammage_gsm > 150 ? 1.4 : 1.0,
-        grainDirectionModifier: grainAnalysis.grainCompliant ? 1.0 : 1.5,
-        colorComplexityModifier: 1.0,
-        coatingModifier: 1.0,
-        runLengthModifier: 1.0,
-        repeatJobModifier: 1.0
-      },
-      {
-        operationName: 'Binding',
-        operationSequence: 3,
-        spoilageRate_percent: input.bindingMethod === 'case_binding' ? ENGINE_CONSTANTS.spoilage.caseBind_base_percent : ENGINE_CONSTANTS.spoilage.perfectBind_base_percent,
-        setupSpoilage_sheets: 30,
-        stockWeightModifier: 1.0,
-        grainDirectionModifier: 1.0,
-        colorComplexityModifier: 1.0,
-        coatingModifier: 1.0,
-        runLengthModifier: 1.0,
-        repeatJobModifier: 1.0
-      }
-    ];
-  }
-
-  // Calculate gross sheets using forms required
-  const goodPressSheetsRequired = Math.ceil((input.quantity * imposition.numberOfForms) / imposition.ups);
-
-  const wastage = calculateCompoundSpoilage(goodPressSheetsRequired, spoilageOps, substrate);
+  // 7. Wastage using Thomson Press ADDITIVE method
+  const machineCode = input.machineCode || 'RMGT';
+  const wastage = calculateTPWastage(netSheets, maxColors, substrate, machineCode);
   const grossSheets = wastage.totalSheetsRequired_printing;
-  const netSheets = goodPressSheetsRequired;
 
-  // 6. Weight Calculation
-  const weight = calculatePrecisionWeight(imposition.pressSheetWidth_mm, imposition.pressSheetHeight_mm, grossSheets, netSheets, substrate);
+  // 8. Weight & Cost Calculation
+  const weight = calculatePrecisionWeight(
+    imposition.pressSheetWidth_mm, imposition.pressSheetHeight_mm,
+    grossSheets, netSheets, substrate
+  );
 
   // Final outputs
   const reams = grossSheets / substrate.sheetsPerReam;
   const totalCost = weight.totalPaperCost;
-  const weightPerReam = (weight.totalWeight_kg / reams) || 0;
+  const weightPerReam = reams > 0 ? (weight.totalWeight_kg / reams) : 0;
+  const preferredSize = autoPlanning?.bestPaperSize || input.paperSizeLabel || imposition.paperSizeLabel;
+  const procurementRecommendation = buildProcurementRecommendation(
+    input,
+    substrate,
+    preferredSize,
+    grossSheets,
+  );
 
   return {
     sectionName: input.sectionName,
     sectionType: input.sectionType,
-    paperType: substrate.surfaceFinish,
+    paperType: input.paperType || substrate.surfaceFinish,
     gsm: substrate.grammage_gsm,
     paperSize: imposition.paperSizeLabel,
     ppPerForm: imposition.ppPerForm,
@@ -787,9 +1080,18 @@ export function calculatePaperRequirement(input: PaperCalculationInput): PaperCa
     ratePerReam: Math.round((weight.costPerKg * weightPerReam) * 100) / 100,
     totalCost: Math.round(totalCost * 100) / 100,
     wastageResult: wastage,
-    imposition: imposition,
-    grainAnalysis: grainAnalysis,
+    imposition,
+    grainAnalysis,
     weightCalculation: weight,
-    substrate: substrate
+    substrate,
+    sourceSelection: substrate.sourceSelection ? {
+      source: substrate.sourceSelection.source,
+      reference: substrate.sourceSelection.reference,
+      confidence: substrate.sourceSelection.confidence,
+      inStock: substrate.sourceSelection.inStock,
+    } : undefined,
+    procurementRecommendation,
+    autoPlanning,
   };
 }
+

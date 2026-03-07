@@ -3,17 +3,30 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/tauri.svg" />
-    <meta name="description" content="Print Estimator Pro - professional print production estimation for paper, printing, binding, finishing, freight, and quoting." />
+    <meta
+      name="description"
+      content="Print Estimator Pro - professional print production estimation for paper, printing, binding, finishing, freight, and quoting."
+    />
     <meta name="robots" content="index,follow" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.puter.com https://*.puter.com; connect-src 'self' 'unsafe-inline' https://*.puter.com wss://*.puter.com https://*.supabase.co;"
+    />
     <meta name="theme-color" content="#2563eb" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Print Estimator Pro" />
-    <meta property="og:description" content="Professional print estimation with multi-quantity comparison, costing breakdowns, and quotation workflows." />
+    <meta
+      property="og:description"
+      content="Professional print estimation with multi-quantity comparison, costing breakdowns, and quotation workflows."
+    />
     <meta property="og:image" content="/tauri.svg" />
     <meta property="og:url" content="https://print-estimator.local/" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Print Estimator Pro" />
-    <meta name="twitter:description" content="Professional print estimation and quotation platform." />
+    <meta
+      name="twitter:description"
+      content="Professional print estimation and quotation platform."
+    />
     <meta name="twitter:image" content="/tauri.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -23,7 +36,9 @@
       rel="stylesheet"
     />
     <title>Print Estimator Pro</title>
+    <script src="https://js.puter.com/v2/"></script>
   </head>
+
   <body class="antialiased">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>

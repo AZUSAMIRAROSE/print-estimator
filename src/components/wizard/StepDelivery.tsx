@@ -1,14 +1,17 @@
 import React from "react";
 import { useEstimationStore } from "@/stores/estimationStore";
+import { useDataStore } from "@/stores/dataStore";
 import { cn } from "@/utils/cn";
 import { Info, Truck, Ship, Plane, MapPin, Package, Globe } from "lucide-react";
-import { DEFAULT_DESTINATIONS } from "@/constants";
 
 export function StepDelivery() {
   const { estimation, updateDelivery } = useEstimationStore();
+  const { destinations } = useDataStore();
   const d = estimation.delivery;
 
-  const selectedDest = DEFAULT_DESTINATIONS.find(dest => dest.id === d.destinationId);
+  // Use live destinations from dataStore, fallback to empty array
+  const activeDestinations = destinations.length > 0 ? destinations : [];
+  const selectedDest = activeDestinations.find(dest => dest.id === d.destinationId);
 
   return (
     <div className="space-y-6 animate-in">
@@ -34,7 +37,7 @@ export function StepDelivery() {
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-          {DEFAULT_DESTINATIONS.map((dest) => (
+          {activeDestinations.map((dest) => (
             <button
               key={dest.id}
               onClick={() => updateDelivery({

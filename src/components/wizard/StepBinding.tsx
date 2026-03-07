@@ -1,12 +1,13 @@
 import React, { useState } from "react";
 import { useEstimationStore } from "@/stores/estimationStore";
+import { useDataStore } from "@/stores/dataStore";
 import { cn } from "@/utils/cn";
 import {
   BookMarked, Info, ToggleLeft, ToggleRight, ChevronDown, ChevronUp,
   Layers, Scissors, Link2, BookOpen, Grip, Ribbon, CircleDot,
   Square, Circle, Shield, Wrench, Star
 } from "lucide-react";
-import { DEFAULT_BOARD_TYPES, DEFAULT_COVERING_MATERIALS, HARDCASE_DEFAULTS } from "@/constants";
+import { HARDCASE_DEFAULTS } from "@/constants";
 
 const BINDING_OPTIONS: {
   type: string;
@@ -140,6 +141,7 @@ const BINDING_OPTIONS: {
 
 export function StepBinding() {
   const { estimation, updateBinding } = useEstimationStore();
+  const { boardTypes, coveringMaterials } = useDataStore();
   const binding = estimation.binding;
   const [expandedSection, setExpandedSection] = useState<string | null>(
     binding.primaryBinding.includes("hardcase") || binding.primaryBinding.includes("case") ? "hardcase" : null
@@ -285,7 +287,7 @@ export function StepBinding() {
               <div>
                 <h4 className="label mb-3">Board Type & Thickness</h4>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                  {DEFAULT_BOARD_TYPES.map((board) => (
+                  {boardTypes.map((board) => (
                     <button
                       key={board.id}
                       onClick={() => updateBinding({
@@ -341,7 +343,7 @@ export function StepBinding() {
               <div>
                 <h4 className="label mb-3">Covering Material</h4>
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                  {DEFAULT_COVERING_MATERIALS.map((material) => (
+                  {coveringMaterials.map((material) => (
                     <button
                       key={material.id}
                       onClick={() => updateBinding({
@@ -448,7 +450,7 @@ export function StepBinding() {
                 <div>
                   <span className="text-text-light-tertiary dark:text-text-dark-tertiary">Board:</span>{" "}
                   <span className="font-medium text-text-light-primary dark:text-text-dark-primary">
-                    {DEFAULT_BOARD_TYPES.find(b => b.id === binding.boardType)?.name || "Not selected"}
+                    {boardTypes.find(b => b.id === binding.boardType)?.name || "Not selected"}
                   </span>
                 </div>
                 <div>

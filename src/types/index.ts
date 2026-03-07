@@ -1,8 +1,8 @@
-// ============================================================================
-// PRINT ESTIMATOR PRO — COMPLETE TYPE DEFINITIONS
+﻿// ============================================================================
+// PRINT ESTIMATOR PRO â€” COMPLETE TYPE DEFINITIONS
 // ============================================================================
 
-// ── User & Auth ──────────────────────────────────────────────────────────────
+// â”€â”€ User & Auth â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export interface UserProfile {
   id: string;
   name: string;
@@ -34,7 +34,7 @@ export interface UserPreferences {
   notificationsEnabled: boolean;
 }
 
-// ── Currency ─────────────────────────────────────────────────────────────────
+// â”€â”€ Currency â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export type CurrencyCode = "INR" | "USD" | "GBP" | "EUR" | "AUD" | "CAD" | "SGD" | "AED" | "ZAR" | "BRL" | "HKD" | "JPY" | "CNY";
 
 export interface CurrencyRate {
@@ -45,8 +45,8 @@ export interface CurrencyRate {
   updatedAt: string;
 }
 
-// ── Customer ─────────────────────────────────────────────────────────────────
-// ── Customer ─────────────────────────────────────────────────────────────────
+// â”€â”€ Customer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â”€â”€ Customer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export interface Customer {
   id: string;
   code: string;
@@ -56,14 +56,14 @@ export interface Customer {
   phone: string;
   alternatePhone: string;
 
-  // ── Company & Social ──
+  // â”€â”€ Company & Social â”€â”€
   website: string;
   industry: string;
   companyRegNumber: string;
   leadSource: string;
   socialLinks: { platform: string; url: string }[];
 
-  // ── Financials & Preferences ──
+  // â”€â”€ Financials & Preferences â”€â”€
   defaultDiscount: number;
   defaultMargin: number;
   defaultTaxRate: number;
@@ -73,7 +73,7 @@ export interface Customer {
   creditLimit: number;
   paymentTerms: string;
 
-  // ── Billing Address ──
+  // â”€â”€ Billing Address â”€â”€
   address: string;
   city: string;
   state: string;
@@ -82,7 +82,7 @@ export interface Customer {
   gstNumber: string;
   panNumber: string;
 
-  // ── Shipping Address ──
+  // â”€â”€ Shipping Address â”€â”€
   shippingAddress: {
     address: string;
     city: string;
@@ -91,7 +91,7 @@ export interface Customer {
     pincode: string;
   };
 
-  // ── Metadata ──
+  // â”€â”€ Metadata â”€â”€
   priority: "high" | "medium" | "low";
   category: string;
   notes: string;
@@ -103,7 +103,7 @@ export interface Customer {
   updatedAt: string;
 }
 
-// ── Paper Types ──────────────────────────────────────────────────────────────
+// â”€â”€ Paper Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export interface PaperType {
   id: string;
   code: string;
@@ -142,9 +142,9 @@ export interface PaperRate {
   isActive: boolean;
 }
 
-// ── Machine interface has been moved to machine.types.ts ──────────────────────
+// â”€â”€ Machine interface has been moved to machine.types.ts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-// ── Advanced Inventory ───────────────────────────────────────────────────────
+// â”€â”€ Advanced Inventory â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export type InventoryCategory = "paper" | "plates" | "finishing" | "packing" | "ink" | "chemicals" | "consumables" | "spare_parts" | "other";
 export type InventoryStatus = "active" | "inactive" | "discontinued" | "draft";
 export type ItemCondition = "new" | "good" | "fair" | "damaged";
@@ -152,7 +152,9 @@ export type MovementClass = "fast_moving" | "slow_moving" | "non_moving";
 
 export interface InventoryItem {
   id: string;
-  // ── Basic ──
+  categoryCode: string;
+  itemCode: string;
+  // â”€â”€ Basic â”€â”€
   name: string;
   sku: string;
   barcode: string;
@@ -160,7 +162,7 @@ export interface InventoryItem {
   subcategory: string;
   description: string;
   tags: string[];
-  // ── Stock ──
+  // â”€â”€ Stock â”€â”€
   stock: number;
   minLevel: number;
   maxLevel: number;
@@ -168,31 +170,31 @@ export interface InventoryItem {
   unit: string;
   batchNumber: string;
   lotNumber: string;
-  // ── Pricing ──
+  // â”€â”€ Pricing â”€â”€
   costPerUnit: number;
   sellingPrice: number;
   lastPurchasePrice: number;
   avgCost: number;
   taxRate: number;
   hsnCode: string;
-  // ── Location ──
+  // â”€â”€ Location â”€â”€
   warehouse: string;
   zone: string;
   rack: string;
   shelf: string;
   bin: string;
-  // ── Supplier ──
+  // â”€â”€ Supplier â”€â”€
   supplier: string;
   supplierCode: string;
   leadTimeDays: number;
   alternateSuppliers: string[];
-  // ── Dates ──
+  // â”€â”€ Dates â”€â”€
   lastUpdated: string;
   expiryDate: string;
   manufacturedDate: string;
   lastAuditDate: string;
   lastMovedDate: string;
-  // ── Physical ──
+  // â”€â”€ Physical â”€â”€
   weight: number;
   weightUnit: string;
   length: number;
@@ -200,18 +202,18 @@ export interface InventoryItem {
   height: number;
   dimensionUnit: string;
   volumeCBM: number;
-  // ── Status ──
+  // â”€â”€ Status â”€â”€
   status: InventoryStatus;
   condition: ItemCondition;
   nmiFlag: boolean;
   movementClass: MovementClass;
-  // ── Quality ──
+  // â”€â”€ Quality â”€â”€
   qualityGrade: string;
   certifications: string[];
   shelfLifeDays: number;
   storageConditions: string;
   handlingInstructions: string;
-  // ── Notes ──
+  // â”€â”€ Notes â”€â”€
   notes: string;
 }
 
@@ -252,34 +254,34 @@ export interface InventoryTransfer {
   sku: string;
   quantity: number;
   unit: string;
-  // ── Locations ──
+  // â”€â”€ Locations â”€â”€
   fromWarehouse: string;
   fromZone: string;
   toWarehouse: string;
   toZone: string;
-  // ── Dates ──
+  // â”€â”€ Dates â”€â”€
   transferDate: string;
   expectedArrivalDate: string;
   actualArrivalDate: string;
-  // ── Status ──
+  // â”€â”€ Status â”€â”€
   status: TransferStatus;
-  // ── Transport ──
+  // â”€â”€ Transport â”€â”€
   transportMode: "manual" | "truck" | "courier" | "rail" | "air";
   vehicleNumber: string;
   driverName: string;
   trackingNumber: string;
-  // ── Charges ──
+  // â”€â”€ Charges â”€â”€
   transportCharges: number;
   handlingCharges: number;
   insuranceCharges: number;
   packagingCharges: number;
   otherCharges: number;
   totalTransferCost: number;
-  // ── People ──
+  // â”€â”€ People â”€â”€
   requestedBy: string;
   approvedBy: string;
   receivedBy: string;
-  // ── Notes ──
+  // â”€â”€ Notes â”€â”€
   notes: string;
   reason: string;
   priorityLevel: "low" | "medium" | "high" | "urgent";
@@ -287,7 +289,7 @@ export interface InventoryTransfer {
   updatedAt: string;
 }
 
-// ── Impression Rates ─────────────────────────────────────────────────────────
+// â”€â”€ Impression Rates â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export interface ImpressionRate {
   id: string;
   machineId: string;
@@ -297,7 +299,7 @@ export interface ImpressionRate {
   ratePer1000: number;
 }
 
-// ── Wastage Chart ────────────────────────────────────────────────────────────
+// â”€â”€ Wastage Chart â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export interface WastageEntry {
   id: string;
   minQuantity: number;
@@ -308,7 +310,7 @@ export interface WastageEntry {
   isPercentage: boolean;
 }
 
-// ── Binding ──────────────────────────────────────────────────────────────────
+// â”€â”€ Binding â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export type BindingType =
   | "perfect_binding"
   | "pur_binding"
@@ -364,7 +366,7 @@ export interface HardcaseBindingDetail {
   roundCornering: number;
 }
 
-// ── Finishing ─────────────────────────────────────────────────────────────────
+// â”€â”€ Finishing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export type FinishingType =
   | "lamination_gloss"
   | "lamination_matt"
@@ -406,7 +408,7 @@ export interface FinishingRate {
   isActive: boolean;
 }
 
-// ── Board Types ──────────────────────────────────────────────────────────────
+// â”€â”€ Board Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export interface BoardType {
   id: string;
   name: string;
@@ -420,7 +422,7 @@ export interface BoardType {
   isActive: boolean;
 }
 
-// ── Covering Material ────────────────────────────────────────────────────────
+// â”€â”€ Covering Material â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export interface CoveringMaterial {
   id: string;
   name: string;
@@ -434,7 +436,7 @@ export interface CoveringMaterial {
   isActive: boolean;
 }
 
-// ── Freight ──────────────────────────────────────────────────────────────────
+// â”€â”€ Freight â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export interface FreightDestination {
   id: string;
   code: string;
@@ -458,7 +460,7 @@ export interface FreightDestination {
   isActive: boolean;
 }
 
-// ── Carton Configuration ─────────────────────────────────────────────────────
+// â”€â”€ Carton Configuration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export interface CartonConfiguration {
   id: string;
   destinationId: string;
@@ -470,7 +472,7 @@ export interface CartonConfiguration {
   cartonsPerPallet: number;
 }
 
-// ── Estimation ───────────────────────────────────────────────────────────────
+// â”€â”€ Estimation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export interface EstimationInput {
   // Basic Info
   id: string;
@@ -554,10 +556,25 @@ export interface TextSection {
   gsm: number;
   paperSizeId: string;
   paperSizeLabel: string;
+
+  // Custom Paper metrics
+  isCustomPaper?: boolean;
+  customPaperWidth?: number;
+  customPaperHeight?: number;
+  customPaperGrain?: "LONG_GRAIN" | "SHORT_GRAIN";
+  customPaperBulk?: number;
+
   machineId: string;
   machineName: string;
   plateChanges: number;
   printingMethod: "sheetwise" | "work_and_turn" | "work_and_tumble" | "perfector";
+  planningMode?: "auto" | "manual_override";
+  recommendedPaperSizeLabel?: string;
+  recommendedMachineId?: string;
+  recommendedMachineName?: string;
+  recommendedSignature?: number;
+  recommendedUps?: number;
+  planningWarnings?: string[];
 }
 
 export interface CoverSection {
@@ -570,11 +587,24 @@ export interface CoverSection {
   gsm: number;
   paperSizeId: string;
   paperSizeLabel: string;
+
+  // Custom Paper metrics
+  isCustomPaper?: boolean;
+  customPaperWidth?: number;
+  customPaperHeight?: number;
+  customPaperGrain?: "LONG_GRAIN" | "SHORT_GRAIN";
+  customPaperBulk?: number;
+
   machineId: string;
   machineName: string;
   selfCover: boolean;
   separateCover: boolean;
   foldType: "wrap_around" | "french_fold" | "gatefold" | "none";
+  planningMode?: "auto" | "manual_override";
+  recommendedPaperSizeLabel?: string;
+  recommendedMachineId?: string;
+  recommendedMachineName?: string;
+  planningWarnings?: string[];
 }
 
 export interface JacketSection {
@@ -586,6 +616,14 @@ export interface JacketSection {
   gsm: number;
   paperSizeId: string;
   paperSizeLabel: string;
+
+  // Custom Paper metrics
+  isCustomPaper?: boolean;
+  customPaperWidth?: number;
+  customPaperHeight?: number;
+  customPaperGrain?: "LONG_GRAIN" | "SHORT_GRAIN";
+  customPaperBulk?: number;
+
   machineId: string;
   machineName: string;
   laminationType: string;
@@ -594,6 +632,11 @@ export interface JacketSection {
   goldBlockingSpine: boolean;
   spotUV: boolean;
   flapWidth: number; // mm
+  planningMode?: "auto" | "manual_override";
+  recommendedPaperSizeLabel?: string;
+  recommendedMachineId?: string;
+  recommendedMachineName?: string;
+  planningWarnings?: string[];
 }
 
 export interface EndleavesSection {
@@ -606,10 +649,23 @@ export interface EndleavesSection {
   gsm: number;
   paperSizeId: string;
   paperSizeLabel: string;
+
+  // Custom Paper metrics
+  isCustomPaper?: boolean;
+  customPaperWidth?: number;
+  customPaperHeight?: number;
+  customPaperGrain?: "LONG_GRAIN" | "SHORT_GRAIN";
+  customPaperBulk?: number;
+
   machineId: string;
   machineName: string;
   type: "printed" | "plain" | "tipped" | "map" | "self" | "special";
   selfEndleaves: boolean;
+  planningMode?: "auto" | "manual_override";
+  recommendedPaperSizeLabel?: string;
+  recommendedMachineId?: string;
+  recommendedMachineName?: string;
+  planningWarnings?: string[];
 }
 
 export interface BindingSection {
@@ -807,7 +863,84 @@ export interface AdditionalCost {
   category: string;
 }
 
-// ── Estimation Results ───────────────────────────────────────────────────────
+export interface EstimationValidationIssue {
+  code: string;
+  severity: "error" | "warning";
+  message: string;
+  section?: string;
+  impact?: string;
+}
+
+export interface PricingRevision {
+  id: string;
+  revisionNumber: number;
+  createdAt: string;
+  createdBy: string;
+  marginPercent: number;
+  commissionPercent: number;
+  targetTPH: number;
+  exchangeRate: number;
+  volumeDiscount: number;
+  paymentTerms: string;
+  taxRate: number;
+  notes: string;
+}
+
+export interface QuoteSnapshot {
+  id: string;
+  estimationId: string;
+  version: number;
+  createdAt: string;
+  createdBy: string;
+  inputSnapshot: EstimationInput;
+  resultsSnapshot: any; // Using any or EstimationResult array depending on import 
+  revisions: PricingRevision[];
+  status: "draft" | "sent" | "approved" | "rejected" | "expired";
+  validUntil: string;
+}
+
+export interface ProcurementRecommendation {
+  section: string;
+  requiredSpec: {
+    paperType: string;
+    gsm: number;
+    preferredSize: string;
+    quantitySheets: number;
+    grain: "LONG_GRAIN" | "SHORT_GRAIN" | "UNKNOWN";
+  };
+  nearestMatches: Array<{
+    source: "rate_card" | "inventory";
+    reference: string;
+    paperType: string;
+    gsm: number;
+    size: string;
+    deltaCostPerCopy: number;
+    stockStatus: "available" | "limited" | "not_available";
+  }>;
+  recommendedBuy: {
+    paperType: string;
+    gsm: number;
+    size: string;
+    estimatedRatePerReam: number;
+    suggestedOrderQtySheets: number;
+    supplierId?: string;
+    supplierName?: string;
+  };
+  impactIfNotAvailable: string;
+  confidence: number;
+}
+
+export interface PlanningDiagnostics {
+  section: string;
+  strategy: string;
+  selectedCandidate: string;
+  rejectedCandidates: string[];
+  paperSource?: string;
+  grainStatus?: string;
+  warnings?: string[];
+}
+
+// â”€â”€ Estimation Results â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export interface EstimationResult {
   id: string;
   estimationId: string;
@@ -878,6 +1011,20 @@ export interface EstimationResult {
   cartonsPerPallet: number;
   totalPallets: number;
 
+  planningIssues?: EstimationValidationIssue[];
+  procurementRecommendations?: ProcurementRecommendation[];
+  diagnostics?: PlanningDiagnostics[];
+  planningSummary?: {
+    section: string;
+    paperSize: string;
+    signature: number;
+    ups: number;
+    machineId: string;
+    grainCompliant: boolean;
+    source: "auto" | "manual_override";
+    warnings: string[];
+  }[];
+
   createdAt: string;
 }
 
@@ -900,6 +1047,14 @@ export interface SectionPaperCost {
   ratePerReam: number;
   totalCost: number;
   imposition?: any;
+  grainCompliant?: boolean;
+  sourceSelection?: {
+    source: "rate_card" | "inventory" | "fallback";
+    reference?: string;
+    confidence: number;
+    inStock: boolean;
+  };
+  procurementRecommendation?: ProcurementRecommendation;
 }
 
 export interface SectionPrintingCost {
@@ -942,7 +1097,7 @@ export interface PackingBreakdown {
   totalWeight: number;
 }
 
-// ── Job ──────────────────────────────────────────────────────────────────────
+// â”€â”€ Job â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export interface Job {
   id: string;
   jobNumber: string;
@@ -964,7 +1119,7 @@ export interface Job {
   updatedAt: string;
 }
 
-// ── Quotation ────────────────────────────────────────────────────────────────
+// â”€â”€ Quotation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export interface Quotation {
   id: string;
   quotationNumber: string;
@@ -985,6 +1140,43 @@ export interface Quotation {
   termsAndConditions: string;
   comments: QuotationComment[];
   revisionNumber: number;
+  pricingVersion?: number;
+  sourceEstimateId?: string;
+  quoteSnapshot?: {
+    id: string;
+    quotationId: string;
+    sourceEstimateId: string;
+    pricingVersion: number;
+    plannedAt: string;
+    estimationInput: EstimationInput;
+    result: EstimationResult;
+    planning: {
+      sections: Array<{
+        section: string;
+        paperSize: string;
+        imposition: string;
+        signature: number;
+        ups: number;
+        grainCompliant: boolean;
+        machineId: string;
+        machineName: string;
+        source: "auto" | "manual_override";
+        warnings: string[];
+      }>;
+      blocked: boolean;
+      issues: EstimationValidationIssue[];
+    };
+    procurement: ProcurementRecommendation[];
+    issues: EstimationValidationIssue[];
+  };
+  pricingRevisions?: Array<{
+    id: string;
+    quotationId: string;
+    version: number;
+    createdAt: string;
+    reason: string;
+    snapshot: Quotation["quoteSnapshot"];
+  }>;
   sentDate?: string;
   acceptedDate?: string;
   rejectedDate?: string;
@@ -1000,7 +1192,7 @@ export interface QuotationComment {
   type: "internal" | "external";
 }
 
-// ── Notification ─────────────────────────────────────────────────────────────
+// â”€â”€ Notification â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export interface AppNotification {
   id: string;
   type: "info" | "success" | "warning" | "error" | "action";
@@ -1013,7 +1205,7 @@ export interface AppNotification {
   metadata?: Record<string, unknown>;
 }
 
-// ── Activity Log ─────────────────────────────────────────────────────────────
+// â”€â”€ Activity Log â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export interface ActivityLog {
   id: string;
   action: string;
@@ -1029,7 +1221,7 @@ export interface ActivityLog {
   metadata?: Record<string, unknown>;
 }
 
-// ── Settings ─────────────────────────────────────────────────────────────────
+// â”€â”€ Settings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export interface AppSettings {
   company: CompanySettings;
   estimation: EstimationSettings;
@@ -1104,7 +1296,7 @@ export interface BackupSettings {
   backupPath: string;
 }
 
-// ── Report Types ─────────────────────────────────────────────────────────────
+// â”€â”€ Report Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export interface ReportData {
   overview: OverviewReport;
   jobsReport: JobsReport;
@@ -1180,7 +1372,7 @@ export interface PaperReport {
   topPapers: { name: string; gsm: number; usage: number }[];
 }
 
-// ── Quick Calculator ─────────────────────────────────────────────────────────
+// â”€â”€ Quick Calculator â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export interface QuickCalcInput {
   bookHeight: number;
   bookWidth: number;
@@ -1212,7 +1404,7 @@ export interface QuickCalcResult {
   impressions: number;
 }
 
-// ── Wizard Step ──────────────────────────────────────────────────────────────
+// â”€â”€ Wizard Step â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export interface WizardStep {
   id: number;
   key: string;
@@ -1224,3 +1416,4 @@ export interface WizardStep {
   isValid: boolean;
   tipText: string;
 }
+

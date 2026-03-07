@@ -39,3 +39,4 @@ export function WizardStepRenderer({ step }: Props) {
     default: return <StepBasicInfo />;
   }
 }
+

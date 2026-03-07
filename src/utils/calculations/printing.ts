@@ -1,19 +1,30 @@
 // ============================================================================
-// PRINTING KINEMATICS & INK CHEMISTRY ENGINE (GOD-LEVEL)
+// PRINTING COST ENGINE — THOMSON PRESS CALIBRATED (REWRITE)
 // ============================================================================
-// Model: Directed Acyclic Graph Node
-// 
-// This module computes the thermodynamic, chemical, and logistical costs of:
-// - Machine Kinematics (Speed degradation curves based on stock/colors)
-// - Makeready Decomposition (Micro-level time tracking per operation)
-// - Ink Chemistry & Consumption (Coverage %, Specific Gravity, Transfer Eq)
-// - Energy Consumption (kWh based on drive motors + curing units)
-// - Machine Depreciation & Direct Overhead Allocation
+// Uses Thomson Press EXACT rate tables:
+//   - CTP plate making: separate cost per plate
+//   - Printing: plates × print rate per plate
+//   - Impression cost: (impressions / 1000) × lookup rate
+//
+// CRITICAL RULES:
+//   1. CTP and Printing are SEPARATE cost lines
+//   2. Impression rates in the lookup table are already in RUPEES per 1000
+//   3. Machine auto-selection picks lowest-cost eligible machine
+//
+// CALIBRATION TARGET:
+//   Text 1 on RMGT: 16 plates × Rs 271 CTP = Rs 4,336
+//   Endleaves on REK: 8 plates × Rs 403 CTP = Rs 3,224
+//   Cover on FAV: 4 plates × Rs 247 CTP = Rs 988
+//   TOTAL CTP: Rs 8,548
+//
+//   Text 1: 16 plates × Rs 146 print = Rs 2,336
+//   Endleaves: 12 plates × Rs 148 print = Rs 1,776
+//   Cover: 4 plates × Rs 131 print = Rs 524 (or similar)
+//   TOTAL PRINTING: Rs ~4,672
 // ============================================================================
 
 import { useMachineStore } from "@/stores/machineStore";
-import { useRateCardStore } from "@/stores/rateCardStore";
-import { ENGINE_CONSTANTS } from "./constants";
+import { lookupTPImpressionRate, lookupTPPlateRates, lookupTPMachineReadyWastage } from "./constants";
 import type { ImpositionResult } from "./paper";
 import type { CompoundSpoilageResult } from "./paper";
 import type { SubstratePhysicalModel } from "./paper";
@@ -23,15 +34,15 @@ import type { SubstratePhysicalModel } from "./paper";
 export interface PrintingCostInput {
   sectionName: string;
   sectionType: string;
-  machineId: string;
+  machineId: string;           // machine ID or "" for auto-select
   colorsFront: number;
   colorsBack: number;
-  quantity: number; // Finished required quantity
-  imposition: ImpositionResult; // From paper module
-  wastageResult: CompoundSpoilageResult; // From paper module
-  substrate: SubstratePhysicalModel; // From paper module
+  quantity: number;
+  imposition: ImpositionResult;
+  wastageResult: CompoundSpoilageResult;
+  substrate: SubstratePhysicalModel;
   printingMethod: 'SHEETWISE' | 'WORK_AND_TURN' | 'WORK_AND_TUMBLE' | 'PERFECTING';
-  inkCoverageFront_percent?: number[]; // [C, M, Y, K, Spot1...]
+  inkCoverageFront_percent?: number[];
   inkCoverageBack_percent?: number[];
 }
 
@@ -79,337 +90,226 @@ export interface SectionPrintingCost_GodLevel {
   sectionType: string;
   machineId: string;
   machineName: string;
-
   impressionsPerForm: number;
   totalImpressions: number;
   totalPlates: number;
-
   kinematics: MachineKinematicsResult;
   makeready: MakereadyDecompositionResult;
-  chemistry: InkChemistryResult;
+  inkChemistry: InkChemistryResult;
   facility: EnergyAndDepreciationResult;
-
-  // Cost breakdown
   timeRunningCost: number;
   timeMakereadyCost: number;
-  platesCost: number;
+  platesCost: number;           // CTP cost (plate making)
+  printingPlateCost: number;    // Printing cost (press running per plate)
   inkCost: number;
   solventCost: number;
   energyCost: number;
   depreciationCost: number;
-
-  totalCost: number;
-  effectiveRatePer1000: number; // Synthetic metric for comparison
+  totalCost: number;            // CTP + Printing + Impression cost
+  effectiveRatePer1000: number;
 }
 
-// ─── 1. MACHINE KINEMATICS ENGINE ────────────────────────────────────────────
+// ─── PLATE COUNT FORMULA ─────────────────────────────────────────────────────
+// CORRECT FORMULA from Excel:
+//   plates = colours_front × formes + colours_back × formes
+// Each forme needs plates for EACH colour on each side.
+
+function calculatePlates(
+  colorsFront: number,
+  colorsBack: number,
+  numberOfForms: number
+): number {
+  return (colorsFront * numberOfForms) + (colorsBack * numberOfForms);
+}
+
+// ─── MACHINE RESOLUTION ──────────────────────────────────────────────────────
+function resolveMachine(machineId: string): any {
+  const { machines } = useMachineStore.getState();
+  // machines is a Map<string, Machine> — convert to array for searching
+  const allMachines = Array.from(machines.values());
+
+  if (machineId) {
+    // Try direct Map lookup first
+    const direct = machines.get(machineId);
+    if (direct) return direct;
+    // Then search by code/name
+    const found = allMachines.find((m: any) =>
+      m.id === machineId || m.code === machineId ||
+      m.nickname?.toUpperCase() === machineId.toUpperCase() ||
+      m.name?.toUpperCase() === machineId.toUpperCase()
+    );
+    if (found) return found;
+  }
+  // Fallback to first active machine
+  const active = allMachines.filter((m: any) => !m.isArchived && m.status === 'ACTIVE');
+  return active.length > 0 ? active[0] : {
+    id: 'rmgt',
+    code: 'RMGT',
+    name: 'RMGT',
+    speedSPH: 8000,
+    effectiveSpeed: 8000,
+    maxColors: 4,
+    maxColorsPerPass: 4,
+    makeReadyTime: 0.3,
+    hourlyRate: 3200,
+    ctpRate: 271,
+    ctpRate_perPlate: 271,
+    maxSheetWidth: 23,
+    maxSheetHeight: 36,
+  };
+}
+
+// ─── MACHINE CODE EXTRACTOR ──────────────────────────────────────────────────
+function getMachineCode(machine: any): string {
+  const code = (machine.code || machine.id || '').toUpperCase();
+  if (code.includes('FAV')) return 'FAV';
+  if (code.includes('REK')) return 'REK';
+  if (code.includes('RMGT')) return 'RMGT';
+  if (code.includes('AKI')) return 'AKI';
+  return 'RMGT'; // Default
+}
+
+// ─── SIMPLIFIED KINEMATICS (for machine hours reporting) ─────────────────────
 function calculateKinematics(
   machine: any,
-  substrate: SubstratePhysicalModel,
-  activeUnits: number,
-  imposition: ImpositionResult,
   totalGrossSheets: number,
-  method: 'SHEETWISE' | 'WORK_AND_TURN' | 'WORK_AND_TUMBLE' | 'PERFECTING'
+  numberOfForms: number,
 ): MachineKinematicsResult {
-
-  const baseSpeed = machine.speed_max_sph || machine.effectiveSpeed || 15000;
-
-  // 1a. Substrate Penalties
-  let subPenalty = 0;
-  if (substrate.grammage_gsm > (machine.maxSubstrateWeight_gsm || 350) * 0.8) {
-    // Heavy stock slows down feeder
-    subPenalty = machine.speedReductionThickStock_percent || 15;
-  } else if (substrate.grammage_gsm < (machine.minSubstrateWeight_gsm || 60) * 1.5) {
-    // Light stock causes air table floating issues
-    subPenalty = machine.speedReductionThinStock_percent || 20;
-  } else if (substrate.surfaceFinish === 'UNCOATED') {
-    subPenalty = 5; // Uncoated dust reduction
-  }
-
-  // 1b. Color Sync Drag (Multi-unit register maintenance)
-  const syncPenalty = activeUnits > 2 ? (activeUnits - 2) * (machine.speedReduction_perAdditionalColor_percent || 2) : 0;
-
-  // 1c. Perfecting Penalty
-  const perfectingPenalty = method === 'PERFECTING' ? (100 - (machine.duplexSpeedFactor || 0.6) * 100) : 0;
-
-  // Compounded Effective Speed
-  const penaltyMult = (1 - (subPenalty / 100)) * (1 - (syncPenalty / 100)) * (1 - (perfectingPenalty / 100));
-  const effectiveSpeed = Math.floor(baseSpeed * penaltyMult);
-
-
-  // For standard mathematical simplicity, we calculate total machine passes required.
-  // Actually, grossSheets from wastage engine already models total sheets required at the feeder for the ENTIRE job.
-  // We need to know how many passes.
-  const forms = imposition.numberOfForms;
-  let passesPerSheet = 1;
-  if (method === 'SHEETWISE') passesPerSheet = 2; // Front, then back
-
-  const totalImpressions = totalGrossSheets * passesPerSheet;
-
-  const rawRunningTime = totalImpressions / effectiveSpeed;
-
-  // Ramp up loss (Physics of accelerating mass)
-  const rampMins = machine.speedCurve_startupDuration_mins || 5; // e.g., 5 mins to hit top speed
-  const rampLoss = (rampMins / 60) * 0.5 * forms * passesPerSheet; // Loses half efficiency during ramp
+  const baseSpeed = machine.speedSPH || 8000;
+  const effectiveSpeed = baseSpeed; // Simplified — use raw speed
+  const totalImpressions = totalGrossSheets * numberOfForms;
+  const runningTime = totalImpressions / effectiveSpeed;
 
   return {
     baseSpeed_sph: baseSpeed,
-    substrateSpeedPenalty_percent: subPenalty,
-    colorSyncPenalty_percent: syncPenalty,
-    perfectingPenalty_percent: perfectingPenalty,
+    substrateSpeedPenalty_percent: 0,
+    colorSyncPenalty_percent: 0,
+    perfectingPenalty_percent: 0,
     effectiveSpeed_sph: effectiveSpeed,
-    rampUpLoss_hours: rampLoss,
-    runningTime_hours: rawRunningTime + rampLoss
+    rampUpLoss_hours: 0,
+    runningTime_hours: runningTime,
   };
 }
 
-// ─── 2. MAKEREADY DECOMPOSITION ──────────────────────────────────────────────
-function calculateMakeready(machine: any, forms: number, activeUnits: number, platesPerForm: number): MakereadyDecompositionResult {
-  // Base Mechanical Setup (Feeder/Delivery)
-  const base = machine.setupTimeBase_mins || 15;
-
-  // Washup & Blanket Cleaning
-  const washup = activeUnits * (machine.setupTimePerColor_mins || 3);
-
-  // Plate loading (Semi-auto vs Fully-auto)
-  const plateLoad = platesPerForm * (machine.autoPlateLoadingTime_perPlate_mins || 1.5);
-
-  // Register targeting
-  const register = (activeUnits > 1 ? activeUnits : 0) * 1.0;
-
-  // CIP3 Ink Key Profiling
-  const cip3 = 2.0;
-
-  const totalPerForm = base + washup + plateLoad + register + cip3;
-
-  return {
-    baseSetup_mins: base * forms,
-    colorUnitWashup_mins: washup * forms,
-    plateLoading_mins: plateLoad * forms,
-    registerAdjustment_mins: register * forms,
-    feederDeliverySetup_mins: 0, // bundled in base
-    cip3Transfer_mins: cip3 * forms,
-    totalMakereadyTime_mins: totalPerForm * forms,
-    totalMakereadyTime_hours: (totalPerForm * forms) / 60
-  };
-}
-
-// ─── 3. INK CHEMISTRY ────────────────────────────────────────────────────────
-function calculateInkChemistry(
-  input: PrintingCostInput,
-  totalImpressions: number,
-  substrate: SubstratePhysicalModel
-): InkChemistryResult {
-
-  // Total printable area per impression (sqm)
-  const impAreaSqm = (input.imposition.usedArea_sqmm) / 1000000;
-  const totalPrintAreaSqm = impAreaSqm * totalImpressions;
-
-  // Mileage baseline (sqm per kg of ink). Typically ~400 sqm/kg for offset.
-  let mileage = (ENGINE_CONSTANTS.ink as any).baseMileage_sqmPerKg || 400;
-
-  // Adjust based on substrate absorption
-  if (substrate.inkAbsorptionRate === 'HIGH') {
-    mileage = mileage * 0.7; // Uncoated absorbs more, meaning less coverage per kg
-  } else if (substrate.inkAbsorptionRate === 'LOW') {
-    mileage = mileage * 1.15; // Coated holds ink on surface
-  }
-
-  // Calculate average coverage
-  // If no coverage provided, assume 25% per color active.
-  const fCov = input.inkCoverageFront_percent || Array(input.colorsFront).fill(0.25);
-  const bCov = input.inkCoverageBack_percent || Array(input.colorsBack).fill(0.25);
-
-  const sumFCov = fCov.reduce((a, b) => a + b, 0);
-  const sumBCov = bCov.reduce((a, b) => a + b, 0);
-  const avgCovSum = ((sumFCov * input.colorsFront) + (sumBCov * input.colorsBack)) / (input.colorsFront + input.colorsBack || 1);
-  // avgCovSum is like 1.0 if 4 colors are at 25% each.
-
-  // Effective mileage based on coverage (mileage is usually quoted at 100% solid)
-  // Therefore actual mileage at 25% coverage is 4x.
-  const effectiveMileageForJob = mileage / Math.max(0.01, avgCovSum);
-
-  const transferEfficiency = (ENGINE_CONSTANTS.ink as any).transferEfficiency_percent || 85;
-
-  // kg Consumed
-  const kgConsumed = (totalPrintAreaSqm / effectiveMileageForJob) / (transferEfficiency / 100);
-
-  // Rates
-  const { inkRates = [] } = useRateCardStore.getState() as any;
-  const cmykRate = inkRates.find((r: any) => r.type === 'cmyk')?.costPerKg || 500; // INR
-
-  const washupCost = (input.colorsFront + input.colorsBack) * input.imposition.numberOfForms * ((ENGINE_CONSTANTS.ink as any).washupSolventCostPerWash || 150);
-
-  return {
-    totalPrintArea_sqm: totalPrintAreaSqm,
-    inkMileage_sqmPerKg: mileage,
-    transferEfficiency_percent: transferEfficiency,
-    totalInkConsumed_kg: kgConsumed,
-    inkCost: kgConsumed * cmykRate,
-    washupSolventCost: washupCost
-  };
-}
-
-// ─── 4. ENERGY & DEPRECIATION ────────────────────────────────────────────────
-function calculateFacility(
+// ─── SIMPLIFIED MAKEREADY ────────────────────────────────────────────────────
+function calculateMakeready(
   machine: any,
-  totalHours: number,
-  activeUnits: number
-): EnergyAndDepreciationResult {
-
-  // Energy
-  const driveMotorKw = machine.power_driveMotor_kW || (45 + (activeUnits * 5)); // Base + per unit
-  const curingKw = machine.power_curing_kW || 0; // IR/UV
-
-  const totalKw = driveMotorKw + curingKw;
-  const kWh = totalKw * totalHours;
-  // Support both current and legacy constant shapes.
-  const electricityRate =
-    (ENGINE_CONSTANTS as any)?.energy?.electricityCost_perKWh ??
-    (ENGINE_CONSTANTS as any)?.factory?.electricityCost_perKwh ??
-    (ENGINE_CONSTANTS as any)?.factory?.electricityCost_perKWh ??
-    0.12;
-  const energyCost = kWh * electricityRate;
-
-  // Depreciation (Straight Line / Hours per year)
-  // Assuming machine cost $X over 10 years, 4000 hours/yr
-  const capitalCost = machine.capitalCost || 10000000; // 1 Cr default
-  const workingHours_perYear = 4000; // 16 hrs/day * 250 days standard
-  const lifeSpanHrs = (machine.lifespan_years || 10) * workingHours_perYear;
-
-  const depPerHour = capitalCost / lifeSpanHrs;
-  const totalDep = depPerHour * totalHours;
+  totalPlates: number,
+): MakereadyDecompositionResult {
+  const makereadyPerPlate_mins = (machine.makeReadyTime || 0.3) * 60 / Math.max(1, totalPlates);
+  const totalMins = makereadyPerPlate_mins * totalPlates;
 
   return {
-    driveMotor_kW: driveMotorKw,
-    curingUnits_kW: curingKw,
-    totalEnergy_kWh: kWh,
-    electricityCost: energyCost,
-    depreciationCost_perHour: depPerHour,
-    totalDepreciationCost: totalDep
+    baseSetup_mins: totalMins * 0.4,
+    colorUnitWashup_mins: totalMins * 0.15,
+    plateLoading_mins: totalMins * 0.2,
+    registerAdjustment_mins: totalMins * 0.15,
+    feederDeliverySetup_mins: totalMins * 0.05,
+    cip3Transfer_mins: totalMins * 0.05,
+    totalMakereadyTime_mins: totalMins,
+    totalMakereadyTime_hours: totalMins / 60,
   };
 }
 
 // ─── MAIN ORCHESTRATION FUNCTION ─────────────────────────────────────────────
 export function calculatePrintingCostGodLevel(input: PrintingCostInput): SectionPrintingCost_GodLevel {
-  const { machines } = useMachineStore.getState();
+  const machine = resolveMachine(input.machineId);
+  const machineCode = getMachineCode(machine);
+  const plateRates = lookupTPPlateRates(machineCode);
 
-  // Fallbacks if machine not found (Should ideally never happen in God-Level)
-  const machine = Array.from(machines.values()).find(m => m.id === input.machineId) || {
-    id: 'unknown',
-    name: 'Generic Press',
-    effectiveSpeed: 12000,
-    totalHourlyCost: 2500,
-    plateCost_each: 350
-  };
-
-  const forms = input.imposition.numberOfForms;
-  const activeUnits = input.colorsFront + input.colorsBack;
-
-  // 1. Determine Plates
-  let platesPerForm: number;
-  if (input.printingMethod === "WORK_AND_TURN" || input.printingMethod === "WORK_AND_TUMBLE") {
-    platesPerForm = Math.max(input.colorsFront, input.colorsBack);
-  } else if (input.printingMethod === "PERFECTING") {
-    platesPerForm = input.colorsFront + input.colorsBack;
-  } else {
-    // Sheetwise: both sides printed separately
-    platesPerForm = input.colorsFront + input.colorsBack;
-  }
-  const totalPlates = platesPerForm * forms;
-
-  // 2. Makeready Time
-  const makeready = calculateMakeready(machine, forms, activeUnits, platesPerForm);
-
-  // 3. Kinematics (Running Time)
-  const kinematics = calculateKinematics(
-    machine,
-    input.substrate,
-    activeUnits,
-    input.imposition,
-    input.wastageResult.totalSheetsRequired_printing,
-    input.printingMethod
+  // ── PLATE COUNT ────────────────────────────────────────────────────────
+  const numberOfForms = input.imposition.numberOfForms;
+  const totalPlates = calculatePlates(
+    input.colorsFront,
+    input.colorsBack,
+    numberOfForms
   );
 
+  // ── CTP COST (plate making — SEPARATE from printing) ───────────────────
+  const ctpCost = totalPlates * plateRates.ctpRatePerPlate;
+
+  // ── PRINTING COST (press running per plate) ────────────────────────────
+  const printingPlateCost = totalPlates * plateRates.printingRatePerPlate;
+
+  // ── IMPRESSION COST ────────────────────────────────────────────────────
+  // Total impressions = gross sheets (qty + wastage) × forms × sides
+  // But for SHEETWISE, each side is a separate impression
+  const grossSheets = input.wastageResult.totalSheetsRequired_printing;
+  const ups = Math.max(1, input.imposition.ups);
+
+  // Impressions per form = gross sheets (already per form from paper calc)
+  // Total impressions = grossSheets from paper calculation
+  const impressionsPerForm = Math.ceil(grossSheets / numberOfForms);
+  const totalImpressions = grossSheets;
+
+  // Look up the impression rate based on paper size and colour count
+  const paperSizeCode = input.imposition.paperSizeLabel || '23×36';
+  const maxColors = Math.max(input.colorsFront, input.colorsBack);
+  const ratePer1000 = lookupTPImpressionRate(totalImpressions, paperSizeCode, maxColors);
+
+  // Impression cost
+  // NOTE: ratePer1000 is already in RUPEES (not paise) — our constants are pre-converted
+  const impressionCost = (totalImpressions / 1000) * ratePer1000;
+
+  // ── TOTAL PRINTING COST ────────────────────────────────────────────────
+  // Total = printing plate cost + impression cost
+  // CTP cost is reported separately
+  const totalPrintCostExclCTP = printingPlateCost + impressionCost;
+  const totalCostInclCTP = ctpCost + totalPrintCostExclCTP;
+
+  // ── MACHINE HOURS (for overhead calculations) ──────────────────────────
+  const kinematics = calculateKinematics(machine, grossSheets, numberOfForms);
+  const makeready = calculateMakeready(machine, totalPlates);
+
   const totalMachineHours = kinematics.runningTime_hours + makeready.totalMakereadyTime_hours;
+  const makeReadyCost = makeready.totalMakereadyTime_hours * (machine.hourlyRate || 3200);
+  const runningCost = kinematics.runningTime_hours * (machine.hourlyRate || 3200);
 
-  // 4. Ink Chemistry
-  // Passes calculate total sheets through the unit.
-  let passes = input.printingMethod === 'SHEETWISE' ? 2 : 1;
-  const impForInk = input.wastageResult.totalSheetsRequired_printing * passes;
-  const chemistry = calculateInkChemistry(input, impForInk, input.substrate);
+  // ── INK & ENERGY (simplified — small proportion of total) ──────────────
+  const inkChemistry: InkChemistryResult = {
+    totalPrintArea_sqm: 0,
+    inkMileage_sqmPerKg: 400,
+    transferEfficiency_percent: 85,
+    totalInkConsumed_kg: 0,
+    inkCost: 0,
+    washupSolventCost: 0,
+  };
 
-  // 5. Facility (Energy & Depreciation)
-  const facility = calculateFacility(machine, totalMachineHours, activeUnits);
+  const facility: EnergyAndDepreciationResult = {
+    driveMotor_kW: 0,
+    curingUnits_kW: 0,
+    totalEnergy_kWh: 0,
+    electricityCost: 0,
+    depreciationCost_perHour: 0,
+    totalDepreciationCost: 0,
+  };
 
-  // 6. Direct Labor & Overhead — Impression Rate Lookup
-  // Try to use the Rate Card impression rate table first (per 1000 impressions).
-  // If no matching rate is found, fall back to the machine hourly rate.
-  const { impressionRates = [] } = useRateCardStore.getState();
-  const totalMachineImpressions = kinematics.runningTime_hours * kinematics.effectiveSpeed_sph;
-
-  let timeRunningCost: number;
-  let timeMakereadyCost: number;
-  const hrRate = machine.totalHourlyCost || 2500;
-
-  // Determine which impression rate column matches this machine
-  const machineLower = ((machine as any).nickname || machine.name || '').toLowerCase();
-  type ImpCol = 'fav' | 'rekordAQ' | 'rekordNoAQ' | 'rmgt' | 'rmgtPerfecto';
-  let impColumn: ImpCol | null = null;
-  if (machineLower.includes('perfecto') || machineLower.includes('perfector')) impColumn = 'rmgtPerfecto';
-  else if (machineLower.includes('rmgt')) impColumn = 'rmgt';
-  else if (machineLower.includes('rekord') && (machineLower.includes('+aq') || machineLower.includes('aq'))) impColumn = 'rekordAQ';
-  else if (machineLower.includes('rekord')) impColumn = 'rekordNoAQ';
-  else if (machineLower.includes('fav')) impColumn = 'fav';
-
-  const impRateEntry = impColumn
-    ? impressionRates.find(r => r.status === 'active' && Math.round(totalMachineImpressions) >= r.rangeMin && Math.round(totalMachineImpressions) <= r.rangeMax)
-    : null;
-
-  if (impRateEntry && impColumn && impRateEntry[impColumn] > 0) {
-    // Use impression-based pricing for running cost
-    const ratePer1000 = impRateEntry[impColumn];
-    timeRunningCost = (totalMachineImpressions / 1000) * ratePer1000;
-    // Makeready is still time-based (impression rates don't cover setup)
-    timeMakereadyCost = makeready.totalMakereadyTime_hours * hrRate;
-  } else {
-    // Fallback: hourly rate × time
-    timeRunningCost = kinematics.runningTime_hours * hrRate;
-    timeMakereadyCost = makeready.totalMakereadyTime_hours * hrRate;
-  }
-
-  // Plates cost
-  const platesCost = totalPlates * (machine.plateCost_each || 350);
-
-  // Assemble Total
-  const totalCost = timeRunningCost + timeMakereadyCost + platesCost + chemistry.inkCost + chemistry.washupSolventCost + facility.electricityCost + facility.totalDepreciationCost;
-
-
+  // ── EFFECTIVE RATE ─────────────────────────────────────────────────────
+  const effectiveRatePer1000 = totalImpressions > 0
+    ? (totalCostInclCTP / totalImpressions) * 1000
+    : 0;
 
   return {
     sectionName: input.sectionName,
     sectionType: input.sectionType,
-    machineId: input.machineId,
-    machineName: machine.name,
-
-    impressionsPerForm: Math.ceil(totalMachineImpressions / forms),
-    totalImpressions: Math.round(totalMachineImpressions),
+    machineId: machine.id || machineCode,
+    machineName: machine.name || machineCode,
+    impressionsPerForm,
+    totalImpressions,
     totalPlates,
-
     kinematics,
     makeready,
-    chemistry,
+    inkChemistry,
     facility,
-
-    timeRunningCost,
-    timeMakereadyCost,
-    platesCost,
-    inkCost: chemistry.inkCost,
-    solventCost: chemistry.washupSolventCost,
-    energyCost: facility.electricityCost,
-    depreciationCost: facility.totalDepreciationCost,
-
-    totalCost,
-    effectiveRatePer1000: totalMachineImpressions > 0 ? (totalCost / totalMachineImpressions) * 1000 : 0
+    timeRunningCost: runningCost,
+    timeMakereadyCost: makeReadyCost,
+    platesCost: ctpCost,            // CTP cost (plate making)
+    printingPlateCost,              // Printing cost (press running per plate)
+    inkCost: 0,
+    solventCost: 0,
+    energyCost: 0,
+    depreciationCost: 0,
+    totalCost: totalCostInclCTP,    // CTP + Print plate + Impression
+    effectiveRatePer1000,
   };
 }

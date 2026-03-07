@@ -8,8 +8,8 @@
 import { BULK_FACTORS } from "@/constants";
 
 export interface SpineInput {
-  textSections: { pages: number; gsm: number; paperType: string }[];
-  endleaves?: { pages: number; gsm: number; paperType: string };
+  textSections: { pages: number; gsm: number; paperType: string; customPaperBulk?: number }[];
+  endleaves?: { pages: number; gsm: number; paperType: string; customPaperBulk?: number };
 }
 
 /**
@@ -22,7 +22,7 @@ export function calculateSpineThickness(input: SpineInput): number {
   for (const section of input.textSections) {
     if (section.pages <= 0 || section.gsm <= 0) continue;
 
-    const bulkFactor = getBulkFactor(section.paperType);
+    const bulkFactor = section.customPaperBulk ?? getBulkFactor(section.paperType);
     const leaves = section.pages / 2; // Each leaf has 2 pages (front and back)
     const thicknessPerLeaf = (section.gsm / 1000) * bulkFactor; // mm
     spine += leaves * thicknessPerLeaf;
@@ -30,7 +30,7 @@ export function calculateSpineThickness(input: SpineInput): number {
 
   // Endleaves contribute to spine if present
   if (input.endleaves && input.endleaves.pages > 0) {
-    const bulkFactor = getBulkFactor(input.endleaves.paperType);
+    const bulkFactor = input.endleaves.customPaperBulk ?? getBulkFactor(input.endleaves.paperType);
     const leaves = input.endleaves.pages / 2;
     const thicknessPerLeaf = (input.endleaves.gsm / 1000) * bulkFactor;
     spine += leaves * thicknessPerLeaf;

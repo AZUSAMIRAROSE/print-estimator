@@ -11,7 +11,7 @@ import {
 
 const iconMap: Record<string, React.ElementType> = {
   LayoutDashboard, FilePlus, Briefcase, FileCheck, Users,
-  CreditCard, Calculator, Warehouse, BarChart3, Settings,
+  CreditCard, Calculator, Warehouse, BarChart3, Settings
 };
 
 export function Sidebar() {

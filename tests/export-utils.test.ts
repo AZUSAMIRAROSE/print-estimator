@@ -1,6 +1,6 @@
-import test from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
-import { buildEstimationCsv } from "../src/utils/export.ts";
+import { buildEstimationCsv } from "../src/utils/export";
 
 test("buildEstimationCsv creates header and rows", () => {
   const estimation: any = {

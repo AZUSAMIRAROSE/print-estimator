@@ -4,7 +4,7 @@ import { useDataStore } from "@/stores/dataStore";
 import { useAppStore } from "@/stores/appStore";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
-import { User, BookOpen, Hash, Calendar, FileText, Info, Building2 } from "lucide-react";
+import { User, BookOpen, Hash, Calendar, FileText, Building2 } from "lucide-react";
 import { cn } from "@/utils/cn";
 
 export function StepBasicInfo() {

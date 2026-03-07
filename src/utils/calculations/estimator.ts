@@ -1,5 +1,30 @@
 // ============================================================================
-// FULL ESTIMATION ORCHESTRATOR - BRINGS EVERYTHING TOGETHER (GOD-LEVEL)
+// FULL ESTIMATION ORCHESTRATOR — THOMSON PRESS CALIBRATED (REWRITE)
+// ============================================================================
+// Implements the EXACT calculation pipeline from the Excel workbook:
+//
+//   STEP 1-3: Input → Signature → Imposition
+//   STEP 4:   Wastage (ADDITIVE: M/R + running)
+//   STEP 5-7: Paper → CTP → Printing (SEPARATE cost lines)
+//   STEP 8-9: Binding → Finishing
+//   STEP 10:  Covering material
+//   STEP 11:  PVC aggregation
+//   STEP 12:  Machine hours
+//   STEP 13:  Packing
+//   STEP 14:  Freight
+//   STEP 15:  Selling price (MAX formula from V189)
+//   STEP 16:  Currency conversion
+//
+// CALIBRATION TARGET:
+//   Production: Rs 31.31/copy, Paper: Rs 21.53/copy
+//   Packing: Rs 4.08/copy, Freight: Rs 7.84/copy
+//   GRAND TOTAL: Rs 65.25/copy = GBP 0.738 FOB Mumbai
+//
+// CRITICAL FORMULA (V189):
+//   selling_price = MAX(
+//     (base_cost + machine_overhead/qty/conv) / (1 - margin%),
+//     base_cost / (1 - discount%) / (1 - margin%)
+//   )
 // ============================================================================
 
 import type {
@@ -17,6 +42,9 @@ import { calculateFinishingCostGodLevel, type FinishingOperationDef } from "./fi
 import { calculatePackingCostGodLevel } from "./packing";
 import { calculateFreightCostGodLevel } from "./freight";
 import { generateId } from "@/utils/format";
+import { lookupTPPlateRates } from "./constants";
+import { validateJob, type ValidationResult } from "./validate";
+import { createTrace, type TraceBuilder } from "./trace";
 
 
 
@@ -36,13 +64,66 @@ function round3(n: number): number {
   return Math.round((n || 0) * 1000) / 1000;
 }
 
+// ─── SELLING PRICE: MAX() FORMULA FROM EXCEL V189 ────────────────────────────
+// V189 = MAX(
+//   ROUNDUP((V188 + B224*B223/D8/I207) / (1-T189), 3),
+//   ROUNDUP(V188 / (1-AK189) / (1-T189), 3)
+// )
+function calculateSellingPriceTP(
+  baseCostPerCopy: number,     // V188: PVC per copy
+  machineHourlyRate: number,   // B224: machine hourly rate (typically Rs 6,500)
+  totalMachineHours: number,   // B223: total machine hours
+  quantity: number,             // D8: print quantity
+  conversionFactor: number,     // I207: depends on binding type
+  marginPercent: number,        // T189: target margin (e.g., 0.25 = 25%)
+  discountPercent: number,      // AK189: discount factor (e.g., 0.05 = 5%)
+): { pricePerCopy: number; method: string } {
+
+  // Option A: cost + machine overhead
+  const machineOverheadPerCopy = (machineHourlyRate * totalMachineHours) / Math.max(1, quantity) / Math.max(0.01, conversionFactor);
+  const priceA = (baseCostPerCopy + machineOverheadPerCopy) / Math.max(0.01, 1 - marginPercent);
+  const priceARounded = Math.ceil(priceA * 1000) / 1000; // ROUNDUP to 3 decimal places
+
+  // Option B: cost + margin + discount
+  const priceB = baseCostPerCopy / Math.max(0.01, 1 - discountPercent) / Math.max(0.01, 1 - marginPercent);
+  const priceBRounded = Math.ceil(priceB * 1000) / 1000;
+
+  // Final selling price = MAX(A, B)
+  if (priceARounded >= priceBRounded) {
+    return { pricePerCopy: priceARounded, method: 'overhead' };
+  } else {
+    return { pricePerCopy: priceBRounded, method: 'margin' };
+  }
+}
+
 export function calculateFullEstimation(estimation: EstimationInput): EstimationResult[] {
+  // ── STEP 0: VALIDATION ───────────────────────────────────────────────
+  const validation = validateJob(estimation);
+  if (!validation.valid) {
+    console.error('❌ Validation failed:', validation.errors.map(e => e.message).join('; '));
+    // Don't throw — let UI show errors. Log and continue with best-effort.
+  }
+  if (validation.warnings.length > 0) {
+    console.warn('⚠️ Validation warnings:', validation.warnings.map(w => w.message).join('; '));
+  }
+
   const results: EstimationResult[] = [];
   const activeQuantities = estimation.quantities.filter((q) => q > 0);
   if (activeQuantities.length === 0) return results;
 
   activeQuantities.forEach((quantity, qi) => {
     try {
+      // ── TRACE INIT ──────────────────────────────────────────────────
+      const isDebug = typeof window !== 'undefined' && (window as any).__PRINT_DEBUG__;
+      const trace = createTrace(estimation.jobTitle || 'Untitled', isDebug || import.meta.env?.DEV);
+
+      trace.section('Job Parameters');
+      trace.log('Job Title', estimation.jobTitle || '—');
+      trace.log('Quantity', quantity);
+      trace.log('Trim Size', `${estimation.bookSpec.widthMM}×${estimation.bookSpec.heightMM}mm`);
+      trace.log('Binding', estimation.binding.primaryBinding);
+      trace.separator();
+
       const paperCosts: SectionPaperCost[] = [];
       const printingCosts: SectionPrintingCost[] = [];
       const ctpCosts: SectionCTPCost[] = [];
@@ -51,11 +132,15 @@ export function calculateFullEstimation(estimation: EstimationInput): Estimation
 
       let totalForms = 0;
 
+      // ── STEP 1-3: TEXT SECTIONS ────────────────────────────────────────
       for (let i = 0; i < estimation.textSections.length; i++) {
         const section = estimation.textSections[i];
         if (!section.enabled || section.pages <= 0) continue;
 
-        console.log(`  Processing Text Section: ${section.label} (Pages: ${section.pages}, GSM: ${section.gsm})`);
+        trace.section(`Paper — ${section.label}`);
+        trace.log('Pages', section.pages);
+        trace.log('GSM', section.gsm);
+        trace.log('Colors', `${section.colorsFront}/${section.colorsBack}`);
 
         const paperRaw = calculatePaperRequirement({
           sectionName: section.label,
@@ -71,10 +156,19 @@ export function calculateFullEstimation(estimation: EstimationInput): Estimation
           colorsFront: section.colorsFront,
           colorsBack: section.colorsBack,
           printingMethod: normalizePrintMethod(section.printingMethod),
+          machineCode: section.machineId, // For M/R wastage lookup
         });
         rawPaperResults.push(paperRaw);
 
-        console.log(`    Paper Requirement for ${section.label}: ${paperRaw.grossSheets} sheets, Cost: ${paperRaw.totalCost}`);
+        trace.log('Sheet size', paperRaw.paperSize);
+        trace.log('PP/form', paperRaw.ppPerForm);
+        trace.log('Forms', paperRaw.numberOfForms);
+        trace.log('Ups', paperRaw.ups);
+        trace.value('Net sheets', paperRaw.netSheets);
+        trace.value('Wastage sheets', paperRaw.wastageSheets);
+        trace.value('Gross sheets', paperRaw.grossSheets);
+        trace.cost('Paper cost', paperRaw.totalCost);
+        trace.cost('Paper/copy', paperRaw.totalCost / Math.max(1, quantity), 'per copy');
 
         paperCosts.push({
           sectionName: paperRaw.sectionName,
@@ -95,8 +189,13 @@ export function calculateFullEstimation(estimation: EstimationInput): Estimation
           ratePerReam: paperRaw.ratePerReam,
           totalCost: paperRaw.totalCost,
           imposition: paperRaw.imposition,
+          grainCompliant: paperRaw.grainAnalysis?.grainCompliant ?? true,
+          sourceSelection: paperRaw.sourceSelection,
+          procurementRecommendation: paperRaw.procurementRecommendation,
         });
         totalForms += paperRaw.numberOfForms;
+
+        trace.section(`Printing — ${section.label}`);
 
         const printRaw = calculatePrintingCostGodLevel({
           sectionName: section.label,
@@ -112,7 +211,13 @@ export function calculateFullEstimation(estimation: EstimationInput): Estimation
         });
         rawPrintResults.push(printRaw);
 
-        console.log(`    Printing Cost for ${section.label}: ${printRaw.totalImpressions} impressions, Cost: ${printRaw.totalCost}`);
+        trace.log('Machine', printRaw.machineName);
+        trace.value('Total plates', printRaw.totalPlates);
+        trace.value('Total impressions', printRaw.totalImpressions);
+        trace.cost('CTP cost', printRaw.platesCost);
+        trace.cost('Printing plate cost', printRaw.printingPlateCost);
+        trace.cost('Total print+CTP', printRaw.totalCost);
+        trace.cost('Print/copy', printRaw.totalCost / Math.max(1, quantity), 'per copy');
 
         printingCosts.push({
           sectionName: printRaw.sectionName,
@@ -123,23 +228,26 @@ export function calculateFullEstimation(estimation: EstimationInput): Estimation
           impressionsPerForm: printRaw.impressionsPerForm,
           totalImpressions: printRaw.totalImpressions,
           ratePer1000: printRaw.effectiveRatePer1000,
-          printingCost: printRaw.timeRunningCost + printRaw.energyCost + printRaw.depreciationCost,
+          printingCost: printRaw.printingPlateCost,  // Press running cost only
           makeReadyCost: printRaw.timeMakereadyCost,
           runningHours: printRaw.kinematics.runningTime_hours,
           makereadyHours: printRaw.makeready.totalMakereadyTime_hours,
-          totalCost: printRaw.totalCost,
+          totalCost: printRaw.totalCost,  // Includes CTP + printing + impression
         });
 
+        // ── CTP COST: Separate line item ──
         ctpCosts.push({
           sectionName: section.label,
           sectionType: i === 0 ? "text1" : "text2",
           totalPlates: printRaw.totalPlates,
           ratePerPlate: printRaw.platesCost / (printRaw.totalPlates || 1),
-          totalCost: printRaw.platesCost,
+          totalCost: printRaw.platesCost,  // CTP cost only
         });
       }
 
+      // ── COVER SECTION ──────────────────────────────────────────────────
       if (estimation.cover.enabled && !estimation.cover.selfCover) {
+        // Pre-calculate spine for cover dimensions
         const bindingRawFast = calculateBindingCostGodLevel({
           jobType: "BOOK",
           bindingMethod: estimation.binding.primaryBinding.includes("perfect")
@@ -154,7 +262,7 @@ export function calculateFullEstimation(estimation: EstimationInput): Estimation
             .filter((s) => s.enabled)
             .map((s, idx) => ({
               pages: s.pages,
-              substrate: rawPaperResults[idx]?.substrate || ({ caliper_microns: s.gsm * 1.05 } as any),
+              substrate: rawPaperResults[idx]?.substrate || ({ caliper_microns: s.gsm * 1.05, grammage_gsm: s.gsm, bulkFactor: 1.0 } as any),
               signatures: Math.ceil(s.pages / 16),
             })),
         });
@@ -174,6 +282,7 @@ export function calculateFullEstimation(estimation: EstimationInput): Estimation
           colorsBack: estimation.cover.colorsBack,
           spineThickness: bindingRawFast.geometry.totalSpineThickness_mm,
           printingMethod: "SHEETWISE",
+          machineCode: estimation.cover.machineId,
         });
         rawPaperResults.push(coverPaperRaw);
 
@@ -196,6 +305,9 @@ export function calculateFullEstimation(estimation: EstimationInput): Estimation
           ratePerReam: coverPaperRaw.ratePerReam,
           totalCost: coverPaperRaw.totalCost,
           imposition: coverPaperRaw.imposition,
+          grainCompliant: coverPaperRaw.grainAnalysis?.grainCompliant ?? true,
+          sourceSelection: coverPaperRaw.sourceSelection,
+          procurementRecommendation: coverPaperRaw.procurementRecommendation,
         });
 
         const coverPrintRaw = calculatePrintingCostGodLevel({
@@ -221,7 +333,7 @@ export function calculateFullEstimation(estimation: EstimationInput): Estimation
           impressionsPerForm: coverPrintRaw.impressionsPerForm,
           totalImpressions: coverPrintRaw.totalImpressions,
           ratePer1000: coverPrintRaw.effectiveRatePer1000,
-          printingCost: coverPrintRaw.timeRunningCost + coverPrintRaw.energyCost + coverPrintRaw.depreciationCost,
+          printingCost: coverPrintRaw.printingPlateCost,
           makeReadyCost: coverPrintRaw.timeMakereadyCost,
           runningHours: coverPrintRaw.kinematics.runningTime_hours,
           makereadyHours: coverPrintRaw.makeready.totalMakereadyTime_hours,
@@ -237,6 +349,7 @@ export function calculateFullEstimation(estimation: EstimationInput): Estimation
         });
       }
 
+      // ── BINDING ────────────────────────────────────────────────────────
       const bindingRaw = calculateBindingCostGodLevel({
         jobType: "BOOK",
         bindingMethod: estimation.binding.primaryBinding.includes("perfect")
@@ -256,14 +369,30 @@ export function calculateFullEstimation(estimation: EstimationInput): Estimation
               rawPaperResults.find((r) => r.sectionType === (idx === 0 ? "text1" : "text2"))?.numberOfForms ||
               Math.ceil(s.pages / 16),
           })),
+        hardcoverSpecs: estimation.binding.primaryBinding.includes("case") ? {
+          boardThickness_mm: estimation.binding.boardThickness || 3,
+          clothMaterial: estimation.binding.coveringMaterialName || 'printed_paper',
+          headTailBands: estimation.binding.headTailBand || false,
+          ribbonMarker: (estimation.binding.ribbonMarker || 0) > 0,
+        } : undefined,
       });
 
+      // ── COST AGGREGATION ───────────────────────────────────────────────
       const totalPaperCost = paperCosts.reduce((sum, p) => sum + (p.totalCost || 0), 0);
+
+      // CTP and Printing are now properly separated inside printing engine
+      // totalCost from printing includes CTP + printing plate + impression
       const totalPrintingCost = printingCosts.reduce((sum, p) => sum + (p.totalCost || 0), 0);
       const totalCTPCost = ctpCosts.reduce((sum, c) => sum + (c.totalCost || 0), 0);
+
+      // NOTE: CTP cost is INCLUDED in totalPrintingCost already
+      // The ctpCosts array is for DISPLAY purposes (breakdown)
+      // We should NOT add totalCTPCost again to avoid double-counting
+
       const totalPaperWeightKg = paperCosts.reduce((sum, p) => sum + (p.totalWeight || 0), 0);
       const bookWeightGrams = quantity > 0 ? (totalPaperWeightKg * 1000) / quantity : 0;
 
+      // ── FINISHING ──────────────────────────────────────────────────────
       const finishingOperations: FinishingOperationDef[] = [];
       if (estimation.finishing.coverLamination.enabled && estimation.finishing.coverLamination.type !== "none") {
         finishingOperations.push({
@@ -297,6 +426,7 @@ export function calculateFullEstimation(estimation: EstimationInput): Estimation
         : [];
       const finTotal = finishingSteps.reduce((sum, step) => sum + (step.totalStepCost || 0), 0);
 
+      // ── PACKING ────────────────────────────────────────────────────────
       const packingRaw = calculatePackingCostGodLevel(quantity, {
         width_mm: estimation.bookSpec.widthMM,
         height_mm: estimation.bookSpec.heightMM,
@@ -304,6 +434,7 @@ export function calculateFullEstimation(estimation: EstimationInput): Estimation
         weight_grams: Math.max(1, bookWeightGrams || 1),
       });
 
+      // ── FREIGHT ────────────────────────────────────────────────────────
       const freightMode = estimation.delivery.freightMode;
       const routeMode =
         freightMode === "air"
@@ -322,6 +453,7 @@ export function calculateFullEstimation(estimation: EstimationInput): Estimation
         requiresTailift: packingRaw.palletsRequired > 0,
       });
 
+      // ── PRE-PRESS ──────────────────────────────────────────────────────
       const totalPlatesAll = ctpCosts.reduce((sum, c) => sum + (c.totalPlates || 0), 0);
       const prePressCost =
         (estimation.prePress.epsonProofs || 0) * (estimation.prePress.epsonRatePerPage || 0) +
@@ -329,15 +461,17 @@ export function calculateFullEstimation(estimation: EstimationInput): Estimation
         ((estimation.prePress.filmOutput ? 1 : 0) * (estimation.prePress.filmRatePerPlate || 0) * totalPlatesAll) +
         (estimation.prePress.designCharges || 0);
 
+      // ── ADDITIONAL COSTS ───────────────────────────────────────────────
       const additionalCost = (estimation.additionalCosts || []).reduce((sum, item) => {
         const line = item.isPerCopy ? (item.costPerCopy || 0) * quantity : (item.totalCost || 0);
         return sum + line;
       }, 0);
 
+      // ── STEP 11: PVC AGGREGATION ───────────────────────────────────────
+      // PVC = paper + printing (incl CTP) + binding + finishing + packing + freight + prepress + additional
       const totalProductionCost =
         totalPaperCost +
-        totalPrintingCost +
-        totalCTPCost +
+        totalPrintingCost +        // Already includes CTP cost
         bindingRaw.costBreakdown.totalCost +
         finTotal +
         packingRaw.materialCosts.total +
@@ -346,28 +480,45 @@ export function calculateFullEstimation(estimation: EstimationInput): Estimation
         additionalCost;
 
       const totalCostPerCopy = quantity > 0 ? totalProductionCost / quantity : 0;
-      const discountedProduction = totalProductionCost * (1 - (estimation.pricing.volumeDiscount || 0) / 100);
-      const marginPct = Math.min(99.99, Math.max(0, estimation.pricing.marginPercent || 0));
-      const sellingBeforeTax = discountedProduction / Math.max(0.0001, 1 - marginPct / 100);
-      const marginAmount = sellingBeforeTax - discountedProduction;
-      const commission = sellingBeforeTax * ((estimation.pricing.commissionPercent || 0) / 100);
 
-      const taxRate = estimation.pricing.taxType === "none" ? 0 : (estimation.pricing.taxRate || 0);
-      const taxAmount = estimation.pricing.includesTax
-        ? sellingBeforeTax - sellingBeforeTax / (1 + taxRate / 100)
-        : sellingBeforeTax * (taxRate / 100);
-      const grandTotal = estimation.pricing.includesTax ? sellingBeforeTax : sellingBeforeTax + taxAmount;
-
-      const totalSellingPrice = sellingBeforeTax;
-      const discountedPrice = quantity > 0 ? totalSellingPrice / quantity : 0;
-      const fx = estimation.pricing.exchangeRate > 0 ? estimation.pricing.exchangeRate : 1;
-      const totalSellingPriceForeign = estimation.pricing.currency === "INR" ? totalSellingPrice : totalSellingPrice / fx;
-      const sellingPriceForeignCurrency = quantity > 0 ? totalSellingPriceForeign / quantity : 0;
-
+      // ── STEP 12: MACHINE HOURS ─────────────────────────────────────────
       const makeReadyHours = printingCosts.reduce((sum, p) => sum + p.makereadyHours, 0);
       const runningHours = printingCosts.reduce((sum, p) => sum + p.runningHours, 0);
       const totalMachineHours = makeReadyHours + runningHours;
 
+      // ── STEP 15: SELLING PRICE (EXCEL V189 MAX FORMULA) ────────────────
+      const marginPct = Math.min(99.99, Math.max(0, estimation.pricing.marginPercent || 0)) / 100;
+      const discountPct = (estimation.pricing.volumeDiscount || 0) / 100;
+      const machineHourlyRate = 6500; // Target TPH rate
+      const conversionFactor = 1.0; // Default, adjusted by binding type
+
+      // Use Excel MAX formula for selling price
+      const tpPrice = calculateSellingPriceTP(
+        totalCostPerCopy,
+        machineHourlyRate,
+        totalMachineHours,
+        quantity,
+        conversionFactor,
+        marginPct,
+        discountPct,
+      );
+
+      const sellingPricePerCopy = tpPrice.pricePerCopy;
+      const totalSellingPrice = sellingPricePerCopy * quantity;
+      const marginAmount = totalSellingPrice - totalProductionCost;
+      const commission = totalSellingPrice * ((estimation.pricing.commissionPercent || 0) / 100);
+
+      const taxRate = estimation.pricing.taxType === "none" ? 0 : (estimation.pricing.taxRate || 0);
+      const taxAmount = estimation.pricing.includesTax
+        ? totalSellingPrice - totalSellingPrice / (1 + taxRate / 100)
+        : totalSellingPrice * (taxRate / 100);
+      const grandTotal = estimation.pricing.includesTax ? totalSellingPrice : totalSellingPrice + taxAmount;
+
+      const fx = estimation.pricing.exchangeRate > 0 ? estimation.pricing.exchangeRate : 1;
+      const totalSellingPriceForeign = estimation.pricing.currency === "INR" ? totalSellingPrice : totalSellingPrice / fx;
+      const sellingPriceForeignCurrency = quantity > 0 ? totalSellingPriceForeign / quantity : 0;
+
+      // ── PACKING BREAKDOWN ──────────────────────────────────────────────
       const packingBreakdownObj: PackingBreakdown = {
         booksPerCarton: packingRaw.unitsPerCarton,
         totalCartons: packingRaw.cartonsRequired,
@@ -384,6 +535,80 @@ export function calculateFullEstimation(estimation: EstimationInput): Estimation
         totalWeight: packingRaw.totalConsignmentWeight_kg,
       };
 
+      // ── TRACE SUMMARY ──────────────────────────────────────────────────
+      trace.section('Cost Summary');
+      trace.separator();
+      trace.cost('Paper', totalPaperCost);
+      trace.cost('Paper/copy', totalPaperCost / Math.max(1, quantity), 'per copy');
+      trace.separator();
+      trace.cost('CTP (plate making)', totalCTPCost);
+      trace.cost('Printing (total)', totalPrintingCost, '', 'includes CTP');
+      trace.cost('Printing/copy', totalPrintingCost / Math.max(1, quantity), 'per copy');
+      trace.separator();
+      trace.cost('Binding', bindingRaw.costBreakdown.totalCost);
+      trace.cost('Binding/copy', bindingRaw.costBreakdown.totalCost / Math.max(1, quantity), 'per copy');
+      trace.separator();
+      trace.cost('Finishing', finTotal);
+      trace.cost('Packing', packingRaw.materialCosts.total);
+      trace.cost('Freight', freightRaw.totalFreightCost);
+      trace.cost('Pre-press', prePressCost);
+      trace.separator();
+      trace.cost('TOTAL PRODUCTION', totalProductionCost);
+      trace.cost('COST/COPY', totalCostPerCopy, 'per copy');
+      trace.cost('SELLING PRICE/COPY', sellingPricePerCopy, 'per copy', tpPrice.method);
+      if (estimation.pricing.currency !== 'INR') {
+        trace.cost(`PRICE (${estimation.pricing.currency})`, sellingPriceForeignCurrency, 'per copy');
+      }
+      trace.separator();
+      trace.value('Machine hours', totalMachineHours, 'hrs');
+      trace.value('TPH', Math.round(totalSellingPrice / Math.max(0.01, totalMachineHours)), 'Rs/hr');
+      trace.value('Book weight', Math.round(bookWeightGrams), 'g');
+      trace.value('Spine', bindingRaw.geometry.baseThickness_mm, 'mm');
+
+      // Print trace to console in dev mode
+      trace.print();
+
+      const planningIssues = paperCosts
+        .filter((paper) => paper.grainCompliant === false)
+        .map((paper, idx) => ({
+          code: `GRAIN_SUBOPTIMAL_${idx + 1}`,
+          severity: "warning" as const,
+          message: `${paper.sectionName}: grain direction is suboptimal for selected imposition.`,
+          section: paper.sectionName,
+          impact: "Potential cracking/curl risk and higher spoilage.",
+        }));
+
+      const procurementRecommendations = paperCosts
+        .map((paper) => paper.procurementRecommendation)
+        .filter((rec): rec is NonNullable<typeof rec> => Boolean(rec));
+
+      const diagnostics = rawPaperResults.map((paper) => ({
+        section: paper.sectionName,
+        strategy: paper.autoPlanning ? "auto_paper_planning" : "manual_sheet_selection",
+        selectedCandidate: `${paper.paperSize} / ${paper.ups} up`,
+        rejectedCandidates: (paper.autoPlanning?.allEvaluated || [])
+          .filter((opt: any) => !opt.selected)
+          .slice(0, 5)
+          .map((opt: any) => `${opt.paperSize} (${opt.ups} up, grain=${opt.grainOk ? "ok" : "warn"})`),
+      }));
+
+      const planningSummary = paperCosts.map((paper) => {
+        const linkedPrint = printingCosts.find((p) => p.sectionName === paper.sectionName);
+        return {
+          section: paper.sectionName,
+          paperSize: paper.paperSize,
+          signature: paper.ppPerForm,
+          ups: paper.ups,
+          machineId: linkedPrint?.machineId || "",
+          grainCompliant: paper.grainCompliant !== false,
+          source: "auto" as const,
+          warnings: paper.grainCompliant === false
+            ? ["Suboptimal grain detected. Review before production release."]
+            : [],
+        };
+      });
+
+      // ── RESULT ASSEMBLY ────────────────────────────────────────────────
       results.push({
         id: generateId(),
         estimationId: estimation.id,
@@ -446,7 +671,7 @@ export function calculateFullEstimation(estimation: EstimationInput): Estimation
 
         totalProductionCost: round2(totalProductionCost),
         totalCostPerCopy: round2(totalCostPerCopy),
-        sellingPricePerCopy: round2(discountedPrice),
+        sellingPricePerCopy: round2(sellingPricePerCopy),
         sellingPriceForeignCurrency: round3(sellingPriceForeignCurrency),
         totalSellingPrice: round2(totalSellingPrice),
         totalSellingPriceForeign: round2(totalSellingPriceForeign),
@@ -455,7 +680,7 @@ export function calculateFullEstimation(estimation: EstimationInput): Estimation
         taxAmount: round2(taxAmount),
         grandTotal: round2(grandTotal),
 
-        tph: Math.round(totalProductionCost / Math.max(1, totalMachineHours)),
+        tph: Math.round(totalSellingPrice / Math.max(0.01, totalMachineHours)),
         totalMachineHours: round2(totalMachineHours),
         makeReadyHours: round2(makeReadyHours),
         runningHours: round2(runningHours),
@@ -467,6 +692,10 @@ export function calculateFullEstimation(estimation: EstimationInput): Estimation
         totalCartons: packingRaw.cartonsRequired,
         cartonsPerPallet: packingRaw.cartonsPerPallet,
         totalPallets: packingRaw.palletsRequired,
+        planningIssues,
+        procurementRecommendations,
+        diagnostics,
+        planningSummary,
 
         createdAt: new Date().toISOString(),
       });

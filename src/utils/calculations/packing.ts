@@ -1,16 +1,23 @@
 // ============================================================================
-// LOGISTICS 3D PACKING ENGINE (GOD-LEVEL)
+// PACKING COST ENGINE — THOMSON PRESS CALIBRATED
 // ============================================================================
-// Model: Directed Acyclic Graph Node
-// 
-// Computes spatial requirements and packaging costs:
-// - Single unit volume and precision computed weight
-// - 3D Bin Packing Algorithm (Books -> Cartons -> Pallets)
-// - Corrugated box specifications (Burst strength / B-Flute logic)
-// - Packing material costs (Tape, strap, stretch film)
+// Uses Thomson Press exact packing rates:
+//   Carton: Rs 65 each
+//   Pallet: Rs 1,350 each
+//   Books per carton: floor(14000 / weight_per_book_grams)
+//   Cartons per pallet: 32 (standard)
+//   Stretch wrap: Rs 0.91/copy
+//
+// CALIBRATION TARGET (2000 copies, ~383g/book):
+//   Books/carton: 36
+//   Total cartons: 56
+//   Carton cost: Rs 3,640
+//   Pallets: 2 @ Rs 1,350 = Rs 2,700
+//   Stretch wrap: Rs 1,820
+//   TOTAL PACKING: Rs 8,160 (Rs 4.08/copy)
 // ============================================================================
 
-
+import { ENGINE_CONSTANTS } from "./constants";
 
 export interface UnitDimensions {
   width_mm: number;
@@ -24,7 +31,7 @@ export interface CartonSpecification {
   internalH_mm: number;
   internalD_mm: number;
   maxWeight_kg: number;
-  thickness_mm: number; // e.g., 3-ply B-flute = ~3mm
+  thickness_mm: number;
   emptyWeight_grams: number;
   cost: number;
 }
@@ -35,7 +42,7 @@ export interface PackingResult {
   totalUnitsPacked: number;
   unitsInPartialCarton: number;
 
-  cartonGrossWeight_kg: number; // For full carton
+  cartonGrossWeight_kg: number;
   totalConsignmentWeight_kg: number;
   totalConsignmentVolume_cbm: number;
 
@@ -57,92 +64,76 @@ export function calculatePackingCostGodLevel(
   _standardCartons?: CartonSpecification[]
 ): PackingResult {
 
-  // 1. Determine best standard carton or use a custom "fit to print" sizing
-  // If no standard cartons provided, we dynamically size the carton based on ergonomic limits:
-  // Ergonomic weight limit = 15kg
-  // Find how many books fit in 15kg
-  const kgPerBook = unitSpec.weight_grams / 1000;
-  let unitsPerCartonLimit = Math.floor(15 / kgPerBook);
-  if (unitsPerCartonLimit < 1) unitsPerCartonLimit = 1;
+  const tp = ENGINE_CONSTANTS.thomsonPress.packing;
 
-  // Arrange units in a stack. Let's stack flat: width x height, stacked on thickness.
-  const stackHeight_mm = unitsPerCartonLimit * unitSpec.thickness_mm;
+  // 1. Books per carton = floor(maxCartonWeight / weightPerBook)
+  // Thomson Press uses 14kg (14000g) max carton weight
+  const booksPerCarton = Math.max(1, Math.floor(tp.maxCartonWeight_grams / Math.max(1, unitSpec.weight_grams)));
 
-  // Box dimensions (Internal)
-  const pad_mm = 5; // Clearance
-  const boxInternalW = unitSpec.width_mm + pad_mm;
-  const boxInternalH = unitSpec.height_mm + pad_mm;
-  const boxInternalD = stackHeight_mm + pad_mm; // stack depth
+  // 2. Total cartons
+  const cartonsNeeded = Math.ceil(quantityToPack / booksPerCarton);
+  const partialUnits = quantityToPack % booksPerCarton || booksPerCarton;
 
-  // Box Outer (3mm wall)
+  // 3. Carton dimensions (estimated from book size)
+  const pad_mm = 10;
+  // Stack books flat in carton
+  const stackHeight_mm = booksPerCarton * unitSpec.thickness_mm;
+  const boxW = unitSpec.width_mm + pad_mm;
+  const boxH = unitSpec.height_mm + pad_mm;
+  const boxD = stackHeight_mm + pad_mm;
+
   const wall = 3;
-  const boxOuterW = boxInternalW + (wall * 2);
-  const boxOuterH = boxInternalH + (wall * 2);
-  const boxOuterD = boxInternalD + (wall * 2);
+  const boxOuterW = boxW + (wall * 2);
+  const boxOuterH = boxH + (wall * 2);
+  const boxOuterD = boxD + (wall * 2);
 
   const boxVolCbm = (boxOuterW / 1000) * (boxOuterH / 1000) * (boxOuterD / 1000);
 
-  // Empty box weight estimate (150gsm kraft x 3 ply = 450gsm surface area)
-  // Surface area of box = 2*(L*W + L*H + W*H)
-  const surfaceAreaSqm = 2 * ((boxOuterW * boxOuterH) + (boxOuterW * boxOuterD) + (boxOuterH * boxOuterD)) / 1000000;
-  const emptyBoxWeightKg = surfaceAreaSqm * 0.45;
-
-  const fullCartonGrossKg = (unitsPerCartonLimit * kgPerBook) + emptyBoxWeightKg;
-
-  const cartonsNeeded = Math.ceil(quantityToPack / unitsPerCartonLimit);
-  const partialUnits = quantityToPack % unitsPerCartonLimit || unitsPerCartonLimit;
+  // 4. Weights
+  const emptyBoxWeightKg = 0.8; // ~800g for standard 5-ply carton
+  const kgPerBook = unitSpec.weight_grams / 1000;
+  const fullCartonGrossKg = (booksPerCarton * kgPerBook) + emptyBoxWeightKg;
 
   const totalWeight = ((cartonsNeeded - 1) * fullCartonGrossKg) + (partialUnits * kgPerBook) + emptyBoxWeightKg;
   const totalVolume = cartonsNeeded * boxVolCbm;
 
-  // Palletization (1200x1000mm standard)
-  const palletW = 1200;
-  const palletH = 1000;
-  const palletMaxKg = 800; // Safe Working Load
-
-  // Simple area fit (knapsack / bin packing simplification)
-  const cAcross = Math.floor(palletW / boxOuterW);
-  const cDown = Math.floor(palletH / boxOuterH);
-  const cPerLayer = cAcross * cDown;
-
-  const maxLayers = Math.floor(1500 / boxOuterD); // 1.5m max height
-
-  const maxCartonsByWeight = Math.floor(palletMaxKg / fullCartonGrossKg);
-  const maxCartonsByVolume = cPerLayer * maxLayers;
-
-  const cartonsPerPallet = Math.min(maxCartonsByWeight, maxCartonsByVolume);
-
+  // 5. Palletization — Thomson Press: 32 cartons per pallet (standard)
+  const cartonsPerPallet = tp.cartonsPerPallet; // 32 standard
   const palletsNeeded = cartonsPerPallet > 0 ? Math.ceil(cartonsNeeded / cartonsPerPallet) : 1;
 
-  // Material Costs
-  const cartonCostEa = surfaceAreaSqm * 25; // Rs 25 per sqm of 3-ply board
-  const totalCartonCost = cartonsNeeded * cartonCostEa;
+  // 6. Costs — Thomson Press exact rates
+  const cartonCostEach = tp.cartonCost; // Rs 65
+  const totalCartonCost = cartonsNeeded * cartonCostEach;
 
+  const palletCost = palletsNeeded * tp.palletCost; // Rs 1,350 per pallet
+
+  // Stretch wrap: Rs 0.91/copy (Thomson Press rate)
+  const stretchWrapCost = quantityToPack * tp.stretchWrapPerCopy;
+
+  // Tape/strapping: minimal cost per carton
   const tapeStrapping = cartonsNeeded * 2; // Rs 2 per carton
-  const palletsCost = palletsNeeded * 450; // Rs 450 for treated wood pallet
-  const wrapCost = palletsNeeded * 60; // Rs 60 stretch wrap per pallet
 
-  const totalMaterial = totalCartonCost + tapeStrapping + palletsCost + wrapCost;
+  const totalMaterial = totalCartonCost + tapeStrapping + palletCost + stretchWrapCost;
 
   return {
-    unitsPerCarton: unitsPerCartonLimit,
+    unitsPerCarton: booksPerCarton,
     cartonsRequired: cartonsNeeded,
     totalUnitsPacked: quantityToPack,
     unitsInPartialCarton: partialUnits,
 
-    cartonGrossWeight_kg: fullCartonGrossKg,
-    totalConsignmentWeight_kg: totalWeight,
-    totalConsignmentVolume_cbm: totalVolume,
+    cartonGrossWeight_kg: Math.round(fullCartonGrossKg * 100) / 100,
+    totalConsignmentWeight_kg: Math.round(totalWeight * 100) / 100,
+    totalConsignmentVolume_cbm: Math.round(totalVolume * 10000) / 10000,
 
     palletsRequired: palletsNeeded,
-    cartonsPerPallet: cartonsPerPallet,
+    cartonsPerPallet,
 
     materialCosts: {
-      cartons: totalCartonCost,
-      tape_strapping: tapeStrapping,
-      pallets: palletsCost,
-      stretchFilm: wrapCost,
-      total: totalMaterial
+      cartons: Math.round(totalCartonCost * 100) / 100,
+      tape_strapping: Math.round(tapeStrapping * 100) / 100,
+      pallets: Math.round(palletCost * 100) / 100,
+      stretchFilm: Math.round(stretchWrapCost * 100) / 100,
+      total: Math.round(totalMaterial * 100) / 100
     }
   };
 }

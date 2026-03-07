@@ -46,6 +46,7 @@ interface DataState {
   getQuotation: (id: string) => Quotation | undefined;
   duplicateQuotation: (id: string) => Quotation | undefined;
   addQuotationComment: (quotationId: string, author: string, text: string, type: "internal" | "external") => void;
+  refreshQuotationPricing: (quotationId: string, newResult?: any) => Quotation | undefined;
 
   // Rate Card CRUD
   addDestination: (dest: Omit<FreightDestination, "id">) => void;
@@ -222,6 +223,94 @@ export const useDataStore = create<DataState>()(
           });
         }
       }),
+
+      // ── Quotation Refresh/Reprice ────────────────────────────────────────
+      refreshQuotationPricing: (quotationId, newResult) => {
+        const original = get().quotations.find((q) => q.id === quotationId);
+        if (!original) return undefined;
+
+        const now = new Date().toISOString();
+        const currentVersion = original.pricingVersion || 1;
+        const newVersion = currentVersion + 1;
+
+        // Create snapshot of current state before refresh
+        const snapshotToArchive = original.quoteSnapshot ? {
+          ...original.quoteSnapshot,
+          id: generateId(),
+          quotationId: original.id,
+          pricingVersion: currentVersion,
+          plannedAt: original.updatedAt,
+        } : {
+          id: generateId(),
+          quotationId: original.id,
+          sourceEstimateId: original.sourceEstimateId || "",
+          pricingVersion: currentVersion,
+          plannedAt: original.updatedAt,
+          estimationInput: {} as any,
+          result: original.results?.[0] || {} as any,
+          planning: { sections: [], blocked: false, issues: [] },
+          procurement: [],
+          issues: [],
+        };
+
+        // Initialize or update pricing revisions array
+        const revisions = original.pricingRevisions || [];
+        
+        // Calculate new results
+        let updatedResults = original.results;
+        if (newResult) {
+          updatedResults = [newResult];
+        }
+
+        // Create new snapshot with latest calculations
+        const newSnapshot = newResult ? {
+          id: generateId(),
+          quotationId: original.id,
+          sourceEstimateId: original.sourceEstimateId || "",
+          pricingVersion: newVersion,
+          plannedAt: now,
+          estimationInput: (newResult as any)?.estimationInput || {} as any,
+          result: newResult,
+          planning: (newResult as any)?.planning || { sections: [], blocked: false, issues: [] },
+          procurement: (newResult as any)?.procurement || [],
+          issues: (newResult as any)?.issues || [],
+        } : snapshotToArchive;
+
+        // Update quotation with new pricing
+        set((state) => {
+          const idx = state.quotations.findIndex((q) => q.id === quotationId);
+          if (idx >= 0) {
+            // Add current snapshot to revisions history
+            if (snapshotToArchive.result && Object.keys(snapshotToArchive.result).length > 0) {
+              state.quotations[idx].pricingRevisions = [
+                ...revisions,
+                {
+                  id: generateId(),
+                  quotationId: original.id,
+                  version: currentVersion,
+                  createdAt: original.updatedAt,
+                  reason: "Previous version",
+                  snapshot: snapshotToArchive,
+                }
+              ];
+            }
+
+            // Update with new snapshot and results
+            state.quotations[idx].quoteSnapshot = newSnapshot;
+            state.quotations[idx].results = updatedResults;
+            state.quotations[idx].pricingVersion = newVersion;
+            state.quotations[idx].updatedAt = now;
+            state.quotations[idx].status = original.status === "accepted" || original.status === "rejected" ? "revised" : original.status;
+            
+            // Update total value from new results
+            if (updatedResults[0]?.grandTotal) {
+              state.quotations[idx].results[0].grandTotal = updatedResults[0].grandTotal;
+            }
+          }
+        });
+
+        return get().quotations.find((q) => q.id === quotationId);
+      },
 
       // ── Rate Card ─────────────────────────────────────────────────────────
       addDestination: (dest) => set((state) => {

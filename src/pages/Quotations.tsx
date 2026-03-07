@@ -7,25 +7,14 @@ import { formatCurrency, formatDate, getRelativeTime } from "@/utils/format";
 import {
   FileCheck, Search, Eye, Check, X,
   Download, Clock, AlertCircle, Send,
-  FileText, Copy, Trash2, Edit3, Banknote
+  FileText, Copy, Trash2, Edit3, Banknote, RefreshCw
 } from "lucide-react";
 import { Quotation } from "@/types";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
+import { generateQuotationPDF } from "@/utils/pdfExport";
 
-interface QuotationEntry {
-  id: string;
-  quotationNumber: string;
-  jobTitle: string;
-  customerName: string;
-  status: "draft" | "sent" | "accepted" | "rejected" | "expired" | "revised";
+export interface QuotationEntry extends Omit<Quotation, "comments"> {
   totalValue: number;
-  currency: string;
-  validUntil: string;
-  revisionNumber: number;
-  comments: number;
-  createdAt: string;
-  results: any[];
+  commentCount: number;
 }
 
 const QTN_STATUS_CONFIG: Record<string, { bg: string; text: string; label: string }> = {
@@ -40,12 +29,13 @@ const QTN_STATUS_CONFIG: Record<string, { bg: string; text: string; label: strin
 
 export function Quotations() {
   const { addNotification, addActivityLog } = useAppStore();
-  const { quotations, updateQuotation, deleteQuotation, duplicateQuotation } = useDataStore();
+  const { quotations, updateQuotation, deleteQuotation, duplicateQuotation, refreshQuotationPricing } = useDataStore();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
   const [viewDetailsQtn, setViewDetailsQtn] = useState<QuotationEntry | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<QuotationEntry | null>(null);
+  const [isRepricing, setIsRepricing] = useState(false);
 
   // Edit Modal State
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -53,53 +43,18 @@ export function Quotations() {
 
   const handleDownloadPDF = async (qtn: QuotationEntry) => {
     try {
-      const doc = new jsPDF();
-
-      // Header Letthead
-      doc.setFontSize(22);
-      doc.setTextColor(30, 41, 59); // Slate 800
-      doc.text("PRINT QUOTATION", 14, 22);
-
-      doc.setFontSize(10);
-      doc.setTextColor(100, 116, 139); // Slate 500
-      doc.text(`Date Issued: ${formatDate(qtn.createdAt)}`, 14, 30);
-      doc.text(`Valid Until: ${formatDate(qtn.validUntil)}`, 14, 35);
-      doc.text(`Quote Reference: ${qtn.quotationNumber} (Rev. ${qtn.revisionNumber})`, 14, 40);
-
-      // Customer Block
-      doc.setFontSize(12);
-      doc.setTextColor(15, 23, 42); // Slate 900
-      doc.text("Bill To:", 14, 52);
-      doc.setFontSize(11);
-      doc.text(qtn.customerName, 14, 58);
-
-      // Job Detials
-      doc.setFontSize(11);
-      doc.text(`Job description: ${qtn.jobTitle}`, 14, 68);
-
-      autoTable(doc, {
-        startY: 75,
-        head: [['S.No', 'Item Description', 'Status', 'Total Value']],
-        body: [
-          ['1', qtn.jobTitle, qtn.status.toUpperCase(), `${qtn.currency} ${qtn.totalValue.toLocaleString()}`]
-        ],
-        theme: 'grid',
-        headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold' },
-        styles: { fontSize: 10, cellPadding: 6, textColor: [30, 41, 59] }
+      const uint8Array = await generateQuotationPDF({
+        quotationNumber: qtn.quotationNumber,
+        revisionNumber: qtn.revisionNumber,
+        customerName: qtn.customerName,
+        jobTitle: qtn.jobTitle,
+        status: qtn.status,
+        currency: qtn.currency,
+        totalValue: qtn.totalValue,
+        validUntil: qtn.validUntil,
+        createdAt: qtn.createdAt,
+        results: qtn.results
       });
-
-      const finalY = (doc as any).lastAutoTable.finalY || 75;
-
-      doc.setFontSize(12);
-      doc.setTextColor(15, 23, 42);
-      doc.text(`Grand Total: ${qtn.currency} ${qtn.totalValue.toLocaleString()}`, 14, finalY + 15);
-
-      doc.setFontSize(9);
-      doc.setTextColor(100, 116, 139);
-      doc.text("Thank you for your business. This quotation is subject to our standard terms and conditions.", 14, finalY + 30);
-
-      const pdfArrayBuffer = doc.output('arraybuffer');
-      const uint8Array = new Uint8Array(pdfArrayBuffer);
 
       const finalPath = await saveBinaryFilePortable(
         {
@@ -123,8 +78,8 @@ export function Quotations() {
     let items = quotations.map((q) => ({
       ...q,
       totalValue: q.results?.[0]?.grandTotal ?? 0,
-      comments: q.comments?.length || 0,
-    }));
+      commentCount: q.comments?.length || 0,
+    })) as QuotationEntry[];
 
     if (search) {
       const q = search.toLowerCase();
@@ -136,7 +91,7 @@ export function Quotations() {
 
   const handleExportAll = async () => {
     const rows = filtered.map((q) => [
-      q.quotationNumber, q.jobTitle, q.customerName, q.status, q.totalValue, q.currency, q.validUntil, q.revisionNumber, q.comments,
+      q.quotationNumber, q.jobTitle, q.customerName, q.status, q.totalValue, q.currency, q.validUntil, q.revisionNumber, q.commentCount,
     ]);
     const csv = [
       ["Quote #", "Job", "Customer", "Status", "Value", "Currency", "Valid Until", "Revision", "Comments"].join(","),
@@ -184,6 +139,75 @@ export function Quotations() {
       addNotification({ type: 'success', title: 'Updates Saved', message: 'Details updated successfully.', category: 'quotation' });
       setIsEditModalOpen(false);
       setEditingQtn(null);
+    }
+  };
+
+  const handleReprice = async (id: string) => {
+    const original = quotations.find((q) => q.id === id);
+    if (!original) return;
+
+    // Check if there's an estimation input to recalculate from
+    const estimationInput = original.quoteSnapshot?.estimationInput;
+
+    if (!estimationInput || !estimationInput.id) {
+      addNotification({
+        type: 'warning',
+        title: 'Cannot Reprice',
+        message: 'No estimation data available for recalculation. Please create a new estimate.',
+        category: 'quotation'
+      });
+      return;
+    }
+
+    setIsRepricing(true);
+
+    try {
+      // Import the estimation engine dynamically to avoid circular dependencies
+      const { runEstimation } = await import('@/domain/estimation/engine');
+
+      // Run fresh calculation with latest rates
+      const estimationResult = runEstimation(estimationInput);
+
+      if (estimationResult.results && estimationResult.results.length > 0) {
+        const updated = refreshQuotationPricing(id, {
+          ...estimationResult.results[0],
+          estimationInput: estimationResult.input,
+          planning: estimationResult.planning,
+          procurement: estimationResult.procurement,
+          issues: estimationResult.issues,
+        });
+
+        if (updated) {
+          addNotification({
+            type: 'success',
+            title: 'Pricing Refreshed',
+            message: `Quotation repriced to version ${updated.pricingVersion}. Original snapshot preserved.`,
+            category: 'quotation'
+          });
+
+          addActivityLog({
+            action: 'QUOTATION_REPRICED',
+            category: 'quotation',
+            description: `Quotation ${original.quotationNumber} repriced to version ${updated.pricingVersion}`,
+            user: 'Current User',
+            entityType: 'quotation',
+            entityId: id,
+            level: 'info',
+          });
+        }
+      } else {
+        throw new Error("No calculation results generated");
+      }
+    } catch (error) {
+      console.error('Reprice error:', error);
+      addNotification({
+        type: 'error',
+        title: 'Reprice Failed',
+        message: `Failed to recalculate: ${(error as Error).message}`,
+        category: 'quotation'
+      });
+    } finally {
+      setIsRepricing(false);
     }
   };
 
@@ -285,6 +309,7 @@ export function Quotations() {
                           <button onClick={() => setViewDetailsQtn(qtn)} className="p-1.5 rounded-lg hover:bg-white dark:hover:bg-surface-dark-tertiary text-text-light-tertiary hover:text-primary-600 transition-colors shadow-sm lg:shadow-none bg-surface-light-primary lg:bg-transparent" title="View Breakdowns"><Eye className="w-4 h-4" /></button>
                           <button onClick={() => openEditor(qtn.id)} className="p-1.5 rounded-lg hover:bg-white dark:hover:bg-surface-dark-tertiary text-text-light-tertiary hover:text-blue-600 transition-colors shadow-sm lg:shadow-none bg-surface-light-primary lg:bg-transparent" title="Edit Quote Details"><Edit3 className="w-4 h-4" /></button>
                           <button onClick={() => handleDuplicate(qtn.id)} className="p-1.5 rounded-lg hover:bg-white dark:hover:bg-surface-dark-tertiary text-text-light-tertiary hover:text-amber-600 transition-colors shadow-sm lg:shadow-none bg-surface-light-primary lg:bg-transparent" title="Duplicate"><Copy className="w-4 h-4" /></button>
+                          <button onClick={() => handleReprice(qtn.id)} disabled={isRepricing} className="p-1.5 rounded-lg hover:bg-white dark:hover:bg-surface-dark-tertiary text-text-light-tertiary hover:text-green-600 transition-colors shadow-sm lg:shadow-none bg-surface-light-primary lg:bg-transparent disabled:opacity-50" title="Reprice (Recalculate)"><RefreshCw className={cn("w-4 h-4", isRepricing && "animate-spin")} /></button>
                           <button onClick={() => handleDownloadPDF(qtn as QuotationEntry)} className="p-1.5 rounded-lg hover:bg-white dark:hover:bg-surface-dark-tertiary text-text-light-tertiary hover:text-blue-600 transition-colors shadow-sm lg:shadow-none bg-surface-light-primary lg:bg-transparent" title="Download PDF"><Download className="w-4 h-4" /></button>
                           <button onClick={() => setShowDeleteConfirm(qtn as QuotationEntry)} className="p-1.5 rounded-lg hover:bg-danger-50 dark:hover:bg-danger-500/10 text-text-light-tertiary hover:text-danger-600 transition-colors shadow-sm lg:shadow-none bg-surface-light-primary lg:bg-transparent" title="Delete"><Trash2 className="w-4 h-4" /></button>
                         </div>
@@ -433,6 +458,30 @@ export function Quotations() {
                     <div className="flex border-b border-surface-light-border last:border-0"><div className="w-1/3 bg-surface-light-secondary dark:bg-surface-dark-tertiary p-3 font-medium text-text-light-secondary">Calculated Weight</div><div className="w-2/3 p-3 font-bold">{viewDetailsQtn.results[0].totalWeight?.toFixed(2) || 0} Kg</div></div>
                     <div className="flex border-b border-surface-light-border last:border-0"><div className="w-1/3 bg-surface-light-secondary dark:bg-surface-dark-tertiary p-3 font-medium text-text-light-secondary">Created By</div><div className="w-2/3 p-3 font-bold">{formatDate(viewDetailsQtn.createdAt)}</div></div>
                   </div>
+
+                  {viewDetailsQtn.pricingRevisions && viewDetailsQtn.pricingRevisions.length > 0 && (
+                    <>
+                      <h3 className="text-sm font-bold uppercase tracking-wider text-text-light-tertiary mt-8 text-left">Revision History</h3>
+                      <div className="space-y-3 mt-3">
+                        {viewDetailsQtn.pricingRevisions.map((rev, index) => (
+                          <div key={rev.id} className="p-4 rounded-xl border border-surface-light-border bg-surface-light-secondary dark:bg-surface-dark-secondary">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
+                                  v{rev.version}
+                                </span>
+                                <span className="text-sm font-medium">{formatDate(rev.createdAt)}</span>
+                              </div>
+                              <span className="text-sm font-bold">{formatCurrency(rev.snapshot?.result?.grandTotal || 0)}</span>
+                            </div>
+                            <div className="text-xs text-text-light-secondary mt-1">
+                              {rev.reason}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
                 </>
               ) : (
                 <div className="text-center py-10 text-text-light-tertiary">No technical results generated for this quotation.</div>

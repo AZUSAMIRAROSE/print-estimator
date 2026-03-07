@@ -1,6 +1,7 @@
-import React, { useState, useCallback, useMemo, useEffect } from "react";
+import React, { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useEstimationStore } from "@/stores/estimationStore";
 import { useAppStore } from "@/stores/appStore";
+import { useDataStore } from "@/stores/dataStore";
 import { cn } from "@/utils/cn";
 import { WIZARD_STEPS } from "@/constants";
 import { WizardStepRenderer } from "@/components/wizard/WizardStepRenderer";
@@ -9,15 +10,14 @@ import { calculateFullEstimation } from "@/utils/calculations/estimator";
 import { calculateSpineThickness } from "@/utils/calculations/spine";
 import { formatNumber } from "@/utils/format";
 import { normalizeEstimationForCalculation, validateEstimation } from "@/utils/validation/estimation";
-import { useDataStore } from "@/stores/dataStore";
 import {
   ChevronLeft, ChevronRight, RotateCcw, Calculator, Save,
-  FileText, CheckCircle, BookOpen, Layers,
-  Type, Square, BookMarked, Sparkles, Package, Truck,
-  Printer, DollarSign, Plus, MessageSquare
+  FileText, BookOpen, Layers, Type, Square, BookMarked,
+  Sparkles, Package, Truck, Printer, DollarSign, Plus, MessageSquare
 } from "lucide-react";
 
-const STEP_ICON_MAP: Record<string, React.ReactNode> = {
+// Step icons mapping
+const STEP_ICONS: Record<string, React.ReactNode> = {
   FileText: <FileText className="w-4 h-4" />,
   Book: <BookOpen className="w-4 h-4" />,
   Type: <Type className="w-4 h-4" />,
@@ -32,184 +32,146 @@ const STEP_ICON_MAP: Record<string, React.ReactNode> = {
   DollarSign: <DollarSign className="w-4 h-4" />,
   Plus: <Plus className="w-4 h-4" />,
   MessageSquare: <MessageSquare className="w-4 h-4" />,
-  CheckCircle: <CheckCircle className="w-4 h-4" />,
 };
 
 export function NewEstimate() {
+  // Store hooks
   const {
     estimation, currentStep, results, isCalculating, showResults,
     setCurrentStep, nextStep, prevStep, resetEstimation,
-    setResults, setIsCalculating, setShowResults, loadEstimation
+    setResults, setIsCalculating, setShowResults, loadEstimation,
+    updateEstimationField
   } = useEstimationStore();
+
   const { addNotification, addActivityLog } = useAppStore();
   const { saveDraft, draftEstimation, addJob, jobs } = useDataStore();
 
+  // Local state
   const [savingDraft, setSavingDraft] = useState(false);
-  const [calculationMessage, setCalculationMessage] = useState("");
+  const [message, setMessage] = useState("");
+  const lastCalculationRef = useRef<string>("");
 
-  // Live spine calculation
-  const spineThickness = calculateSpineThickness({
-    textSections: estimation.textSections
-      .filter(s => s.enabled)
-      .map(s => ({ pages: s.pages, gsm: s.gsm, paperType: s.paperTypeName })),
-    endleaves: estimation.endleaves.enabled
-      ? { pages: estimation.endleaves.pages, gsm: estimation.endleaves.gsm, paperType: estimation.endleaves.paperTypeName }
-      : undefined,
-  });
+  // Live calculations
+  const spineThickness = useMemo(() => {
+    return calculateSpineThickness({
+      textSections: estimation.textSections
+        .filter(s => s.enabled)
+        .map(s => ({ pages: s.pages, gsm: s.gsm, paperType: s.paperTypeName })),
+      endleaves: estimation.endleaves.enabled
+        ? { pages: estimation.endleaves.pages, gsm: estimation.endleaves.gsm, paperType: estimation.endleaves.paperTypeName }
+        : undefined,
+    });
+  }, [estimation.textSections, estimation.endleaves]);
 
   const totalPages = estimation.textSections.reduce((sum, s) => s.enabled ? sum + s.pages : sum, 0);
   const activeQuantities = estimation.quantities.filter(q => q > 0);
   const validationErrors = useMemo(() => validateEstimation(estimation), [estimation]);
-  const canCalculate = validationErrors.length === 0 && !isCalculating;
+  const canCalculate = validationErrors.length === 0 && !isCalculating && activeQuantities.length > 0;
 
+  // Calculate handler
   const handleCalculate = useCallback(() => {
-    if (results.length > 0 && !window.confirm("Recalculate and overwrite existing results?")) {
+    const calcKey = JSON.stringify({ estimation, activeQuantities });
+    if (lastCalculationRef.current === calcKey && results.length > 0) {
+      setShowResults(true);
       return;
     }
+    lastCalculationRef.current = calcKey;
 
     if (validationErrors.length > 0) {
-      const message = validationErrors[0];
-      setCalculationMessage(message);
-      addNotification({
-        type: "error",
-        title: "Validation Error",
-        message,
-        category: "estimate",
-      });
+      setMessage(validationErrors[0]);
       return;
     }
 
-    setCalculationMessage("Calculation in progress...");
+    setMessage("Calculating...");
     setIsCalculating(true);
 
-    // Run calculation in a setTimeout to allow UI to update
     setTimeout(() => {
       try {
-        const normalizedEstimation = normalizeEstimationForCalculation(estimation);
-        const calcResults = calculateFullEstimation(normalizedEstimation);
+        const normalized = normalizeEstimationForCalculation(estimation);
+        const calcResults = calculateFullEstimation(normalized);
+        
         if (calcResults.length === 0) {
-          throw new Error("No valid quantity found for calculation.");
+          throw new Error("No valid quantity found");
         }
 
         setResults(calcResults);
         setShowResults(true);
         setIsCalculating(false);
-        setCalculationMessage(`Calculation complete for ${calcResults.length} quantity variant${calcResults.length > 1 ? "s" : ""}.`);
+        setMessage(`Done - ${calcResults.length} quantity variant${calcResults.length > 1 ? "s" : ""}`);
 
         addNotification({
           type: "success",
           title: "Estimation Complete",
-          message: `Calculated ${calcResults.length} quantity variant${calcResults.length > 1 ? "s" : ""} for "${estimation.jobTitle || "Untitled"}"`,
+          message: `${calcResults.length} variant${calcResults.length > 1 ? "s" : ""} calculated`,
           category: "estimate",
-        });
-
-        addActivityLog({
-          action: "ESTIMATE_CALCULATED",
-          category: "estimation",
-          description: `Estimation calculated for "${estimation.jobTitle}" — ${activeQuantities.join(", ")} copies`,
-          user: "Current User",
-          entityType: "estimation",
-          entityId: estimation.id,
-          level: "info",
         });
       } catch (error) {
         setIsCalculating(false);
-        setCalculationMessage("Calculation failed. Please check inputs and try again.");
+        setMessage("Calculation failed");
         addNotification({
           type: "error",
-          title: "Calculation Error",
-          message: `Failed to calculate estimation: ${(error as Error).message}`,
+          title: "Error",
+          message: (error as Error).message,
           category: "system",
-        });
-
-        addActivityLog({
-          action: "ESTIMATE_ERROR",
-          category: "estimation",
-          description: `Calculation error: ${(error as Error).message}`,
-          user: "Current User",
-          entityType: "estimation",
-          entityId: estimation.id,
-          level: "error",
         });
       }
     }, 100);
-  }, [estimation, setResults, setShowResults, setIsCalculating, addNotification, addActivityLog, activeQuantities, validationErrors, results.length]);
+  }, [estimation, activeQuantities, validationErrors, results.length, setResults, setShowResults, setIsCalculating, addNotification]);
 
+  // Save draft handler
   const handleSaveDraft = useCallback(() => {
     setSavingDraft(true);
     setTimeout(() => {
       saveDraft(estimation);
 
-      // Also create/update a Job with "draft" status so it appears on the Jobs page
-      const existingDraftJob = jobs.find(
-        (j: any) => j.estimationId === estimation.id && j.status === "draft"
-      );
-      if (!existingDraftJob) {
+      const existingDraft = jobs.find((j: any) => j.estimationId === estimation.id && j.status === "draft");
+      if (!existingDraft) {
         addJob({
           title: estimation.jobTitle || "Untitled Draft",
           customerId: estimation.customerId || "",
-          customerName: estimation.customerName || "Unknown Customer",
+          customerName: estimation.customerName || "Unknown",
           estimationId: estimation.id,
           status: "draft",
-          quantities: estimation.quantities.filter((q: number) => q > 0),
+          quantities: activeQuantities,
           results: [],
           bookSpec: estimation.bookSpec,
           totalValue: 0,
           currency: estimation.pricing.currency,
-          assignedTo: estimation.estimatedBy || "Current User",
+          assignedTo: estimation.estimatedBy || "User",
           dueDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString(),
-          notes: estimation.notes || "Draft estimation — not yet calculated.",
+          notes: estimation.notes || "Draft",
           tags: ["draft"],
         });
       }
 
       setSavingDraft(false);
+      setMessage("Draft saved");
       addNotification({
         type: "success",
-        title: "Draft Saved",
-        message: `"${estimation.jobTitle || "Untitled"}" has been saved as a draft and appears in Jobs.`,
+        title: "Saved",
+        message: "Draft saved successfully",
         category: "job",
       });
-      addActivityLog({
-        action: "DRAFT_SAVED",
-        category: "job",
-        description: `Draft saved: "${estimation.jobTitle}"`,
-        user: "Current User",
-        entityType: "job",
-        entityId: estimation.id,
-        level: "info",
-      });
-    }, 500);
-  }, [estimation, addNotification, addActivityLog, saveDraft, addJob, jobs]);
+    }, 300);
+  }, [estimation, activeQuantities, saveDraft, addJob, addNotification]);
 
+  // Reset handler
+  const handleReset = useCallback(() => {
+    if (window.confirm("Reset all data?")) {
+      resetEstimation();
+      lastCalculationRef.current = "";
+      setMessage("");
+    }
+  }, [resetEstimation]);
+
+  // Load draft on mount
   useEffect(() => {
     if (draftEstimation && !estimation.jobTitle && !showResults && results.length === 0) {
       loadEstimation(draftEstimation);
-      addNotification({
-        type: "info",
-        title: "Draft Restored",
-        message: "Unsaved draft restored from local storage.",
-        category: "estimate",
-      });
     }
-  }, [draftEstimation, estimation.jobTitle, showResults, results.length, addNotification, loadEstimation]);
+  }, [draftEstimation, estimation.jobTitle, showResults, results.length, loadEstimation]);
 
-  const handleReset = () => {
-    if (window.confirm("Are you sure you want to reset this estimation? All data will be lost.")) {
-      resetEstimation();
-      addActivityLog({
-        action: "ESTIMATE_RESET",
-        category: "estimation",
-        description: "Estimation wizard reset",
-        user: "Current User",
-        entityType: "estimation",
-        entityId: "",
-        level: "info",
-      });
-    }
-  };
-
-  // Show results page
+  // Show results
   if (showResults && results.length > 0) {
     return (
       <EstimationResults
@@ -221,13 +183,13 @@ export function NewEstimate() {
     );
   }
 
+  const currentStepData = WIZARD_STEPS[currentStep - 1];
+  const progressPercent = Math.round((currentStep / 15) * 100);
+
   return (
-    <div className="flex gap-6 h-[calc(100vh-112px)] animate-in">
-      <div className="sr-only" aria-live="polite" aria-atomic="true">
-        {calculationMessage}
-      </div>
-      {/* Left: Step Navigation */}
-      <div className="w-56 shrink-0 overflow-y-auto pr-1">
+    <div className="flex h-[calc(100vh-112px)]">
+      {/* Left Sidebar - Steps */}
+      <div className="w-56 shrink-0 overflow-y-auto pr-2 border-r border-surface-light-border dark:border-surface-dark-border">
         <div className="space-y-1">
           {WIZARD_STEPS.map((step) => {
             const isActive = currentStep === step.id;
@@ -237,119 +199,99 @@ export function NewEstimate() {
                 key={step.id}
                 onClick={() => setCurrentStep(step.id)}
                 className={cn(
-                  "w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left transition-all text-sm group",
-                  isActive
-                    ? "bg-primary-50 dark:bg-primary-500/10 text-primary-700 dark:text-primary-400 font-semibold shadow-sm border border-primary-200 dark:border-primary-500/30"
-                    : isPast
-                      ? "text-text-light-primary dark:text-text-dark-primary hover:bg-surface-light-tertiary dark:hover:bg-surface-dark-tertiary"
-                      : "text-text-light-tertiary dark:text-text-dark-tertiary hover:bg-surface-light-tertiary dark:hover:bg-surface-dark-tertiary"
+                  "w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm transition-all",
+                  isActive && "bg-primary-100 dark:bg-primary-500/20 text-primary-700 dark:text-primary-300 font-semibold",
+                  !isActive && isPast && "text-text-light-primary dark:text-text-dark-primary hover:bg-surface-light-tertiary dark:hover:bg-surface-dark-tertiary",
+                  !isActive && !isPast && "text-text-light-tertiary dark:text-text-dark-tertiary"
                 )}
               >
-                <div className={cn(
-                  "w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-xs font-bold transition-colors",
-                  isActive
-                    ? "bg-primary-600 text-white"
-                    : isPast
-                      ? "bg-success-100 dark:bg-success-500/20 text-success-700 dark:text-success-400"
-                      : "bg-surface-light-tertiary dark:bg-surface-dark-tertiary text-text-light-tertiary dark:text-text-dark-tertiary"
+                <span className={cn(
+                  "w-6 h-6 rounded flex items-center justify-center text-xs font-bold",
+                  isActive && "bg-primary-600 text-white",
+                  isPast && "bg-green-100 dark:bg-green-500/20 text-green-600 dark:text-green-400",
+                  !isActive && !isPast && "bg-surface-light-tertiary dark:bg-surface-dark-tertiary"
                 )}>
-                  {isPast ? (
-                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                    </svg>
-                  ) : (
-                    step.id
-                  )}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate leading-tight">{step.title}</p>
-                  {isActive && (
-                    <p className="text-[10px] text-primary-500 dark:text-primary-400 truncate mt-0.5">
-                      {step.subtitle}
-                    </p>
-                  )}
-                </div>
-                {step.isOptional && (
-                  <span className="text-[9px] font-medium text-text-light-tertiary dark:text-text-dark-tertiary bg-surface-light-tertiary dark:bg-surface-dark-tertiary px-1.5 py-0.5 rounded-full shrink-0">
-                    OPT
-                  </span>
-                )}
+                  {isPast ? "✓" : step.id}
+                </span>
+                <span className="truncate">{step.title}</span>
               </button>
             );
           })}
         </div>
 
-        {/* Progress */}
-        <div className="mt-4 px-3">
-          <div className="flex items-center justify-between text-xs text-text-light-tertiary dark:text-text-dark-tertiary mb-1.5">
+        {/* Progress bar */}
+        <div className="mt-4 px-2">
+          <div className="flex justify-between text-xs text-text-light-tertiary mb-1">
             <span>Progress</span>
-            <span>{Math.round((currentStep / 15) * 100)}%</span>
+            <span>{progressPercent}%</span>
           </div>
-          <div className="w-full h-1.5 bg-surface-light-tertiary dark:bg-surface-dark-tertiary rounded-full">
-            <div
-              className="h-full bg-primary-500 rounded-full transition-all duration-500"
-              style={{ width: `${(currentStep / 15) * 100}%` }}
-            />
+          <div className="h-1.5 bg-surface-light-tertiary dark:bg-surface-dark-tertiary rounded-full">
+            <div className="h-full bg-primary-500 rounded-full" style={{ width: `${progressPercent}%` }} />
           </div>
         </div>
       </div>
 
-      {/* Center: Step Content */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Step Header */}
-        <div className="flex items-center justify-between mb-5 shrink-0">
+      {/* Center - Content */}
+      <div className="flex-1 flex flex-col min-w-0 px-6">
+        {/* Header */}
+        <div className="py-4 border-b border-surface-light-border dark:border-surface-dark-border">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-primary-50 dark:bg-primary-500/10">
-              {STEP_ICON_MAP[WIZARD_STEPS[currentStep - 1]?.icon] || <FileText className="w-4 h-4 text-primary-600" />}
+            <div className="p-2 rounded-lg bg-primary-50 dark:bg-primary-500/20">
+              {STEP_ICONS[currentStepData?.icon] || <FileText className="w-5 h-5 text-primary-600" />}
             </div>
             <div>
-              <h2 className="text-lg font-bold text-text-light-primary dark:text-text-dark-primary">
-                Step {currentStep}: {WIZARD_STEPS[currentStep - 1]?.title}
-              </h2>
-              <p className="text-sm text-text-light-secondary dark:text-text-dark-secondary">
-                {WIZARD_STEPS[currentStep - 1]?.subtitle}
-              </p>
+              <h2 className="text-xl font-bold">Step {currentStep}: {currentStepData?.title}</h2>
+              <p className="text-sm text-text-light-secondary">{currentStepData?.subtitle}</p>
             </div>
           </div>
         </div>
 
-        {/* Step Content */}
-        <div className="flex-1 overflow-y-auto pb-4 pr-1 text-text-light-primary dark:text-text-dark-primary">
+        {/* Main Content */}
+        <div className="flex-1 overflow-y-auto py-4">
           <WizardStepRenderer step={currentStep} />
         </div>
 
-        {/* Bottom Actions */}
-        <div className="flex items-center justify-between pt-4 border-t border-surface-light-border dark:border-surface-dark-border shrink-0">
+        {/* Footer Actions */}
+        <div className="py-4 border-t border-surface-light-border dark:border-surface-dark-border flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleReset}
+              className="px-3 py-2 text-sm rounded-lg border border-surface-light-border dark:border-surface-dark-border hover:bg-surface-light-tertiary dark:hover:bg-surface-dark-tertiary flex items-center gap-1.5"
+            >
+              <RotateCcw className="w-4 h-4" />
+              Reset
+            </button>
+            {message && (
+              <span className="text-sm text-text-light-secondary dark:text-text-dark-secondary ml-2">
+                {message}
+              </span>
+            )}
+          </div>
+
           <div className="flex items-center gap-2">
             <button
               onClick={prevStep}
               disabled={currentStep <= 1}
-              className="btn-secondary flex items-center gap-1.5 disabled:opacity-40"
+              className="px-4 py-2 text-sm rounded-lg border border-surface-light-border dark:border-surface-dark-border hover:bg-surface-light-tertiary disabled:opacity-40 flex items-center gap-1"
             >
               <ChevronLeft className="w-4 h-4" />
               Previous
             </button>
-            <button onClick={handleReset} className="btn-ghost text-sm flex items-center gap-1.5" title="Reset">
-              <RotateCcw className="w-4 h-4" />
-              Reset
-            </button>
-          </div>
 
-          <div className="flex items-center gap-2">
             <button
               onClick={handleSaveDraft}
               disabled={savingDraft}
-              className="btn-secondary flex items-center gap-1.5"
+              className="px-4 py-2 text-sm rounded-lg border border-surface-light-border dark:border-surface-dark-border hover:bg-surface-light-tertiary disabled:opacity-40 flex items-center gap-1"
             >
               <Save className="w-4 h-4" />
-              {savingDraft ? "Saving..." : "Save Draft"}
+              {savingDraft ? "Saving..." : "Save"}
             </button>
 
             {currentStep === 15 ? (
               <button
                 onClick={handleCalculate}
                 disabled={!canCalculate}
-                className="btn-primary flex items-center gap-2 px-6"
+                className="px-6 py-2 text-sm rounded-lg bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-40 flex items-center gap-2 font-medium"
               >
                 <Calculator className="w-4 h-4" />
                 {isCalculating ? "Calculating..." : "Create Estimate"}
@@ -358,7 +300,7 @@ export function NewEstimate() {
               <button
                 onClick={nextStep}
                 disabled={currentStep >= 15}
-                className="btn-primary flex items-center gap-1.5"
+                className="px-4 py-2 text-sm rounded-lg bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-40 flex items-center gap-1"
               >
                 Next
                 <ChevronRight className="w-4 h-4" />
@@ -368,135 +310,90 @@ export function NewEstimate() {
         </div>
       </div>
 
-      {/* Right: Live Preview Panel */}
-      <div className="w-64 shrink-0 space-y-4 overflow-y-auto pl-1">
+      {/* Right Sidebar - Preview */}
+      <div className="w-64 shrink-0 overflow-y-auto pl-4">
+        {/* Validation Errors */}
         {validationErrors.length > 0 && (
-          <div className="card p-3 border-danger-500/30 bg-danger-50 dark:bg-danger-500/10" role="alert" aria-live="assertive">
-            <p className="text-xs font-semibold text-danger-700 dark:text-danger-400">Validation</p>
-            <p className="text-xs text-danger-700 dark:text-danger-400 mt-1">{validationErrors[0]}</p>
+          <div className="mb-4 p-3 rounded-lg bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20">
+            <p className="text-xs font-semibold text-red-700 dark:text-red-400">Issues Found</p>
+            <p className="text-xs text-red-600 dark:text-red-300 mt-1">{validationErrors[0]}</p>
           </div>
         )}
-        {/* Live Spec Preview */}
-        <div className="card p-4 space-y-3">
-          <h4 className="text-xs font-bold text-text-light-tertiary dark:text-text-dark-tertiary uppercase tracking-wider">
-            Live Preview
-          </h4>
 
-          {/* Book Visual */}
-          <div className="flex items-center justify-center py-3">
-            <div className="relative" title={`${estimation.bookSpec.widthMM} × ${estimation.bookSpec.heightMM} mm`}>
+        {/* Book Preview */}
+        <div className="card p-4 mb-4">
+          <h4 className="text-xs font-semibold text-text-light-tertiary uppercase mb-3">Book Preview</h4>
+          
+          <div className="flex justify-center py-4">
+            <div className="relative">
               <div
-                className="bg-gradient-to-br from-primary-400 to-primary-600 rounded-r-md rounded-l-sm shadow-lg flex items-center justify-center"
+                className="bg-gradient-to-br from-primary-400 to-primary-600 rounded-r-md rounded-l-sm"
                 style={{
-                  width: `${Math.min(Math.max(estimation.bookSpec.widthMM * 0.55, 50), 120)}px`,
-                  height: `${Math.min(Math.max(estimation.bookSpec.heightMM * 0.55, 60), 150)}px`,
+                  width: `${Math.min(Math.max(estimation.bookSpec.widthMM * 0.5, 40), 100)}px`,
+                  height: `${Math.min(Math.max(estimation.bookSpec.heightMM * 0.5, 50), 130)}px`,
                 }}
               >
-                <div className="text-white text-center px-2">
-                  <div className="text-[9px] font-medium opacity-80">{estimation.bookSpec.widthMM}×{estimation.bookSpec.heightMM}</div>
-                  <div className="text-[8px] opacity-60">mm</div>
+                <div className="absolute inset-0 flex items-center justify-center text-white text-center">
+                  <div>
+                    <div className="text-[8px] opacity-80">{estimation.bookSpec.widthMM}×{estimation.bookSpec.heightMM}</div>
+                    <div className="text-[7px] opacity-60">mm</div>
+                  </div>
                 </div>
               </div>
-              {/* Spine */}
               {spineThickness > 0 && (
                 <div
-                  className="absolute top-0 left-0 bg-primary-700 rounded-l-sm"
-                  style={{
-                    width: `${Math.max(spineThickness * 0.8, 3)}px`,
-                    height: "100%",
-                  }}
-                  title={`Spine: ${spineThickness.toFixed(2)}mm`}
+                  className="absolute top-0 left-0 bg-primary-800 rounded-l-sm"
+                  style={{ width: `${Math.max(spineThickness * 0.6, 2)}px`, height: "100%" }}
                 />
               )}
             </div>
           </div>
 
-          {/* Spec Details */}
           <div className="space-y-2 text-xs">
-            <SpecRow label="Title" value={estimation.jobTitle || "—"} />
-            <SpecRow label="Size" value={`${estimation.bookSpec.widthMM}×${estimation.bookSpec.heightMM}mm`} />
-            <SpecRow label="Pages" value={`${totalPages}pp`} />
-            <SpecRow label="Spine" value={`${spineThickness.toFixed(2)}mm`} highlight />
-            <SpecRow label="Quantities" value={activeQuantities.length > 0 ? activeQuantities.map(q => formatNumber(q)).join(", ") : "—"} />
-            <SpecRow label="Binding" value={estimation.binding.primaryBinding.replace(/_/g, " ")} />
-            <SpecRow label="Currency" value={estimation.pricing.currency} />
-            <SpecRow label="Margin" value={`${estimation.pricing.marginPercent}%`} />
+            <div className="flex justify-between">
+              <span className="text-text-light-tertiary">Title</span>
+              <span className="font-medium truncate max-w-[100px]">{estimation.jobTitle || "—"}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-text-light-tertiary">Size</span>
+              <span className="font-medium">{estimation.bookSpec.widthMM}×{estimation.bookSpec.heightMM}mm</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-text-light-tertiary">Pages</span>
+              <span className="font-medium">{totalPages}pp</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-text-light-tertiary">Spine</span>
+              <span className="font-medium text-primary-600">{spineThickness.toFixed(2)}mm</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-text-light-tertiary">Qty</span>
+              <span className="font-medium">{activeQuantities.length > 0 ? activeQuantities.map(q => formatNumber(q)).join(", ") : "—"}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-text-light-tertiary">Binding</span>
+              <span className="font-medium capitalize">{estimation.binding.primaryBinding.replace(/_/g, " ")}</span>
+            </div>
           </div>
         </div>
 
-        {/* Live Cost Preview (if we have enough data) */}
-        {totalPages > 0 && activeQuantities.length > 0 && (
-          <div className="card p-4 space-y-2">
-            <h4 className="text-xs font-bold text-text-light-tertiary dark:text-text-dark-tertiary uppercase tracking-wider">
-              Quick Cost Preview
-            </h4>
-            <div className="space-y-1.5 text-xs">
-              <div className="flex justify-between">
-                <span className="text-text-light-secondary dark:text-text-dark-secondary">Text Paper</span>
-                <span className="font-medium text-text-light-primary dark:text-text-dark-primary text-right truncate ml-2">
-                  {estimation.textSections[0]?.gsm || "—"}gsm {estimation.textSections[0]?.paperTypeName?.split(" ")[0] || ""}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-text-light-secondary dark:text-text-dark-secondary">Cover</span>
-                <span className="font-medium text-text-light-primary dark:text-text-dark-primary text-right truncate ml-2">
-                  {estimation.cover.gsm}gsm {estimation.cover.paperTypeName?.split(" ")[0] || ""}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-text-light-secondary dark:text-text-dark-secondary">Machine</span>
-                <span className="font-medium text-text-light-primary dark:text-text-dark-primary text-right truncate ml-2">
-                  {estimation.textSections[0]?.machineName || "—"}
-                </span>
-              </div>
-              {estimation.finishing.coverLamination.enabled && (
-                <div className="flex justify-between">
-                  <span className="text-text-light-secondary dark:text-text-dark-secondary">Lamination</span>
-                  <span className="font-medium text-text-light-primary dark:text-text-dark-primary capitalize text-right truncate ml-2">
-                    {estimation.finishing.coverLamination.type}
-                  </span>
-                </div>
-              )}
-              <div className="flex justify-between">
-                <span className="text-text-light-secondary dark:text-text-dark-secondary">Destination</span>
-                <span className="font-medium text-text-light-primary dark:text-text-dark-primary text-right truncate ml-2">
-                  {estimation.delivery.destinationName || "—"}
-                </span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Sections Summary */}
+        {/* Sections */}
         <div className="card p-4">
-          <h4 className="text-xs font-bold text-text-light-tertiary dark:text-text-dark-tertiary uppercase tracking-wider mb-2">
-            Sections Included
-          </h4>
-          <div className="space-y-1.5">
+          <h4 className="text-xs font-semibold text-text-light-tertiary uppercase mb-3">Sections</h4>
+          <div className="space-y-2">
             {[
-              { label: "Text 1", active: estimation.textSections[0]?.enabled, detail: `${estimation.textSections[0]?.pages}pp` },
-              { label: "Text 2", active: estimation.textSections[1]?.enabled, detail: estimation.textSections[1]?.enabled ? `${estimation.textSections[1]?.pages}pp` : "" },
-              { label: "Cover", active: estimation.cover.enabled, detail: `${estimation.cover.gsm}gsm` },
-              { label: "Jacket", active: estimation.jacket.enabled, detail: estimation.jacket.enabled ? `${estimation.jacket.gsm}gsm` : "" },
-              { label: "Endleaves", active: estimation.endleaves.enabled, detail: estimation.endleaves.enabled ? estimation.endleaves.type : "" },
+              { name: "Text 1", pages: estimation.textSections[0]?.pages || 0, enabled: estimation.textSections[0]?.enabled },
+              { name: "Text 2", pages: estimation.textSections[1]?.pages || 0, enabled: estimation.textSections[1]?.enabled },
+              { name: "Cover", pages: estimation.cover.enabled ? estimation.cover.pages : 0, enabled: estimation.cover.enabled },
+              { name: "Jacket", pages: estimation.jacket.enabled ? 2 : 0, enabled: estimation.jacket.enabled },
+              { name: "Endleaves", pages: estimation.endleaves.enabled ? estimation.endleaves.pages : 0, enabled: estimation.endleaves.enabled },
             ].map((sec) => (
-              <div key={sec.label} className="flex items-center justify-between text-xs">
+              <div key={sec.name} className="flex items-center justify-between text-xs">
                 <div className="flex items-center gap-2">
-                  <div className={cn(
-                    "w-2 h-2 rounded-full",
-                    sec.active ? "bg-success-500" : "bg-gray-300 dark:bg-gray-600"
-                  )} />
-                  <span className={cn(
-                    sec.active
-                      ? "text-text-light-primary dark:text-text-dark-primary"
-                      : "text-text-light-tertiary dark:text-text-dark-tertiary line-through"
-                  )}>
-                    {sec.label}
-                  </span>
+                  <div className={cn("w-2 h-2 rounded-full", sec.enabled ? "bg-green-500" : "bg-gray-300")} />
+                  <span className={sec.enabled ? "" : "line-through text-text-light-tertiary"}>{sec.name}</span>
                 </div>
-                {sec.active && sec.detail && (
-                  <span className="text-text-light-tertiary dark:text-text-dark-tertiary text-right truncate ml-2">{sec.detail}</span>
-                )}
+                <span className="text-text-light-tertiary">{sec.enabled ? `${sec.pages}pp` : ""}</span>
               </div>
             ))}
           </div>
@@ -506,18 +403,3 @@ export function NewEstimate() {
   );
 }
 
-function SpecRow({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
-  return (
-    <div className="flex items-center justify-between">
-      <span className="text-text-light-tertiary dark:text-text-dark-tertiary">{label}</span>
-      <span className={cn(
-        "font-medium capitalize truncate max-w-[120px] text-right",
-        highlight
-          ? "text-primary-600 dark:text-primary-400"
-          : "text-text-light-primary dark:text-text-dark-primary"
-      )}>
-        {value}
-      </span>
-    </div>
-  );
-}

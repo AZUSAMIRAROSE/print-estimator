@@ -6,11 +6,59 @@ import type {
     NMIRecord, InventoryTransfer
 } from "@/types";
 import { generateId } from "@/utils/format";
+import {
+    reserveNextCategoryCode,
+    reserveNextItemCode,
+    withDeterministicCollisionSuffix,
+} from "@/domain/catalog/codeRegistry";
+
+function ensureInventoryCodes(items: InventoryItem[]): InventoryItem[] {
+    const existingCategoryCodes = new Set<string>();
+    const existingItemCodes = new Set<string>();
+    const categoryToCode = new Map<string, string>();
+
+    for (const item of items) {
+        if (item.categoryCode && !categoryToCode.has(item.category)) {
+            const uniqueCategory = withDeterministicCollisionSuffix(item.categoryCode, existingCategoryCodes);
+            categoryToCode.set(item.category, uniqueCategory);
+            existingCategoryCodes.add(uniqueCategory);
+        }
+        if (item.itemCode) {
+            existingItemCodes.add(item.itemCode);
+        }
+    }
+
+    for (const item of items) {
+        if (!categoryToCode.has(item.category)) {
+            const nextCategory = reserveNextCategoryCode("INV", Array.from(existingCategoryCodes));
+            const uniqueCategory = withDeterministicCollisionSuffix(nextCategory, existingCategoryCodes);
+            existingCategoryCodes.add(uniqueCategory);
+            categoryToCode.set(item.category, uniqueCategory);
+        }
+    }
+
+    return items.map((item) => {
+        const categoryCode = categoryToCode.get(item.category) || reserveNextCategoryCode("INV", Array.from(existingCategoryCodes));
+
+        const baseItemCode = item.itemCode || reserveNextItemCode(categoryCode, Array.from(existingItemCodes));
+        const itemCode = withDeterministicCollisionSuffix(baseItemCode, existingItemCodes);
+        existingItemCodes.add(itemCode);
+
+        const sku = item.sku || itemCode.replace(/^ITM-/, "SKU-");
+
+        return {
+            ...item,
+            categoryCode,
+            itemCode,
+            sku,
+        };
+    });
+}
 
 // ── Default Inventory Items (migrated from old schema) ───────────────────────
 function createDefaultItem(overrides: Partial<InventoryItem>): InventoryItem {
     return {
-        id: generateId(), name: "", sku: "", barcode: "", category: "other",
+        id: generateId(), categoryCode: "", itemCode: "", name: "", sku: "", barcode: "", category: "other",
         subcategory: "", description: "", tags: [],
         stock: 0, minLevel: 0, maxLevel: 9999, reorderQty: 0, unit: "Pcs",
         batchNumber: "", lotNumber: "",
@@ -54,7 +102,7 @@ interface InventoryState {
     transfers: InventoryTransfer[];
 
     // Item actions
-    addItem: (item: Omit<InventoryItem, "id" | "lastUpdated">) => void;
+    addItem: (item: Partial<Omit<InventoryItem, "id" | "lastUpdated">>) => void;
     updateItem: (id: string, updates: Partial<InventoryItem>) => void;
     deleteItem: (id: string) => void;
     duplicateItem: (id: string) => void;
@@ -81,16 +129,32 @@ interface InventoryState {
 export const useInventoryStore = create<InventoryState>()(
     persist(
         immer((set, get) => ({
-            items: INITIAL_ITEMS,
+            items: ensureInventoryCodes(INITIAL_ITEMS),
             nmiRecords: [],
             transfers: [],
 
             // ── Item Actions ─────────────────────────────────────────────────────
             addItem: (itemData) => set((state) => {
+                const existingCategoryCodes = new Set(state.items.map((i) => i.categoryCode).filter(Boolean));
+                const existingItemCodes = new Set(state.items.map((i) => i.itemCode).filter(Boolean));
+                const existingCategoryCode = state.items.find((i) => i.category === (itemData.category || "other"))?.categoryCode;
+                let categoryCode = existingCategoryCode || itemData.categoryCode || reserveNextCategoryCode("INV", Array.from(existingCategoryCodes));
+                if (!existingCategoryCode) {
+                    categoryCode = withDeterministicCollisionSuffix(categoryCode, existingCategoryCodes);
+                    existingCategoryCodes.add(categoryCode);
+                }
+
+                const itemCodeBase = itemData.itemCode || reserveNextItemCode(categoryCode, Array.from(existingItemCodes));
+                const itemCode = withDeterministicCollisionSuffix(itemCodeBase, existingItemCodes);
+                existingItemCodes.add(itemCode);
+
                 const newItem: InventoryItem = {
                     ...createDefaultItem({}),
                     ...itemData,
                     id: generateId(),
+                    categoryCode,
+                    itemCode,
+                    sku: itemData.sku || itemCode.replace(/^ITM-/, "SKU-"),
                     lastUpdated: new Date().toISOString(),
                 };
                 state.items.push(newItem);
@@ -110,11 +174,17 @@ export const useInventoryStore = create<InventoryState>()(
             duplicateItem: (id) => set((state) => {
                 const item = state.items.find((i) => i.id === id);
                 if (item) {
+                    const itemCodeSet = new Set(state.items.map((i) => i.itemCode).filter(Boolean));
+                    const nextItemCode = withDeterministicCollisionSuffix(
+                        reserveNextItemCode(item.categoryCode, Array.from(itemCodeSet)),
+                        itemCodeSet
+                    );
                     const dup: InventoryItem = {
                         ...JSON.parse(JSON.stringify(item)),
                         id: generateId(),
                         name: `${item.name} (Copy)`,
-                        sku: `${item.sku}-COPY`,
+                        itemCode: nextItemCode,
+                        sku: `${nextItemCode.replace(/^ITM-/, "SKU-")}`,
                         lastUpdated: new Date().toISOString(),
                         status: "draft" as const,
                     };
@@ -218,6 +288,15 @@ export const useInventoryStore = create<InventoryState>()(
         {
             name: "print-estimator-inventory-store",
             storage: createJSONStorage(() => localStorage),
+            migrate: (persistedState: any) => {
+                if (!persistedState || !Array.isArray(persistedState.items)) {
+                    return persistedState;
+                }
+                return {
+                    ...persistedState,
+                    items: ensureInventoryCodes(persistedState.items as InventoryItem[]),
+                };
+            },
         }
     )
 );

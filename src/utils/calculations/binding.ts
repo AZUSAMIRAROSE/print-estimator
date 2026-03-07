@@ -1,14 +1,21 @@
 // ============================================================================
-// BINDING PHYSICS & THREE-DIMENSIONAL GEOMETRY ENGINE (GOD-LEVEL)
+// BINDING COST ENGINE — THOMSON PRESS CALIBRATED
 // ============================================================================
-// Model: Directed Acyclic Graph Node
-// 
-// Computes extreme-precision binding metrics:
-// - Spine thickness to 0.01mm factoring adhesive swell and thread bulk
-// - PUR / EVA adhesive consumption in grams via volumetric extrusion geometry
-// - Thread metering exact length per section based on spine + gutter
-// - Hardcover (Case Making) precise material calculation (board, cloth, glue)
-// - Machine kinematics for gathering, sewing, and binding lines
+// Uses Thomson Press exact binding rates from the 68-page PDF:
+//
+// HARDCASE BINDING per copy:
+//   Labour: Rs 3.75
+//   Board: Rs 15.23 (imported 3mm, 5 books/sheet from 31×41" sheet @ Rs 112/sheet)
+//   Glue: Rs 2.10
+//   Lamination film: Rs 0.55
+//   Total H/C: Rs 21.08/copy
+//
+// Other rates:
+//   Sewn blocks: Rs 0.11/copy/section
+//   Folding: Rs 0.04/copy
+//   Saddle stitching: Rs 0.25/copy
+//   Perfect binding: lessThan8pp=15, 8-16pp=10.75, 16-32pp=7.5, >=32pp=5.5
+//   Sewn P/B: lessThan8pp=17.25, 8-16pp=13, 16-32pp=8.5, >=32pp=7.5
 // ============================================================================
 
 import { ENGINE_CONSTANTS } from "./constants";
@@ -26,7 +33,7 @@ export interface BindingCostInput {
   textSections: {
     pages: number;
     substrate: SubstratePhysicalModel;
-    signatures: number; // e.g., 10x 16pp signatures
+    signatures: number;
   }[];
 
   coverSubstrate?: SubstratePhysicalModel;
@@ -45,9 +52,9 @@ export interface SpineGeometryResult {
   baseThickness_mm: number;
   adhesiveSwell_mm: number;
   threadSwell_mm: number;
-  boardThickness_mm: number; // if case bound
+  boardThickness_mm: number;
   totalSpineThickness_mm: number;
-  hingeWidth_mm: number; // required for cover layout
+  hingeWidth_mm: number;
 }
 
 export interface AdhesiveThreadConsumptionResult {
@@ -75,7 +82,7 @@ export interface CaseMakingResult {
   boardCost: number;
   materialCost: number;
   glueCost: number;
-  accessoriesCost: number; // headbands, ribbons
+  accessoriesCost: number;
 }
 
 export interface BindingKinematicsResult {
@@ -94,8 +101,8 @@ export interface JobBindingCost_GodLevel {
   geometry: SpineGeometryResult;
   materials: AdhesiveThreadConsumptionResult;
   caseMaking: CaseMakingResult;
-  kinematics: BindingKinematicsResult; // Primary binding line
-  sewingKinematics?: BindingKinematicsResult; // Secondary gathering/sewing
+  kinematics: BindingKinematicsResult;
+  sewingKinematics?: BindingKinematicsResult;
 
   costBreakdown: {
     adhesiveCost: number;
@@ -103,7 +110,7 @@ export interface JobBindingCost_GodLevel {
     hardcoverMaterialsCost: number;
     machineTimeCost: number;
     setupCost: number;
-    subcontractorCost: number; // If outsourced
+    subcontractorCost: number;
     totalCost: number;
   };
 
@@ -114,17 +121,18 @@ export interface JobBindingCost_GodLevel {
 function calculateSpineGeometry(input: BindingCostInput): SpineGeometryResult {
   let baseThickness = 0;
 
-  // Calculate raw paper caliper
+  // Thomson Press formula: spine_mm = (total_pages / 2) × (GSM / 1000) × bulk_factor
   for (const group of input.textSections) {
     const leaves = group.pages / 2;
-    // Caliper in microns to mm
-    baseThickness += leaves * (group.substrate.caliper_microns / 1000);
+    const bulkFactor = group.substrate.bulkFactor || 1.0;
+    baseThickness += leaves * (group.substrate.grammage_gsm / 1000) * bulkFactor;
   }
 
-  // Endpapers
+  // Endpapers (if case bound or section sewn)
   if (input.endpaperSubstrate && (input.bindingMethod === 'CASE' || input.bindingMethod === 'SECTION_SEWN')) {
-    // 8 pages of endpapers total (4 front, 4 back)
-    baseThickness += 4 * (input.endpaperSubstrate.caliper_microns / 1000);
+    const endleafLeaves = 4; // 8 pages = 4 leaves (4 front, 4 back combined)
+    const bulkFactor = input.endpaperSubstrate.bulkFactor || 1.3;
+    baseThickness += endleafLeaves * (input.endpaperSubstrate.grammage_gsm / 1000) * bulkFactor;
   }
 
   let adhesiveSwell = 0;
@@ -134,76 +142,111 @@ function calculateSpineGeometry(input: BindingCostInput): SpineGeometryResult {
 
   switch (input.bindingMethod) {
     case 'PERFECT':
-      adhesiveSwell = 0.5; // EVA is thicker
+      adhesiveSwell = 0.5;
       hingeWidth = 7;
       break;
     case 'PUR':
-      adhesiveSwell = 0.2; // PUR applies thinner 
+      adhesiveSwell = 0.2;
       hingeWidth = 7;
       break;
     case 'SECTION_SEWN':
-      threadSwell = input.textSections.reduce((acc, section) => acc + (section.signatures * 0.1), 0);
+      threadSwell = input.textSections.reduce((acc, s) => acc + (s.signatures * 0.08), 0);
       adhesiveSwell = 0.3;
       hingeWidth = 8;
       break;
     case 'CASE':
-      threadSwell = input.textSections.reduce((acc, section) => acc + (section.signatures * 0.1), 0);
-      adhesiveSwell = 0.5; // Glue lining
-      boardThickness = input.hardcoverSpecs?.boardThickness_mm || 2.5;
+      threadSwell = input.textSections.reduce((acc, s) => acc + (s.signatures * 0.08), 0);
+      adhesiveSwell = 0.5;
+      boardThickness = input.hardcoverSpecs?.boardThickness_mm || 3;
       hingeWidth = 10;
       break;
   }
 
+  // Spine INCLUDING board = spine_mm + (2 × board_thickness)
+  const spineExclBoard = baseThickness + adhesiveSwell + threadSwell;
+  const totalSpine = spineExclBoard + (boardThickness * 2);
+
   return {
-    baseThickness_mm: baseThickness,
+    baseThickness_mm: Math.round(baseThickness * 100) / 100,
     adhesiveSwell_mm: adhesiveSwell,
     threadSwell_mm: threadSwell,
     boardThickness_mm: boardThickness,
-    totalSpineThickness_mm: baseThickness + adhesiveSwell + threadSwell,
+    totalSpineThickness_mm: Math.round(totalSpine * 100) / 100,
     hingeWidth_mm: hingeWidth
   };
 }
 
-// ─── 2. ADHESIVE & THREAD CHEMISTRY ──────────────────────────────────────────
+// ─── 2. THOMSON PRESS BOARD COST CALCULATOR ──────────────────────────────────
+// Board cost = Rs 15.23/copy for imported 3mm board
+// Calculation: board sheet 31×41 inches, Rs 112/sheet, 5 books/sheet
+function calculateBoardCostTP(
+  bookWidth_mm: number,
+  bookHeight_mm: number,
+  boardThickness_mm: number,
+  quantity: number
+): { costPerCopy: number; totalCost: number; booksPerSheet: number } {
+
+  const tp = ENGINE_CONSTANTS.thomsonPress.board;
+
+  // Board piece size per book (with 3mm overhang on all sides)
+  const boardW_inch = (bookWidth_mm + 6) / 25.4;
+  const boardH_inch = (bookHeight_mm + 6) / 25.4;
+
+  // Board sheet dimensions
+  const sheetW = tp.imported_sheetWidth_inch; // 31"
+  const sheetH = tp.imported_sheetHeight_inch; // 41"
+
+  // How many boards fit per sheet (2 boards per book: front + back)
+  const boardsAcross = Math.floor(sheetW / boardW_inch);
+  const boardsDown = Math.floor(sheetH / boardH_inch);
+  const boardsPerSheet = boardsAcross * boardsDown;
+
+  // Books per sheet = boards per sheet / 2 (front + back)
+  const booksPerSheet = Math.max(1, Math.floor(boardsPerSheet / 2));
+
+  // Rate per sheet based on thickness
+  let ratePerSheet = tp.imported_3mm_ratePerSheet; // Rs 112 for 3mm
+  if (boardThickness_mm <= 2) ratePerSheet = 75;
+  else if (boardThickness_mm <= 2.5) ratePerSheet = 93;
+
+  const costPerCopy = ratePerSheet / booksPerSheet;
+  const sheetsNeeded = Math.ceil(quantity / booksPerSheet);
+  const totalCost = sheetsNeeded * ratePerSheet;
+
+  return { costPerCopy, totalCost, booksPerSheet };
+}
+
+// ─── 3. ADHESIVE & THREAD ───────────────────────────────────────────────────
 function calculateAdhesiveAndThread(
   input: BindingCostInput,
   geometry: SpineGeometryResult
 ): AdhesiveThreadConsumptionResult {
 
   const spineLengthM = input.bookHeight_mm / 1000;
-  const spineWidthM = geometry.totalSpineThickness_mm / 1000;
+  const spineWidthM = geometry.baseThickness_mm / 1000;
 
   let adhesiveType: 'EVA' | 'PUR' | 'NONE' = 'NONE';
   let filmThicknessMicrons = 0;
-  let SG = 1.0; // Specific Gravity
+  let SG = 1.0;
 
   if (input.bindingMethod === 'PERFECT' || input.bindingMethod === 'SECTION_SEWN' || input.bindingMethod === 'CASE') {
     adhesiveType = 'EVA';
-    filmThicknessMicrons = 500; // 0.5mm standard EVA layer
+    filmThicknessMicrons = 500;
     SG = ENGINE_CONSTANTS.adhesives.EVA_density_gPerCm3;
   } else if (input.bindingMethod === 'PUR') {
     adhesiveType = 'PUR';
-    filmThicknessMicrons = 200; // 0.2mm PUR layer
+    filmThicknessMicrons = 200;
     SG = ENGINE_CONSTANTS.adhesives.PUR_density_gPerCm3;
   }
 
-  // Volume = L x W x H
   const volumeM3 = spineLengthM * spineWidthM * (filmThicknessMicrons / 1000000);
   const volumeCm3 = volumeM3 * 1000000;
-
-  // Weight = Volume x SG
   const weightGramsPerBook = volumeCm3 * SG;
   const totalWeightGrams = weightGramsPerBook * input.quantity;
 
-  // Costs
   let costPerKg = 0;
-
-  if (adhesiveType === 'EVA') {
-    costPerKg = ENGINE_CONSTANTS.adhesives.EVA_costPerKg;
-  } else if (adhesiveType === 'PUR') {
-    costPerKg = ENGINE_CONSTANTS.adhesives.PUR_costPerKg;
-  }
-
+  if (adhesiveType === 'EVA') costPerKg = ENGINE_CONSTANTS.adhesives.EVA_costPerKg;
+  else if (adhesiveType === 'PUR') costPerKg = ENGINE_CONSTANTS.adhesives.PUR_costPerKg;
 
   const adhesiveCost = (totalWeightGrams / 1000) * costPerKg;
 
@@ -214,11 +257,9 @@ function calculateAdhesiveAndThread(
 
   if (requiresSewing) {
     const sigTotal = input.textSections.reduce((acc, val) => acc + val.signatures, 0);
-    // Rough estimate: Spine length * 1.5 thread per signature
     const threadPerBook = sigTotal * spineLengthM * 1.5;
     threadMeters = threadPerBook * input.quantity;
-    const threadCostPerM = 0.05; // 5 paise per meter default
-    threadCost = threadMeters * threadCostPerM;
+    threadCost = threadMeters * ENGINE_CONSTANTS.thread.costPerMeter;
   }
 
   return {
@@ -234,47 +275,43 @@ function calculateAdhesiveAndThread(
   };
 }
 
-// ─── 3. CASE MAKING GEOMETRY ─────────────────────────────────────────────────
+// ─── 4. CASE MAKING (SIMPLIFIED — USES TP DIRECT RATES) ────────────────────
 function calculateCaseMaking(input: BindingCostInput, geometry: SpineGeometryResult): CaseMakingResult {
   const isActive = input.bindingMethod === 'CASE';
   if (!isActive || !input.hardcoverSpecs) {
     return { isActive: false, boardW_mm: 0, boardH_mm: 0, spineBoardW_mm: 0, coverMaterialW_mm: 0, coverMaterialH_mm: 0, glueWeight_grams: 0, boardCost: 0, materialCost: 0, glueCost: 0, accessoriesCost: 0 };
   }
 
-  // Board dimensions (usually 3mm overhang on head, tail, and fore-edge)
   const overhang = 3;
-  const boardW = input.bookWidth_mm - 2; // slightly less than book width to allow hinge
+  const boardW = input.bookWidth_mm - 2;
   const boardH = input.bookHeight_mm + (overhang * 2);
-
-  const spineBoardW = geometry.totalSpineThickness_mm + 2; // Allow for board thickness and cloth
-
-  // Cloth / Paper Cover dimensions
-  const turnIn = 15; // 15mm wrap around the board
+  const spineBoardW = geometry.baseThickness_mm + 2;
+  const turnIn = 15;
   const hingeGap = geometry.hingeWidth_mm;
-
   const coverMaterialW = (boardW * 2) + spineBoardW + (hingeGap * 2) + (turnIn * 2);
   const coverMaterialH = boardH + (turnIn * 2);
 
-  // Glue for pasting cloth to board (Animal glue typically used)
-  const glueGsm = 150; // Grams per sqm of wet glue
-  const areaSqm = (coverMaterialW / 1000) * (coverMaterialH / 1000);
-  const glueWeightPerBook = areaSqm * glueGsm;
-  const glueWeightTotal = glueWeightPerBook * input.quantity;
+  // Calculate board cost using Thomson Press method
+  const boardResult = calculateBoardCostTP(
+    input.bookWidth_mm,
+    input.bookHeight_mm,
+    input.hardcoverSpecs.boardThickness_mm || 3,
+    input.quantity
+  );
 
-  // Costs (Synthetic defaults if not in DB for advanced physics)
-  const boardCostPerSqm = 120; // INR
-  const boardArea = ((boardW * 2 * boardH) + (spineBoardW * boardH)) / 1000000;
-  const boardCost = boardArea * boardCostPerSqm * input.quantity;
+  // Glue cost = Rs 2.10/copy (Thomson Press rate)
+  const glueCost = input.quantity * ENGINE_CONSTANTS.thomsonPress.hardcaseBinding.gluePerCopy;
 
-  const materialSqm = areaSqm;
-  const clothCostPerSqm = 300; // typical geltex/buckram
-  const materialCost = materialSqm * clothCostPerSqm * input.quantity;
-
-  const glueCost = (glueWeightTotal / 1000) * 150; // 150 per kg glue
+  // Covering material cost = Rs 0.55/copy lamination film (for PLC - Printed Laminated Case)
+  const materialCost = input.quantity * ENGINE_CONSTANTS.thomsonPress.hardcaseBinding.caseLaminationFilmPerCopy;
 
   let accessoriesCost = 0;
-  if (input.hardcoverSpecs.headTailBands) accessoriesCost += input.quantity * 2; // Rs 2 per book
-  if (input.hardcoverSpecs.ribbonMarker) accessoriesCost += input.quantity * 3; // Rs 3 per book
+  if (input.hardcoverSpecs.headTailBands) {
+    accessoriesCost += input.quantity * ENGINE_CONSTANTS.thomsonPress.hardcaseBinding.htBandPerCopy;
+  }
+  if (input.hardcoverSpecs.ribbonMarker) {
+    accessoriesCost += input.quantity * ENGINE_CONSTANTS.thomsonPress.hardcaseBinding.ribbonPerCopy;
+  }
 
   return {
     isActive,
@@ -283,46 +320,43 @@ function calculateCaseMaking(input: BindingCostInput, geometry: SpineGeometryRes
     spineBoardW_mm: spineBoardW,
     coverMaterialW_mm: coverMaterialW,
     coverMaterialH_mm: coverMaterialH,
-    glueWeight_grams: glueWeightTotal,
-    boardCost,
+    glueWeight_grams: 0,
+    boardCost: boardResult.totalCost,
     materialCost,
     glueCost,
     accessoriesCost
   };
 }
 
-// ─── 4. KINEMATICS ENGINE (MACHINERY) ────────────────────────────────────────
-function calculateBindingKinematics(method: string, quantity: number, signatures: number): BindingKinematicsResult {
-  // Simplified kinematics for the binder line
-  let speed = 1000; // books per hour
+// ─── 5. BINDING KINEMATICS ──────────────────────────────────────────────────
+function calculateBindingKinematics(method: string, quantity: number, _signatures: number): BindingKinematicsResult {
+  let speed = 1000;
   let setupMins = 30;
-  let hrRate = 1500;
 
   if (method === 'PERFECT' || method === 'PUR') {
     speed = 1000;
-    setupMins = 30 + (signatures * 5); // 5 mins per gathering station
-    hrRate = 2500;
+    setupMins = 30;
   } else if (method === 'SADDLE') {
     speed = 3000;
-    setupMins = 20 + (signatures * 5); // 5 per pocket
-    hrRate = 1200;
-  } else if (method === 'CASE') {
-    speed = 500; // Casing-in line
-    setupMins = 90;
-    hrRate = 3000;
+    setupMins = 20;
+  } else if (method === 'CASE' || method === 'SECTION_SEWN') {
+    speed = 800;
+    setupMins = 45;
   }
 
   const runTimeHours = quantity / speed;
   const setupHours = setupMins / 60;
   const totalTime = runTimeHours + setupHours;
 
+  // Thomson Press uses direct per-copy rates, not hourly rates
+  // So machine time cost will be calculated differently
   return {
     machineId: 'synthetic_binder',
     setupTime_hours: setupHours,
     runningSpeed_booksPerHour: speed,
     runTime_hours: runTimeHours,
     totalTime_hours: totalTime,
-    laborOverheadCost: totalTime * hrRate
+    laborOverheadCost: 0 // Will be handled by per-copy rates
   };
 }
 
@@ -338,8 +372,7 @@ export function calculateBindingCostGodLevel(input: BindingCostInput): JobBindin
 
   let sewingKinematics;
   if (materials.requiresSewing) {
-    // Sewing thread machines speed
-    const sewSpeed = 3000; // signatures per hour
+    const sewSpeed = 3000;
     const totalSigs = signatures * input.quantity;
     const runTime = totalSigs / sewSpeed;
     const setupTime = 0.5;
@@ -349,30 +382,67 @@ export function calculateBindingCostGodLevel(input: BindingCostInput): JobBindin
       runningSpeed_booksPerHour: sewSpeed,
       runTime_hours: runTime,
       totalTime_hours: runTime + setupTime,
-      laborOverheadCost: (runTime + setupTime) * 800 // Rs 800/hr for sewing line
+      laborOverheadCost: 0
     };
   }
 
-  const machineTimeCost = kinematics.laborOverheadCost + (sewingKinematics?.laborOverheadCost || 0);
+  // ── COST BREAKDOWN (Thomson Press per-copy rates) ──
+  const tp = ENGINE_CONSTANTS.thomsonPress;
 
+  // Base binding labour cost
+  let labourCost = 0;
+
+  if (input.bindingMethod === 'CASE') {
+    // Hardcase binding: Rs 3.75/copy labour (casing in)
+    labourCost = input.quantity * tp.hardcaseBinding.labourPerCopy;
+  } else if (input.bindingMethod === 'PERFECT' || input.bindingMethod === 'PUR') {
+    // Perfect binding or PUR
+    const totalPages = input.textSections.reduce((sum, s) => sum + s.pages, 0);
+    let pbRate = tp.perfectBinding.from32ppPlus;
+    if (totalPages < 8) pbRate = tp.perfectBinding.lessThan8pp;
+    else if (totalPages < 16) pbRate = tp.perfectBinding.from8to16pp;
+    else if (totalPages < 32) pbRate = tp.perfectBinding.from16to32pp;
+    labourCost = input.quantity * pbRate;
+  } else if (input.bindingMethod === 'SADDLE') {
+    labourCost = input.quantity * tp.hardcaseBinding.saddleStitchPerCopy;
+  } else if (input.bindingMethod === 'SECTION_SEWN') {
+    const totalPages = input.textSections.reduce((sum, s) => sum + s.pages, 0);
+    let sewnRate = tp.sewnPB.from32ppPlus;
+    if (totalPages < 8) sewnRate = tp.sewnPB.lessThan8pp;
+    else if (totalPages < 16) sewnRate = tp.sewnPB.from8to16pp;
+    else if (totalPages < 32) sewnRate = tp.sewnPB.from16to32pp;
+    labourCost = input.quantity * sewnRate;
+  }
+
+  // Sewing cost (per section per copy)
+  let sewingCost = 0;
+  if (materials.requiresSewing) {
+    sewingCost = input.quantity * signatures * tp.hardcaseBinding.sewingRatePerCopyPerSection;
+  }
+
+  // Folding cost
+  const foldingCost = input.quantity * tp.hardcaseBinding.foldingRatePerCopy;
+
+  // Hardcover materials (board + glue + lamination film)
   let hardcoverCost = 0;
   if (caseMaking.isActive) {
-    hardcoverCost = caseMaking.boardCost + caseMaking.materialCost + caseMaking.glueCost + caseMaking.accessoriesCost;
+    hardcoverCost = caseMaking.boardCost + caseMaking.glueCost + caseMaking.materialCost + caseMaking.accessoriesCost;
   }
 
-  // Foil Stamping simplified (Dwell time / Kinematics usually separate finish process, lumped in accessories for now)
+  // Foil stamping
+  let foilCost = 0;
   if (input.hardcoverSpecs?.foilStamping_sqcm) {
-    const foilSqcmTotal = input.hardcoverSpecs.foilStamping_sqcm * input.quantity;
-    hardcoverCost += (foilSqcmTotal * 0.05); // Rs 0.05 per sqcm foil consumed
-    kinematics.laborOverheadCost += (input.quantity / 800) * 1500; // Platen punch time 800 per hr
+    foilCost = input.hardcoverSpecs.foilStamping_sqcm * input.quantity * 0.05;
   }
+
+  const machineTimeCost = labourCost + sewingCost + foldingCost;
 
   const costBreakdown = {
-    adhesiveCost: materials.adhesiveCost,
-    threadCost: materials.threadCost,
-    hardcoverMaterialsCost: hardcoverCost,
-    machineTimeCost: Math.round(machineTimeCost),
-    setupCost: 0, // bundled in machine time
+    adhesiveCost: Math.round(materials.adhesiveCost * 100) / 100,
+    threadCost: Math.round(materials.threadCost * 100) / 100,
+    hardcoverMaterialsCost: Math.round((hardcoverCost + foilCost) * 100) / 100,
+    machineTimeCost: Math.round(machineTimeCost * 100) / 100,
+    setupCost: 0,
     subcontractorCost: 0,
     totalCost: 0
   };
@@ -388,6 +458,6 @@ export function calculateBindingCostGodLevel(input: BindingCostInput): JobBindin
     kinematics,
     sewingKinematics,
     costBreakdown,
-    unitCost: costBreakdown.totalCost / input.quantity
+    unitCost: costBreakdown.totalCost / Math.max(1, input.quantity)
   };
 }

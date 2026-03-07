@@ -1,6 +1,6 @@
-import test from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
-import { calcVolumeDiscountPercent, calculateQuickCosts, validateAndParseQuickCalc, type QuickCalcForm } from "../src/utils/calculations/quickQuote.ts";
+import { calcVolumeDiscountPercent, calculateQuickCosts, validateAndParseQuickCalc, type QuickCalcForm } from "../src/utils/calculations/quickQuote";
 
 const baseForm: QuickCalcForm = {
   bookHeight: "234",

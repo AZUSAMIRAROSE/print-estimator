@@ -1,6 +1,6 @@
-import test from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
-import { normalizeEstimationForCalculation, validateEstimation } from "../src/utils/validation/estimation.ts";
+import { normalizeEstimationForCalculation, validateEstimation } from "../src/utils/validation/estimation";
 
 function createBaseEstimation() {
   return {

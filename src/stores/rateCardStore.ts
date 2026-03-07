@@ -11,6 +11,11 @@ import {
     DEFAULT_COVERING_MATERIALS, DEFAULT_BOARD_TYPES,
     HARDCASE_DEFAULTS, WIRE_O_RATES
 } from "@/constants";
+import {
+    reserveNextCategoryCode,
+    reserveNextItemCode,
+    withDeterministicCollisionSuffix,
+} from "@/domain/catalog/codeRegistry";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -18,6 +23,8 @@ export type RateStatus = "active" | "draft" | "inactive";
 
 export interface PaperRateEntry {
     id: string;
+    categoryCode: string;
+    itemCode: string;
     paperType: string;
     code: string;
     gsm: number;
@@ -225,6 +232,8 @@ export interface TransferEntry {
 function seedPaperRates(): PaperRateEntry[] {
     return DEFAULT_PAPER_RATES.map((r, i) => ({
         id: `pr_${i}`,
+        categoryCode: "",
+        itemCode: "",
         paperType: r.paperType,
         code: r.code,
         gsm: r.gsm,
@@ -331,6 +340,44 @@ function seedPacking(): PackingRatesEntry {
         polybag: PACKING_RATES.polybag,
         kraftWrap: PACKING_RATES.kraftWrap,
     };
+}
+
+function ensurePaperRateCodes(entries: PaperRateEntry[]): PaperRateEntry[] {
+    const categoryCodes = new Set<string>();
+    const itemCodes = new Set<string>();
+    const typeToCategory = new Map<string, string>();
+
+    for (const entry of entries) {
+        if (entry.categoryCode && !typeToCategory.has(entry.paperType)) {
+            const unique = withDeterministicCollisionSuffix(entry.categoryCode, categoryCodes);
+            typeToCategory.set(entry.paperType, unique);
+            categoryCodes.add(unique);
+        }
+        if (entry.itemCode) {
+            itemCodes.add(entry.itemCode);
+        }
+    }
+
+    for (const entry of entries) {
+        if (!typeToCategory.has(entry.paperType)) {
+            const next = reserveNextCategoryCode("RATE", Array.from(categoryCodes));
+            const unique = withDeterministicCollisionSuffix(next, categoryCodes);
+            typeToCategory.set(entry.paperType, unique);
+            categoryCodes.add(unique);
+        }
+    }
+
+    return entries.map((entry) => {
+        const categoryCode = typeToCategory.get(entry.paperType) || reserveNextCategoryCode("RATE", Array.from(categoryCodes));
+        const itemCodeBase = entry.itemCode || reserveNextItemCode(categoryCode, Array.from(itemCodes));
+        const itemCode = withDeterministicCollisionSuffix(itemCodeBase, itemCodes);
+        itemCodes.add(itemCode);
+        return {
+            ...entry,
+            categoryCode,
+            itemCode,
+        };
+    });
 }
 
 // ── Store Interface ──────────────────────────────────────────────────────────
@@ -441,7 +488,7 @@ interface RateCardState {
 export const useRateCardStore = create<RateCardState>()(
     persist(
         immer((set) => ({
-            paperRates: seedPaperRates(),
+            paperRates: ensurePaperRateCodes(seedPaperRates()),
             wastageChart: seedWastage(),
             perfectBinding: seedPerfectBinding(),
             saddleStitch: seedSaddleStitch(),
@@ -459,8 +506,19 @@ export const useRateCardStore = create<RateCardState>()(
             // ── Paper ──────────────────────────────────────────────────────────
             addPaperRate(data) {
                 set(s => {
+                    const categoryCodeSet = new Set(s.paperRates.map((r) => r.categoryCode).filter(Boolean));
+                    const itemCodeSet = new Set(s.paperRates.map((r) => r.itemCode).filter(Boolean));
+                    const existingCategoryCode = s.paperRates.find((r) => r.paperType === (data.paperType || ""))?.categoryCode;
+                    let categoryCode = existingCategoryCode || data.categoryCode || reserveNextCategoryCode("RATE", Array.from(categoryCodeSet));
+                    if (!existingCategoryCode) {
+                        categoryCode = withDeterministicCollisionSuffix(categoryCode, categoryCodeSet);
+                        categoryCodeSet.add(categoryCode);
+                    }
+                    const itemCodeBase = data.itemCode || reserveNextItemCode(categoryCode, Array.from(itemCodeSet));
+                    const itemCode = withDeterministicCollisionSuffix(itemCodeBase, itemCodeSet);
+
                     const entry: PaperRateEntry = {
-                        id: generateId(), paperType: "", code: "", gsm: 0, size: "23x36",
+                        id: generateId(), categoryCode, itemCode, paperType: "", code: "", gsm: 0, size: "23x36",
                         landedCost: 0, chargeRate: 0, ratePerKg: 0, supplier: "", moq: 0,
                         hsnCode: "4802", marginPercent: 0, effectiveRate: 0,
                         validFrom: "", validTo: "", notes: "",
@@ -476,6 +534,12 @@ export const useRateCardStore = create<RateCardState>()(
                     const idx = s.paperRates.findIndex(r => r.id === id);
                     if (idx >= 0) {
                         Object.assign(s.paperRates[idx], updates, { updatedAt: new Date().toISOString() });
+                        if (updates.paperType && !updates.categoryCode) {
+                            const existingCategoryCode = s.paperRates.find((r, i) => i !== idx && r.paperType === updates.paperType)?.categoryCode;
+                            if (existingCategoryCode) {
+                                s.paperRates[idx].categoryCode = existingCategoryCode;
+                            }
+                        }
                         recalcPaperDerived(s.paperRates[idx]);
                     }
                 });
@@ -484,7 +548,21 @@ export const useRateCardStore = create<RateCardState>()(
             duplicatePaperRate(id) {
                 set(s => {
                     const orig = s.paperRates.find(r => r.id === id);
-                    if (orig) s.paperRates.push({ ...orig, id: generateId(), status: "draft", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+                    if (orig) {
+                        const itemCodeSet = new Set(s.paperRates.map((r) => r.itemCode).filter(Boolean));
+                        const nextItemCode = withDeterministicCollisionSuffix(
+                            reserveNextItemCode(orig.categoryCode, Array.from(itemCodeSet)),
+                            itemCodeSet
+                        );
+                        s.paperRates.push({
+                            ...orig,
+                            id: generateId(),
+                            itemCode: nextItemCode,
+                            status: "draft",
+                            createdAt: new Date().toISOString(),
+                            updatedAt: new Date().toISOString()
+                        });
+                    }
                 });
             },
 
@@ -629,7 +707,7 @@ export const useRateCardStore = create<RateCardState>()(
             resetToDefaults(category) {
                 set(s => {
                     switch (category) {
-                        case "paper": s.paperRates = seedPaperRates(); break;
+                        case "paper": s.paperRates = ensurePaperRateCodes(seedPaperRates()); break;
                         case "wastage": s.wastageChart = seedWastage(); break;
                         case "impressions": s.impressionRates = seedImpressionRates(); break;
                         case "binding": s.perfectBinding = seedPerfectBinding(); s.saddleStitch = seedSaddleStitch(); s.wireO = seedWireO(); s.hardcaseDefaults = { ...HARDCASE_DEFAULTS }; break;
@@ -646,6 +724,15 @@ export const useRateCardStore = create<RateCardState>()(
         {
             name: "print-estimator-ratecard-store",
             storage: createJSONStorage(() => localStorage),
+            migrate: (persistedState: any) => {
+                if (!persistedState || !Array.isArray(persistedState.paperRates)) {
+                    return persistedState;
+                }
+                return {
+                    ...persistedState,
+                    paperRates: ensurePaperRateCodes(persistedState.paperRates as PaperRateEntry[]),
+                };
+            },
         }
     )
 );

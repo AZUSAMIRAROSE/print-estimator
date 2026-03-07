@@ -5,6 +5,8 @@ import { useDataStore } from "@/stores/dataStore";
 import { cn } from "@/utils/cn";
 import { formatCurrency, formatNumber, formatPercent } from "@/utils/format";
 import { buildEstimationCsv, downloadTextFile } from "@/utils/export";
+import { saveBinaryFilePortable } from "@/utils/fileSave";
+import { generateQuotationPDF } from "@/utils/pdfExport";
 import type { EstimationInput, EstimationResult } from "@/types";
 import {
   ArrowLeft, Download, FileText, Printer as PrinterIcon, Save,
@@ -110,36 +112,54 @@ export function EstimationResults({ estimation, results, spineThickness, onBackT
     });
   };
 
-  const handleGeneratePDF = () => {
-    const html = printRef.current?.innerHTML;
-    if (html) {
-      const pdfWindow = window.open("", "_blank", "width=1024,height=768");
-      if (pdfWindow) {
-        pdfWindow.document.write(`
-          <html>
-            <head>
-              <title>${estimation.jobTitle || "Estimate"} - PDF</title>
-              <style>
-                body { font-family: Arial, sans-serif; padding: 16px; }
-                table { border-collapse: collapse; width: 100%; }
-                th, td { border: 1px solid #ddd; padding: 6px; font-size: 12px; }
-              </style>
-            </head>
-            <body>${html}</body>
-          </html>
-        `);
-        pdfWindow.document.close();
-        pdfWindow.focus();
-        pdfWindow.print();
-      }
+  const handleGeneratePDF = async () => {
+    try {
+      const uint8Array = await generateQuotationPDF({
+        customerName: estimation.customerName || "Walk-in Customer",
+        jobTitle: estimation.jobTitle || "Estimate Document",
+        currency: estimation.pricing.currency,
+        totalValue: primaryResult?.grandTotal || 0,
+        createdAt: new Date().toISOString(),
+        estimationInput: estimation,
+        results: results
+      });
+
+      const safeTitle = (estimation.jobTitle || "estimate").replace(/[^a-z0-9]/gi, '_').toLowerCase();
+      const finalPath = await saveBinaryFilePortable(
+        {
+          filters: [{ name: "PDF Document", extensions: ["pdf"] }],
+          defaultPath: `${safeTitle}_details.pdf`,
+        },
+        uint8Array,
+        "application/pdf"
+      );
+
+      if (!finalPath) return;
+
+      addNotification({
+        type: "success",
+        title: "PDF Exported",
+        message: `Saved successfully to ${finalPath}`,
+        category: "export",
+      });
+      addActivityLog({
+        action: "PDF_EXPORTED",
+        category: "export",
+        description: `Exported PDF for "${estimation.jobTitle}"`,
+        user: "Current User",
+        entityType: "job",
+        entityId: estimation.id,
+        level: "info",
+      });
+    } catch (err: any) {
+      console.error("PDF generation failed:", err);
+      addNotification({
+        type: "error",
+        title: "Export Failed",
+        message: err?.message || "Failed to generate and save PDF.",
+        category: "export",
+      });
     }
-    setLiveMessage("PDF print view opened.");
-    addNotification({
-      type: "success",
-      title: "PDF Generated",
-      message: `PDF print view opened for "${estimation.jobTitle}"`,
-      category: "export",
-    });
   };
 
   const handleSave = () => {
