@@ -39,8 +39,7 @@ export function NewEstimate() {
   const {
     estimation, currentStep, results, isCalculating, showResults,
     setCurrentStep, nextStep, prevStep, resetEstimation,
-    setResults, setIsCalculating, setShowResults, loadEstimation,
-    updateEstimationField
+    setResults, setIsCalculating, setShowResults, loadEstimation
   } = useEstimationStore();
 
   const { addNotification, addActivityLog } = useAppStore();
