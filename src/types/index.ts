@@ -484,6 +484,9 @@ export interface EstimationInput {
   estimationDate: string;
   poNumber: string;
 
+  // Dynamic tracking fields (e.g., step_1_visited_at, step_2_visited_at)
+  [key: string]: unknown;
+
   // Book Spec
   bookSpec: BookSpec;
 

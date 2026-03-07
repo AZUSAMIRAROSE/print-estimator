@@ -85,6 +85,9 @@ export function EstimationResults({ estimation, results, spineThickness, onBackT
     savings: i > 0 ? ((results[0].totalCostPerCopy - r.totalCostPerCopy) / results[0].totalCostPerCopy * 100) : 0,
   }));
 
+  // Format percentage helper
+  const formatSavingsPercent = (value: number) => formatPercent(value, 1);
+
   const handleExport = () => {
     const csv = buildEstimationCsv(estimation, results);
     const title = (estimation.jobTitle || "estimate").replace(/[^a-z0-9-_]/gi, "_").toLowerCase();

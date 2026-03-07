@@ -23,8 +23,10 @@ interface EstimationState {
   nextStep: () => void;
   prevStep: () => void;
 
-  // Updates
+  // Updates - Advanced field-level updates with dot notation support
   updateEstimation: (updates: Partial<EstimationInput>) => void;
+  updateEstimationField: <T = unknown>(fieldPath: string, value: T) => void;
+  updateTextSectionField: <T = unknown>(index: number, fieldPath: string, value: T) => void;
   updateBookSpec: (updates: Partial<BookSpec>) => void;
   updateTextSection: (index: number, updates: Partial<TextSection>) => void;
   updateCover: (updates: Partial<CoverSection>) => void;
@@ -306,7 +308,45 @@ export const useEstimationStore = create<EstimationState>()(
         state.estimation.updatedAt = new Date().toISOString();
       }),
 
-      updateBookSpec: (updates) => set((state) => { 
+      // Advanced field-level update with dot notation support (e.g., "bookSpec.heightMM" or "pricing.marginPercent")
+      updateEstimationField: (fieldPath, value) => set((state) => {
+        const keys = fieldPath.split('.');
+        let target: Record<string, unknown> = state.estimation;
+        
+        for (let i = 0; i < keys.length - 1; i++) {
+          if (target && typeof target === 'object') {
+            target = target[keys[i]] as Record<string, unknown>;
+          }
+        }
+        
+        if (target && typeof target === 'object') {
+          const lastKey = keys[keys.length - 1];
+          (target as Record<string, unknown>)[lastKey] = value;
+          state.estimation.updatedAt = new Date().toISOString();
+        }
+      }),
+
+      // Update a specific field in a text section
+      updateTextSectionField: (index, fieldPath, value) => set((state) => {
+        if (state.estimation.textSections[index]) {
+          const keys = fieldPath.split('.');
+          let target: Record<string, unknown> = state.estimation.textSections[index];
+          
+          for (let i = 0; i < keys.length - 1; i++) {
+            if (target && typeof target === 'object') {
+              target = target[keys[i]] as Record<string, unknown>;
+            }
+          }
+          
+          if (target && typeof target === 'object') {
+            const lastKey = keys[keys.length - 1];
+            (target as Record<string, unknown>)[lastKey] = value;
+            state.estimation.updatedAt = new Date().toISOString();
+          }
+        }
+      }),
+
+      updateBookSpec: (updates) => set((state) => {
         Object.assign(state.estimation.bookSpec, updates);
         state.estimation.updatedAt = new Date().toISOString();
       }),

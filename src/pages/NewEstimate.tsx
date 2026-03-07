@@ -39,7 +39,8 @@ export function NewEstimate() {
   const {
     estimation, currentStep, results, isCalculating, showResults,
     setCurrentStep, nextStep, prevStep, resetEstimation,
-    setResults, setIsCalculating, setShowResults, loadEstimation
+    setResults, setIsCalculating, setShowResults, loadEstimation,
+    updateEstimationField
   } = useEstimationStore();
 
   const { addNotification, addActivityLog } = useAppStore();
@@ -141,6 +142,28 @@ export function NewEstimate() {
           notes: estimation.notes || "Draft",
           tags: ["draft"],
         });
+        
+        // Log the draft creation activity
+        addActivityLog({
+          action: "created_draft",
+          category: "estimation",
+          description: `Created draft for "${estimation.jobTitle || 'Untitled'}"`,
+          user: estimation.estimatedBy || "User",
+          entityType: "estimation",
+          entityId: estimation.id,
+          level: "info",
+        });
+      } else {
+        // Log the draft update activity
+        addActivityLog({
+          action: "updated_draft",
+          category: "estimation",
+          description: `Updated draft for "${estimation.jobTitle || 'Untitled'}"`,
+          user: estimation.estimatedBy || "User",
+          entityType: "estimation",
+          entityId: estimation.id,
+          level: "info",
+        });
       }
 
       setSavingDraft(false);
@@ -152,7 +175,7 @@ export function NewEstimate() {
         category: "job",
       });
     }, 300);
-  }, [estimation, activeQuantities, saveDraft, addJob, addNotification]);
+  }, [estimation, activeQuantities, saveDraft, addJob, addNotification, jobs, addActivityLog]);
 
   // Reset handler
   const handleReset = useCallback(() => {
@@ -169,6 +192,17 @@ export function NewEstimate() {
       loadEstimation(draftEstimation);
     }
   }, [draftEstimation, estimation.jobTitle, showResults, results.length, loadEstimation]);
+
+  // Track step changes with updateEstimationField for audit trail
+  const previousStepRef = useRef(currentStep);
+  useEffect(() => {
+    if (previousStepRef.current !== currentStep) {
+      // Log step navigation using updateEstimationField
+      const stepKey = `step_${currentStep}_visited_at`;
+      updateEstimationField(stepKey, new Date().toISOString());
+      previousStepRef.current = currentStep;
+    }
+  }, [currentStep, updateEstimationField]);
 
   // Show results
   if (showResults && results.length > 0) {
