@@ -260,8 +260,8 @@ export function Dashboard() {
               <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500" /> Jobs</span>
             </div>
           </div>
-          <div className="h-64 min-w-0">
-            <ResponsiveContainer width="99%" height="100%" minWidth={0} minHeight={1}>
+          <div className="h-64 w-full min-w-0">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={1}>
               <AreaChart data={dynamicMonthlyData}>
                 <defs>
                   <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
@@ -304,8 +304,8 @@ export function Dashboard() {
           <h3 className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary mb-4">
             Job Status Distribution
           </h3>
-          <div className="h-48 min-w-0">
-            <ResponsiveContainer width="99%" height="100%" minWidth={0} minHeight={1}>
+          <div className="h-48 w-full min-w-0">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={1}>
               <RechartsPie>
                 <Pie
                   data={dynamicStatusDistribution}

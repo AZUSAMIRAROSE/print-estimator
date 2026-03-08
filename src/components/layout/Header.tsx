@@ -32,7 +32,7 @@ export function Header() {
   const navigate = useNavigate();
   const {
     user, theme, toggleTheme, setSearchOpen,
-    notifications, unreadCount,
+    notifications, unreadCount, toggleSidebar,
     markNotificationRead, markAllNotificationsRead, clearNotifications,
     logout
   } = useAppStore();
@@ -76,17 +76,28 @@ export function Header() {
   };
 
   return (
-    <header className="h-16 border-b border-surface-light-border dark:border-surface-dark-border bg-white dark:bg-surface-dark-secondary flex items-center justify-between px-6 shrink-0 z-20">
-      {/* Search Bar */}
+    <header className="sticky top-0 h-16 border-b border-surface-light-border dark:border-surface-dark-border bg-white dark:bg-surface-dark-secondary flex items-center justify-between px-3 sm:px-4 md:px-6 shrink-0 z-20 gap-2 sm:gap-4">
+      {/* Hamburger Menu Button (Mobile Only) */}
+      <button
+        onClick={toggleSidebar}
+        className="lg:hidden p-2 rounded-lg hover:bg-surface-light-tertiary dark:hover:bg-surface-dark-tertiary transition-colors flex-shrink-0 min-h-[44px] min-w-[44px] flex items-center justify-center -ml-2"
+        title="Toggle menu"
+      >
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+      </button>
+
+      {/* Search Bar - Hidden on mobile, visible on tablet+ */}
       <button
         onClick={() => setSearchOpen(true)}
-        className="flex items-center gap-3 px-4 py-2 w-full max-w-md rounded-xl border border-surface-light-border dark:border-surface-dark-border bg-surface-light-secondary dark:bg-surface-dark-tertiary hover:border-primary-300 dark:hover:border-primary-500/50 transition-colors group"
+        className="hidden sm:flex items-center gap-3 px-4 py-2 flex-1 max-w-md rounded-xl border border-surface-light-border dark:border-surface-dark-border bg-surface-light-secondary dark:bg-surface-dark-tertiary hover:border-primary-300 dark:hover:border-primary-500/50 transition-colors group"
       >
-        <Search className="w-4 h-4 text-text-light-tertiary dark:text-text-dark-tertiary group-hover:text-primary-500 transition-colors" />
-        <span className="text-sm text-text-light-tertiary dark:text-text-dark-tertiary">
+        <Search className="w-4 h-4 text-text-light-tertiary dark:text-text-dark-tertiary group-hover:text-primary-500 transition-colors flex-shrink-0" />
+        <span className="text-sm text-text-light-tertiary dark:text-text-dark-tertiary truncate">
           Search anything...
         </span>
-        <div className="ml-auto flex items-center gap-1">
+        <div className="ml-auto md:flex items-center gap-1 hidden flex-shrink-0">
           <kbd className="px-1.5 py-0.5 text-[10px] font-mono font-semibold bg-white dark:bg-surface-dark-secondary border border-surface-light-border dark:border-surface-dark-border rounded text-text-light-tertiary dark:text-text-dark-tertiary">
             Ctrl
           </kbd>
@@ -96,12 +107,21 @@ export function Header() {
         </div>
       </button>
 
+      {/* Mobile Search Icon */}
+      <button
+        onClick={() => setSearchOpen(true)}
+        className="sm:hidden p-2 rounded-lg hover:bg-surface-light-tertiary dark:hover:bg-surface-dark-tertiary transition-colors flex-shrink-0 min-h-[44px] min-w-[44px] flex items-center justify-center"
+        title="Search"
+      >
+        <Search className="w-5 h-5 text-text-light-secondary dark:text-text-dark-secondary" />
+      </button>
+
       {/* Right Side Actions */}
-      <div className="flex items-center gap-2 ml-4">
+      <div className="flex items-center gap-1 sm:gap-2 ml-auto flex-shrink-0">
         {/* Theme Toggle */}
         <button
           onClick={toggleTheme}
-          className="p-2.5 rounded-xl hover:bg-surface-light-tertiary dark:hover:bg-surface-dark-tertiary transition-colors relative group"
+          className="p-2 sm:p-2.5 rounded-xl hover:bg-surface-light-tertiary dark:hover:bg-surface-dark-tertiary transition-colors relative group min-h-[44px] min-w-[44px] flex items-center justify-center"
           title={theme === "light" ? "Switch to Dark Mode" : "Switch to Light Mode"}
         >
           {theme === "light" ? (
@@ -115,7 +135,7 @@ export function Header() {
         <div ref={notifRef} className="relative">
           <button
             onClick={() => setNotifOpen(!notifOpen)}
-            className="p-2.5 rounded-xl hover:bg-surface-light-tertiary dark:hover:bg-surface-dark-tertiary transition-colors relative"
+            className="p-2 sm:p-2.5 rounded-xl hover:bg-surface-light-tertiary dark:hover:bg-surface-dark-tertiary transition-colors relative min-h-[44px] min-w-[44px] flex items-center justify-center"
             title="Notifications"
           >
             <Bell className="w-5 h-5 text-text-light-secondary dark:text-text-dark-secondary" />
@@ -128,7 +148,7 @@ export function Header() {
 
           {/* Notifications Dropdown */}
           {notifOpen && (
-            <div className="absolute right-0 top-full mt-2 w-96 max-h-[500px] flex flex-col card-elevated overflow-hidden animate-scale-in z-50">
+            <div className="absolute right-0 top-full mt-2 w-screen sm:w-96 sm:-translate-x-4 md:translate-x-0 max-h-[500px] flex flex-col card-elevated overflow-hidden animate-scale-in z-50 rounded-none sm:rounded-xl">
               {/* Header */}
               <div className="flex items-center justify-between px-4 py-3 border-b border-surface-light-border dark:border-surface-dark-border shrink-0">
                 <h3 className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary">
@@ -146,7 +166,7 @@ export function Header() {
                       className="text-xs text-primary-600 dark:text-primary-400 hover:underline px-2 py-1 flex items-center gap-1"
                     >
                       <Check className="w-3 h-3" />
-                      Mark all read
+                      <span className="hidden sm:inline">Mark all read</span>
                     </button>
                   )}
                   {notifications.length > 0 && (
@@ -190,7 +210,7 @@ export function Header() {
         <div ref={profileRef} className="relative">
           <button
             onClick={() => setProfileOpen(!profileOpen)}
-            className="flex items-center gap-2.5 pl-3 pr-2 py-1.5 rounded-xl hover:bg-surface-light-tertiary dark:hover:bg-surface-dark-tertiary transition-colors"
+            className="flex items-center gap-2 sm:gap-2.5 px-2 sm:pl-3 sm:pr-2 py-1.5 rounded-xl hover:bg-surface-light-tertiary dark:hover:bg-surface-dark-tertiary transition-colors min-h-[44px]"
           >
             <div className="w-8 h-8 shrink-0 rounded-full bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-white text-xs font-bold shadow-sm overflow-hidden">
               {user?.avatar ? (
@@ -210,14 +230,14 @@ export function Header() {
               </div>
             )}
             <ChevronDown className={cn(
-              "w-4 h-4 text-text-light-tertiary dark:text-text-dark-tertiary transition-transform",
+              "w-4 h-4 text-text-light-tertiary dark:text-text-dark-tertiary transition-transform hidden md:block",
               profileOpen && "rotate-180"
             )} />
           </button>
 
           {/* Profile Dropdown */}
           {profileOpen && (
-            <div className="absolute right-0 top-full mt-2 w-64 card-elevated py-2 animate-scale-in z-50">
+            <div className="absolute right-0 top-full mt-2 w-64 card-elevated py-2 animate-scale-in z-50 rounded-xl">
               {/* User Info */}
               <div className="px-4 py-3 border-b border-surface-light-border dark:border-surface-dark-border">
                 <div className="flex items-center gap-3">

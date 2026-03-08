@@ -6,10 +6,12 @@ import { cn } from "@/utils/cn";
 import { WIZARD_STEPS } from "@/constants";
 import { WizardStepRenderer } from "@/components/wizard/WizardStepRenderer";
 import { EstimationResults } from "@/components/results/EstimationResults";
+import { QuickAutoEstimate } from "@/components/estimation/QuickAutoEstimate";
 import { calculateFullEstimation } from "@/utils/calculations/estimator";
 import { calculateSpineThickness } from "@/utils/calculations/spine";
 import { formatNumber } from "@/utils/format";
 import { normalizeEstimationForCalculation, validateEstimation } from "@/utils/validation/estimation";
+import { useEstimation } from "@/hooks/useEstimation";
 import {
   ChevronLeft, ChevronRight, RotateCcw, Calculator, Save,
   FileText, BookOpen, Layers, Type, Square, BookMarked,
@@ -43,6 +45,9 @@ export function NewEstimate() {
     updateEstimationField
   } = useEstimationStore();
 
+  // Domain estimation integration
+  const { estimate: estimateWithDomain, quotation, progress, progressMessage } = useEstimation();
+
   const { addNotification, addActivityLog } = useAppStore();
   const { saveDraft, draftEstimation, addJob, jobs } = useDataStore();
 
@@ -68,8 +73,8 @@ export function NewEstimate() {
   const validationErrors = useMemo(() => validateEstimation(estimation), [estimation]);
   const canCalculate = validationErrors.length === 0 && !isCalculating && activeQuantities.length > 0;
 
-  // Calculate handler
-  const handleCalculate = useCallback(() => {
+  // Calculate handler - Nuclear-grade estimator with fallback
+  const handleCalculate = useCallback(async () => {
     const calcKey = JSON.stringify({ estimation, activeQuantities });
     if (lastCalculationRef.current === calcKey && results.length > 0) {
       setShowResults(true);
@@ -82,9 +87,35 @@ export function NewEstimate() {
       return;
     }
 
-    setMessage("Calculating...");
+    setMessage("Preparing estimation...");
     setIsCalculating(true);
 
+    try {
+      // Try nuclear-grade domain estimator first
+      const domainResult = await estimateWithDomain(estimation);
+      
+      if (domainResult && domainResult.costPerCopy > 0) {
+        // Successfully got domain estimation with imposition + paper sourcing + pricing
+        setMessage(`Nuclear-grade estimation complete - ₹${domainResult.costPerCopy.toFixed(2)}/copy`);
+        setShowResults(true);
+        
+        addNotification({
+          type: "success",
+          title: "Advanced Estimation Complete",
+          message: `Cost: ₹${domainResult.costPerCopy.toFixed(2)}/copy | Total: ₹${domainResult.totalCost.toFixed(0)}`,
+          category: "estimate",
+        });
+        
+        return; 
+      }
+    } catch (err) {
+      console.warn("Domain estimation failed, falling back to standard calculator:", err);
+      // Fall through to standard calculation
+    }
+
+    // Fallback: Use standard calculator for backward compatibility
+    setMessage("Calculating with standard engine...");
+    
     setTimeout(() => {
       try {
         const normalized = normalizeEstimationForCalculation(estimation);
@@ -96,7 +127,6 @@ export function NewEstimate() {
 
         setResults(calcResults);
         setShowResults(true);
-        setIsCalculating(false);
         setMessage(`Done - ${calcResults.length} quantity variant${calcResults.length > 1 ? "s" : ""}`);
 
         addNotification({
@@ -106,7 +136,6 @@ export function NewEstimate() {
           category: "estimate",
         });
       } catch (error) {
-        setIsCalculating(false);
         setMessage("Calculation failed");
         addNotification({
           type: "error",
@@ -114,9 +143,11 @@ export function NewEstimate() {
           message: (error as Error).message,
           category: "system",
         });
+      } finally {
+        setIsCalculating(false);
       }
     }, 100);
-  }, [estimation, activeQuantities, validationErrors, results.length, setResults, setShowResults, setIsCalculating, addNotification]);
+  }, [estimation, activeQuantities, validationErrors, results.length, setResults, setShowResults, setIsCalculating, addNotification, estimateWithDomain]);
 
   // Save draft handler
   const handleSaveDraft = useCallback(() => {
@@ -431,8 +462,31 @@ export function NewEstimate() {
             ))}
           </div>
         </div>
+
+        {/* Smart Auto Estimate Widget (disabled temporarily) */}
+        {false && totalPages > 0 && activeQuantities.length > 0 && (
+          <div className="col-span-full">
+            <QuickAutoEstimate
+              trimWidth={estimation.bookSpec.widthMM}
+              trimHeight={estimation.bookSpec.heightMM}
+              totalPages={totalPages}
+              quantity={activeQuantities[0] || 0}
+              colorsFront={estimation.textSections[0]?.colorsFront || 4}
+              colorsBack={estimation.textSections[0]?.colorsBack || 4}
+              onEstimateComplete={() => {
+                addNotification({
+                  type: "success",
+                  title: "Auto Estimate Complete",
+                  message: "Smart cost estimation generated",
+                  category: "estimate"
+                });
+              }}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
 }
+
 

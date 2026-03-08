@@ -9,6 +9,8 @@ import type {
 } from "@/types";
 import { generateId } from "@/utils/format";
 import { EPSON_PROOF_RATE, WET_PROOF_RATE, PACKING_RATES } from "@/constants";
+import type { EstimationRequest, EstimationResult as DomainEstimationResult, CustomerQuotation } from "@/domain/estimation/imposition/types";
+import type { QuotationOptions } from "@/domain/estimation/pricing/quotationGenerator";
 
 interface EstimationState {
   estimation: EstimationInput;
@@ -17,6 +19,16 @@ interface EstimationState {
   isCalculating: boolean;
   isCalculated: boolean;
   showResults: boolean;
+
+  // NEW: Domain-driven estimation fields
+  domainRequest: EstimationRequest | null;
+  domainEstimation: DomainEstimationResult | null;
+  quotation: CustomerQuotation | null;
+  quotationHistory: CustomerQuotation[];
+  quotationOptions: QuotationOptions | null;
+  estimationProgress: number; // 0-100
+  estimationProgressMessage: string;
+  estimationError: string | null;
 
   // Navigation
   setCurrentStep: (step: number) => void;
@@ -39,6 +51,16 @@ interface EstimationState {
   updatePrePress: (updates: Partial<PrePressSection>) => void;
   updatePricing: (updates: Partial<PricingSection>) => void;
   updateQuantity: (index: number, value: number) => void;
+
+  // NEW: Domain estimation setters
+  setDomainRequest: (request: EstimationRequest) => void;
+  setDomainEstimation: (estimation: DomainEstimationResult) => void;
+  setQuotation: (quotation: CustomerQuotation) => void;
+  addToQuotationHistory: (quotation: CustomerQuotation) => void;
+  setQuotationOptions: (options: QuotationOptions) => void;
+  setEstimationProgress: (progress: number, message?: string) => void;
+  setEstimationError: (error: string | null) => void;
+  clearDomainEstimation: () => void;
 
   // Results
   setResults: (results: EstimationResult[]) => void;
@@ -297,6 +319,16 @@ export const useEstimationStore = create<EstimationState>()(
       isCalculated: false,
       showResults: false,
 
+      // NEW: Domain estimation state initialization
+      domainRequest: null,
+      domainEstimation: null,
+      quotation: null,
+      quotationHistory: [],
+      quotationOptions: null,
+      estimationProgress: 0,
+      estimationProgressMessage: "",
+      estimationError: null,
+
       // Navigation
       setCurrentStep: (step) => set((state) => { state.currentStep = step; }),
       nextStep: () => set((state) => { if (state.currentStep < 15) state.currentStep++; }),
@@ -415,6 +447,53 @@ export const useEstimationStore = create<EstimationState>()(
         state.estimation.updatedAt = new Date().toISOString();
       }),
 
+      // NEW: Domain estimation setters
+      setDomainRequest: (request) => set((state) => {
+        state.domainRequest = request;
+        state.estimationProgress = 0;
+        state.estimationError = null;
+      }),
+
+      setDomainEstimation: (estimation) => set((state) => {
+        state.domainEstimation = estimation;
+        state.estimationProgress = 100;
+        state.estimationError = null;
+      }),
+
+      setQuotation: (quotation) => set((state) => {
+        state.quotation = quotation;
+      }),
+
+      addToQuotationHistory: (quotation) => set((state) => {
+        state.quotationHistory = [quotation, ...state.quotationHistory];
+      }),
+
+      setQuotationOptions: (options) => set((state) => {
+        state.quotationOptions = options;
+      }),
+
+      setEstimationProgress: (progress, message) => set((state) => {
+        state.estimationProgress = Math.min(100, Math.max(0, progress));
+        if (message) {
+          state.estimationProgressMessage = message;
+        }
+      }),
+
+      setEstimationError: (error) => set((state) => {
+        state.estimationError = error;
+      }),
+
+      clearDomainEstimation: () => set((state) => {
+        state.domainRequest = null;
+        state.domainEstimation = null;
+        state.quotation = null;
+        state.quotationHistory = [];
+        state.quotationOptions = null;
+        state.estimationProgress = 0;
+        state.estimationProgressMessage = "";
+        state.estimationError = null;
+      }),
+
       // Results
       setResults: (results) => set((state) => {
         state.results = results;
@@ -451,6 +530,12 @@ export const useEstimationStore = create<EstimationState>()(
         results: state.results,
         isCalculated: state.isCalculated,
         showResults: state.showResults,
+        // NEW: Persist domain estimation state
+        domainRequest: state.domainRequest,
+        domainEstimation: state.domainEstimation,
+        quotation: state.quotation,
+        quotationHistory: state.quotationHistory,
+        quotationOptions: state.quotationOptions,
       }),
     }
   )

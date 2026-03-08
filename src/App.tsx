@@ -6,6 +6,7 @@ import { MainLayout } from "@/layouts/MainLayout";
 import { OnboardingScreen } from "@/pages/Onboarding";
 import { Dashboard } from "@/pages/Dashboard";
 import { NewEstimate } from "@/pages/NewEstimate";
+import NewEstimateV2 from "@/pages/NewEstimateV2";
 import { Jobs } from "@/pages/Jobs";
 import { Quotations } from "@/pages/Quotations";
 import { Customers } from "@/pages/Customers";
@@ -64,6 +65,7 @@ export default function App() {
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/estimate/new" element={<NewEstimate />} />
+        <Route path="/estimate/v2" element={<NewEstimateV2 />} />
         <Route path="/jobs" element={<Jobs />} />
         <Route path="/quotations" element={<Quotations />} />
         <Route path="/customers" element={<Customers />} />

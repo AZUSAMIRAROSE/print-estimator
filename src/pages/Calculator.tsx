@@ -6,6 +6,7 @@ import { calculateBookWeight } from "@/utils/calculations/weight";
 import { useDataStore } from "@/stores/dataStore";
 import { useRateCardStore } from "@/stores/rateCardStore";
 import { useMachineStore } from "@/stores/machineStore";
+import { QuickAutoEstimate } from "@/components/estimation/QuickAutoEstimate";
 import {
   Calculator as CalcIcon, Book, DollarSign, RefreshCcw, AlertTriangle,
   Printer, Settings2, Sparkles, BarChart3,
@@ -494,6 +495,23 @@ export function Calculator() {
         {/* RIGHT: Results Dashboard (7 cols)                                   */}
         {/* ═══════════════════════════════════════════════════════════════════ */}
         <div className="xl:col-span-7 space-y-3">
+          {/* ── Smart Auto Estimate Widget (disabled temporarily) ──────────────────────────────────── */}
+          {/* DISABLED TO TEST */}
+          {false && (
+            <QuickAutoEstimate
+              trimWidth={parseFloat(form.bookWidth) || 0}
+              trimHeight={parseFloat(form.bookHeight) || 0}
+              totalPages={parseFloat(form.pages) || 0}
+              quantity={parseFloat(form.quantity) || 0}
+              colorsFront={parseFloat(form.colorsFront) || 4}
+              colorsBack={parseFloat(form.colorsBack) || 4}
+              onEstimateComplete={(price) => {
+                console.log("Auto-estimate price:", price);
+                // Can update form if needed
+              }}
+            />
+          )}
+
           {result ? (
             <>
               {/* ── Hero Summary Cards ──────────────────────────────────────── */}

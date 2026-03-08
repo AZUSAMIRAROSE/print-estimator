@@ -33,7 +33,8 @@ export function Sidebar() {
       className={cn(
         "fixed top-0 left-0 h-full z-30 flex flex-col border-r transition-all duration-300",
         "bg-white dark:bg-surface-dark-secondary border-surface-light-border dark:border-surface-dark-border",
-        sidebarCollapsed ? "w-[68px]" : "w-[252px]"
+        "hidden lg:flex", // Hide on mobile, show on lg screens
+        sidebarCollapsed ? "lg:w-[68px]" : "lg:w-[252px]"
       )}
     >
       {/* Logo Area */}
@@ -128,16 +129,17 @@ export function MainLayout() {
   const { sidebarCollapsed, searchOpen } = useAppStore();
 
   return (
-    <div className="min-h-screen bg-surface-light-primary dark:bg-surface-dark-primary">
+    <div className="min-h-screen bg-surface-light-primary dark:bg-surface-dark-primary flex flex-col">
       <Sidebar />
       <div
         className={cn(
-          "transition-all duration-300",
-          sidebarCollapsed ? "ml-[68px]" : "ml-[252px]"
+          "flex-1 transition-all duration-300 flex flex-col",
+          "lg:ml-0", // Full width on mobile
+          sidebarCollapsed ? "lg:ml-[68px]" : "lg:ml-[252px]" // Sidebar offset on desktop
         )}
       >
         <Header />
-        <main className="p-6">
+        <main className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 w-full">
           <Outlet />
         </main>
       </div>

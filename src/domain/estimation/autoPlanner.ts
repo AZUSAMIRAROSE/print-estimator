@@ -1,817 +1,738 @@
 // ============================================================================
-// AUTO-PLANNING ORCHESTRATOR — GOD MODE
+// AUTO-PLANNER ORCHESTRATOR
 // ============================================================================
-// Unified constraint-based planner that generates candidate production plans,
-// validates constraints, scores alternatives, and selects the optimal plan
-// for each section of a print job.
 //
-// ALGORITHM:
-//   Step 1: Generate candidate signature plans (8, 16, 24, 32pp)
-//   Step 2: Generate sheet orientations for each candidate
-//   Step 3: Validate grain rules, machine compatibility, paper availability
-//   Step 4: Reject impossible plans
-//   Step 5: Score candidates using weighted scoring
-//   Step 6: Select optimal candidate per section
+// This is the TOP-LEVEL entry point for the auto-planning pipeline.
 //
-// SCORING WEIGHTS:
-//   feasibility:       pass/fail gate
-//   grain compliance:  10%
-//   paper availability: 15%
-//   waste percentage:  20%
-//   machine efficiency: 15%
-//   total cost:        40%
+// Input:  Trim size + pages + paper category + GSM + binding + quantities
+// Output: Complete production plan for every section
+//
+// Pipeline:
+//   1. Build section configs from user input
+//   2. Calculate preliminary spine thickness
+//   3. Auto-impose ALL sections (imposition engine)
+//   4. Resolve paper for each section (paper resolver)
+//   5. Select machine for each section (machine selector)
+//   6. Calculate wastage (ADDITIVE, Thomson Press method)
+//   7. Assemble complete SectionPlan with all production data
+//   8. Return BookPlan with diagnostics and procurement
+//
+// This module coordinates Parts 1 & 2 into a unified planning result
+// that the estimation engine (Part 3) will consume for costing.
 // ============================================================================
 
-import type { EstimationInput, TextSection, CoverSection, JacketSection, EndleavesSection } from "@/types";
-import { runFullOptimization, optimizeSheetSize, optimizeSignature, optimizeMachine, type OptimizationResult, type SheetOption, type MachineOption, type SignatureOption } from "@/utils/calculations/optimizer";
-import { calculatePaperRequirement, type PaperCalculationResult } from "@/utils/calculations/paper";
-import { calculateSpineThickness, type SpineInput } from "@/utils/calculations/spine";
-import type { ProcurementRecommendation } from "@/types";
+import type {
+  Dimensions_mm,
+  AnySectionConfig,
+  SectionType,
+  PaperSpec,
+  SheetSpec,
+  MachineSpec,
+  PrintingMethod,
+  ImpositionPlan,
+  ImpositionCandidate,
+  GrainDirection,
+  ProcurementRecommendation,
+  Diagnostic,
+  BindingConfig,
+  CustomPaperOverride,
+} from "./types";
 
-// ─── SCORING WEIGHTS ─────────────────────────────────────────────────────────
+import {
+  STANDARD_SHEETS,
+  MACHINE_DATABASE,
+  BULK_FACTORS,
+  calculateCaliper,
+  calculateSpineThickness,
+  lookupWastage,
+} from "./constants";
 
-const SCORING_WEIGHTS = {
-    GRAIN_COMPLIANCE: 0.10,
-    PAPER_AVAILABILITY: 0.15,
-    WASTE_PERCENTAGE: 0.20,
-    MACHINE_EFFICIENCY: 0.15,
-    TOTAL_COST: 0.40,
-} as const;
+import {
+  autoImposeSection,
+  autoImposeBook,
+  reImposeSection,
+  getImpositionSummary,
+} from "./imposition";
 
-// ─── TYPES ───────────────────────────────────────────────────────────────────
+import type {
+  PaperRequirement,
+  InventoryPaperItem,
+  RateCardPaperEntry,
+  PaperCandidate,
+  PaperResolutionResult,
+} from "./paperResolver";
+import { resolvePaper, sheetWeight_kg } from "./paperResolver";
 
-export interface SectionPlanCandidate {
-    id: string;
-    sectionName: string;
-    sectionType: "text1" | "text2" | "cover" | "jacket" | "endleaves";
+import type {
+  MachineRequirement,
+  MachineCandidate,
+  MachineSelectionResult,
+} from "./machineSelector";
+import { selectMachine } from "./machineSelector";
 
-    // Paper plan
-    paperSizeLabel: string;
-    paperSizeId: string;
-    sheetWidthMM: number;
-    sheetHeightMM: number;
-    orientation: "PORTRAIT" | "LANDSCAPE";
+// ─── PLAN TYPES ─────────────────────────────────────────────────────────────
 
-    // Signature plan
-    signaturePP: number;           // Pages per form (4, 8, 16, 24, 32)
-    numberOfForms: number;
-    ups: number;
+/** Complete production plan for one section */
+export interface SectionPlan {
+  readonly sectionId: string;
+  readonly sectionType: SectionType;
+  readonly label: string;
+  readonly pages: number;
+  readonly colorsFront: number;
+  readonly colorsBack: number;
 
-    // Machine plan
-    machineId: string;
-    machineName: string;
-    machineCode: string;
-    runtimeHours: number;
-    machineCost: number;
+  // ── Imposition ──
+  readonly imposition: ImpositionPlan;
+  readonly impositionSummary: ReturnType<typeof getImpositionSummary>;
 
-    // Paper source
-    paperSource: "inventory" | "rate_card" | "fallback";
-    paperSourceReference?: string;
-    paperAvailability: number;     // 0-1 confidence
-    costPerKg: number;
+  // ── Paper ──
+  readonly paper: PaperCandidate | null;
+  readonly paperAlternatives: PaperCandidate[];
+  readonly paperDiagnostics: PaperResolutionResult["diagnostics"];
 
-    // Grain
-    grainCompliant: boolean;
-    grainDirection: "LONG_GRAIN" | "SHORT_GRAIN";
+  // ── Machine ──
+  readonly machine: MachineCandidate | null;
+  readonly machineAlternatives: MachineCandidate[];
 
-    // Cost breakdown
-    paperCost: number;
-    printingCost: number;
-    ctpCost: number;
-    totalCost: number;
-    costPerCopy: number;
+  // ── Sheet math ──
+  readonly netSheets: number;
+  readonly wastageSheets: number;
+  readonly grossSheets: number;
+  readonly totalWeight_kg: number;
 
-    // Waste metrics
-    wastePct: number;
-    wastageSheets: number;
-    grossSheets: number;
-    netSheets: number;
-
-    // Scoring
-    score: number;
-    scoreBreakdown: {
-        grainScore: number;
-        availabilityScore: number;
-        wasteScore: number;
-        machineScore: number;
-        costScore: number;
-    };
-
-    // Status
-    feasible: boolean;
-    selected: boolean;
-    rejectionReason: string | null;
+  // ── Costing inputs (for estimation engine) ──
+  readonly paperCostTotal: number;
+  readonly forms: number;
+  readonly totalPlates: number;
+  readonly estimatedMachineHours: number;
 }
 
-export interface SectionAutoPlan {
-    sectionName: string;
-    sectionType: string;
-    selectedPlan: SectionPlanCandidate | null;
-    allCandidates: SectionPlanCandidate[];
-    blocked: boolean;
-    blockReason: string | null;
-    warnings: string[];
-    diagnostics: SectionDiagnostic;
-    procurementRecommendation?: ProcurementRecommendation;
+/** Complete production plan for the entire book */
+export interface BookPlan {
+  readonly id: string;
+  readonly trimSize: Dimensions_mm;
+  readonly totalPages: number;
+  readonly quantity: number;
+  readonly spineThickness_mm: number;
+
+  /** Plan for each section */
+  readonly sections: readonly SectionPlan[];
+
+  /** Aggregated procurement needs */
+  readonly procurement: readonly ProcurementRecommendation[];
+
+  /** All diagnostics from all sub-systems */
+  readonly diagnostics: readonly Diagnostic[];
+
+  /** Planning metadata */
+  readonly meta: {
+    readonly planningTime_ms: number;
+    readonly candidatesEvaluated: number;
+    readonly timestamp: string;
+  };
 }
 
-export interface SectionDiagnostic {
-    strategy: "auto_planning" | "manual_override";
-    selectedSummary: string;
-    rejectedSummaries: string[];
-    grainStatus: "compliant" | "warning" | "blocked";
-    grainDetail: string;
-    paperSourceStatus: "inventory" | "rate_card" | "procurement_needed" | "fallback";
-    paperSourceDetail: string;
-    machineSelectionDetail: string;
-    candidatesEvaluated: number;
-    candidatesFeasible: number;
-    candidatesRejected: number;
-    optimizationTimeMs: number;
+// ─── ORCHESTRATOR INPUT ─────────────────────────────────────────────────────
+
+export interface AutoPlanInput {
+  /** Book trim size */
+  readonly trimSize: Dimensions_mm;
+  /** All sections to plan */
+  readonly sections: readonly AnySectionConfig[];
+  /** Binding configuration (needed for spine calculation) */
+  readonly binding: BindingConfig;
+  /** Quantity to plan for */
+  readonly quantity: number;
+
+  // ── Data sources (injected from stores) ──
+  readonly inventory: readonly InventoryPaperItem[];
+  readonly rateCard: readonly RateCardPaperEntry[];
+  readonly machines?: readonly MachineSpec[];
+  readonly sheets?: readonly SheetSpec[];
+
+  // ── User overrides ──
+  readonly overrides?: {
+    readonly forceSpineThickness_mm?: number;
+    readonly customPaperCostPerKg?: number;
+  };
 }
 
-export interface AutoPlanResult {
-    sections: SectionAutoPlan[];
-    blocked: boolean;
-    blockReasons: string[];
-    warnings: string[];
-    totalOptimizationTimeMs: number;
-    totalCandidatesEvaluated: number;
+// ─── SPINE CALCULATION ──────────────────────────────────────────────────────
+
+/**
+ * Calculate preliminary spine thickness from all text sections.
+ * This is needed BEFORE cover/jacket imposition (they wrap around the spine).
+ */
+function calculatePreliminarySpine(
+  sections: readonly AnySectionConfig[],
+  binding: BindingConfig,
+): number {
+  let totalThickness_mm = 0;
+
+  for (const section of sections) {
+    if (!section.enabled || section.type !== "TEXT") continue;
+
+    const bulkFactor = section.customPaper?.bulkFactor ?? section.paper.bulkFactor;
+    const gsm = section.customPaper?.gsm ?? section.paper.gsm;
+    const thickness = calculateSpineThickness(section.pages, gsm, bulkFactor);
+    totalThickness_mm += thickness;
+  }
+
+  // Add board thickness for case binding
+  if (binding.method === "CASE" && binding.boardThickness_mm) {
+    totalThickness_mm += binding.boardThickness_mm * 2;
+  }
+
+  // Add cover card thickness for perfect binding
+  if (binding.method === "PERFECT") {
+    // Assume 300gsm cover card ≈ 0.4mm per side
+    totalThickness_mm += 0.8;
+  }
+
+  return Math.max(1, totalThickness_mm);
 }
 
-// ─── HELPER: BINDING TYPE REQUIRES STRICT GRAIN ──────────────────────────────
+// ─── SECTION PLANNER ────────────────────────────────────────────────────────
 
-const STRICT_GRAIN_BINDINGS = [
-    "perfect_binding", "pur_binding", "section_sewn_perfect",
-    "section_sewn_hardcase", "case_binding", "saddle_stitching",
-];
+/**
+ * Plan a single section: impose → resolve paper → select machine → calculate sheets.
+ */
+function planSection(
+  section: AnySectionConfig,
+  trimSize: Dimensions_mm,
+  spineThickness_mm: number,
+  quantity: number,
+  inventory: readonly InventoryPaperItem[],
+  rateCard: readonly RateCardPaperEntry[],
+  sheets: readonly SheetSpec[],
+  machines: readonly MachineSpec[],
+  customCostPerKg?: number,
+): SectionPlan {
+  // ── Step 1: Imposition ──
+  const imposition = autoImposeSection({
+    section,
+    trimSize,
+    spineThickness_mm,
+    quantity,
+    sheets,
+    machines,
+    constraints: {
+      preferredSheet: section.preferredSheet,
+      preferredMachine: section.preferredMachine,
+      preferredMethod: section.preferredMethod,
+    },
+  });
 
-function bindingRequiresStrictGrain(bindingType: string): boolean {
-    return STRICT_GRAIN_BINDINGS.some(b =>
-        bindingType.toLowerCase().includes(b.replace(/_/g, " ")) ||
-        bindingType.toLowerCase().replace(/[_\s]/g, "") === b.replace(/[_\s]/g, "")
+  const impositionSummary = getImpositionSummary(imposition);
+  const selectedImp = imposition.selected;
+
+  // If no imposition candidate, return empty plan
+  if (!selectedImp) {
+    return buildEmptySectionPlan(section, imposition, impositionSummary);
+  }
+
+  // ── Step 2: Calculate sheet requirements ──
+  const netSheets = selectedImp.totalNetSheets;
+  const wastage = lookupWastage(quantity, netSheets);
+  const grossSheets = netSheets + wastage.totalWaste;
+
+  // ── Step 3: Resolve paper ──
+  const paperReq: PaperRequirement = {
+    category: section.paper.category,
+    gsm: section.customPaper?.gsm ?? section.paper.gsm,
+    requiredGrain: selectedImp.grain.compliant
+      ? section.paper.grain
+      : (selectedImp.grain.grainAxis === "HEIGHT" ? "LONG_GRAIN" : "SHORT_GRAIN"),
+    sheetSpec: selectedImp.sheet,
+    grossSheets,
+    quantity,
+    customOverride: section.customPaper,
+  };
+
+  const paperResult = resolvePaper(
+    paperReq,
+    inventory,
+    rateCard,
+    customCostPerKg,
+  );
+
+  // ── Step 4: Select machine ──
+  const maxColors = Math.max(section.colorsFront, section.colorsBack);
+  const machineReq: MachineRequirement = {
+    sheet: selectedImp.sheet,
+    maxColors,
+    preferredMethod: selectedImp.method,
+    preferredMachineId: section.preferredMachine,
+    prefersPerfecting: selectedImp.method === "PERFECTING",
+    quantity,
+    forms: selectedImp.forms,
+  };
+
+  const machineResult = selectMachine(machineReq, machines);
+
+  // ── Step 5: Calculate totals ──
+  const weightPerSheet = paperResult.selected
+    ? paperResult.selected.weightPerSheet_kg
+    : sheetWeight_kg(
+        selectedImp.sheet.size_mm,
+        section.customPaper?.gsm ?? section.paper.gsm,
+      );
+
+  const totalWeight = weightPerSheet * grossSheets;
+  const paperCostTotal = paperResult.selected
+    ? paperResult.selected.costPerSheet * grossSheets
+    : 0;
+
+  return {
+    sectionId: section.id,
+    sectionType: section.type,
+    label: section.label,
+    pages: section.pages,
+    colorsFront: section.colorsFront,
+    colorsBack: section.colorsBack,
+
+    imposition,
+    impositionSummary,
+
+    paper: paperResult.selected,
+    paperAlternatives: paperResult.alternatives,
+    paperDiagnostics: paperResult.diagnostics,
+
+    machine: machineResult.selected,
+    machineAlternatives: machineResult.alternatives,
+
+    netSheets,
+    wastageSheets: wastage.totalWaste,
+    grossSheets,
+    totalWeight_kg: totalWeight,
+
+    paperCostTotal,
+    forms: selectedImp.forms,
+    totalPlates: selectedImp.totalPlates,
+    estimatedMachineHours: machineResult.selected?.estimatedHours ?? 0,
+  };
+}
+
+function buildEmptySectionPlan(
+  section: AnySectionConfig,
+  imposition: ImpositionPlan,
+  impositionSummary: ReturnType<typeof getImpositionSummary>,
+): SectionPlan {
+  return {
+    sectionId: section.id,
+    sectionType: section.type,
+    label: section.label,
+    pages: section.pages,
+    colorsFront: section.colorsFront,
+    colorsBack: section.colorsBack,
+    imposition,
+    impositionSummary,
+    paper: null,
+    paperAlternatives: [],
+    paperDiagnostics: [{ level: "ERROR", message: "No imposition solution — cannot resolve paper" }],
+    machine: null,
+    machineAlternatives: [],
+    netSheets: 0,
+    wastageSheets: 0,
+    grossSheets: 0,
+    totalWeight_kg: 0,
+    paperCostTotal: 0,
+    forms: 0,
+    totalPlates: 0,
+    estimatedMachineHours: 0,
+  };
+}
+
+// ─── MAIN ORCHESTRATOR ──────────────────────────────────────────────────────
+
+/**
+ * Auto-plan an entire book.
+ *
+ * This is the TOP-LEVEL entry point. Feed it minimal user input
+ * and it returns a complete production plan for every section.
+ */
+export function autoPlanBook(input: AutoPlanInput): BookPlan {
+  const startTime = performance.now();
+
+  const sheets = input.sheets ?? STANDARD_SHEETS;
+  const machines = input.machines ?? MACHINE_DATABASE;
+  const allDiagnostics: Diagnostic[] = [];
+  const allProcurement: ProcurementRecommendation[] = [];
+  let totalCandidatesEvaluated = 0;
+
+  // ── Step 1: Spine thickness ──
+  const spineThickness = input.overrides?.forceSpineThickness_mm
+    ?? calculatePreliminarySpine(input.sections, input.binding);
+
+  allDiagnostics.push({
+    level: "INFO",
+    code: "SPINE_CALCULATED",
+    message: `Preliminary spine thickness: ${spineThickness.toFixed(1)}mm`,
+  });
+
+  // ── Step 2: Plan text sections FIRST (needed for spine → cover) ──
+  const textSections = input.sections.filter(
+    (s) => s.enabled && s.type === "TEXT",
+  );
+  const nonTextSections = input.sections.filter(
+    (s) => s.enabled && s.type !== "TEXT",
+  );
+
+  const sectionPlans: SectionPlan[] = [];
+
+  // Plan text sections
+  for (const section of textSections) {
+    const plan = planSection(
+      section,
+      input.trimSize,
+      spineThickness,
+      input.quantity,
+      input.inventory,
+      input.rateCard,
+      sheets,
+      machines,
+      input.overrides?.customPaperCostPerKg,
     );
-}
 
-// ─── HELPER: GENERATE SIGNATURE CANDIDATES ───────────────────────────────────
+    sectionPlans.push(plan);
 
-function getSignatureCandidates(totalPages: number, sectionType: string): number[] {
-    if (sectionType === "cover" || sectionType === "jacket") {
-        return [totalPages]; // Cover/jacket is always 1 form
-    }
-    if (sectionType === "endleaves") {
-        return [Math.min(8, totalPages)];
-    }
-
-    const candidates = [8, 16, 24, 32].filter(pp => pp <= totalPages);
-
-    // Also try totalPages itself if it's <=32 and not already in the list
-    if (totalPages <= 32 && !candidates.includes(totalPages)) {
-        candidates.push(totalPages);
-    }
-
-    // Fallback
-    if (candidates.length === 0) {
-        candidates.push(Math.min(4, totalPages));
-    }
-
-    return candidates.sort((a, b) => a - b);
-}
-
-// ─── HELPER: CALCULATE CANDIDATE SCORE ───────────────────────────────────────
-
-function scoreCandidate(candidate: SectionPlanCandidate, allCandidates: SectionPlanCandidate[]): number {
-    const feasible = allCandidates.filter(c => c.feasible);
-    if (!candidate.feasible || feasible.length === 0) return Infinity;
-
-    // Normalize each metric to 0-100 range
-    const costs = feasible.map(c => c.costPerCopy);
-    const minCost = Math.min(...costs);
-    const maxCost = Math.max(...costs);
-    const costRange = maxCost - minCost || 1;
-
-    const wastes = feasible.map(c => c.wastePct);
-    const minWaste = Math.min(...wastes);
-    const maxWaste = Math.max(...wastes);
-    const wasteRange = maxWaste - minWaste || 1;
-
-    const times = feasible.map(c => c.runtimeHours);
-    const minTime = Math.min(...times);
-    const maxTime = Math.max(...times);
-    const timeRange = maxTime - minTime || 1;
-
-    // Grain compliance: 0 (compliant) or 100 (non-compliant)
-    const grainScore = candidate.grainCompliant ? 0 : 100;
-
-    // Paper availability: 0 (best) to 100 (worst)
-    const availabilityScore = (1 - candidate.paperAvailability) * 100;
-
-    // Waste: normalized 0-100
-    const wasteScore = ((candidate.wastePct - minWaste) / wasteRange) * 100;
-
-    // Machine efficiency (time-based): normalized 0-100
-    const machineScore = ((candidate.runtimeHours - minTime) / timeRange) * 100;
-
-    // Cost: normalized 0-100
-    const costScore = ((candidate.costPerCopy - minCost) / costRange) * 100;
-
-    // Store breakdown
-    candidate.scoreBreakdown = {
-        grainScore,
-        availabilityScore,
-        wasteScore,
-        machineScore,
-        costScore,
-    };
-
-    // Weighted composite (lower = better)
-    return (
-        grainScore * SCORING_WEIGHTS.GRAIN_COMPLIANCE +
-        availabilityScore * SCORING_WEIGHTS.PAPER_AVAILABILITY +
-        wasteScore * SCORING_WEIGHTS.WASTE_PERCENTAGE +
-        machineScore * SCORING_WEIGHTS.MACHINE_EFFICIENCY +
-        costScore * SCORING_WEIGHTS.TOTAL_COST
+    // Collect diagnostics
+    plan.imposition.diagnostics.forEach((d) =>
+      allDiagnostics.push({ ...d, code: `${section.id}:${d.code}` }),
     );
+    plan.paperDiagnostics.forEach((d) =>
+      allDiagnostics.push({ level: d.level, code: `${section.id}:PAPER`, message: d.message }),
+    );
+
+    // Collect procurement
+    const paperRes = resolvePaper(
+      {
+        category: section.paper.category,
+        gsm: section.customPaper?.gsm ?? section.paper.gsm,
+        requiredGrain: section.paper.grain,
+        sheetSpec: plan.imposition.selected?.sheet ?? sheets[0],
+        grossSheets: plan.grossSheets,
+        quantity: input.quantity,
+        customOverride: section.customPaper,
+      },
+      input.inventory,
+      input.rateCard,
+    );
+    if (paperRes.procurement) {
+      allProcurement.push(paperRes.procurement);
+    }
+
+    totalCandidatesEvaluated +=
+      (plan.imposition.selected ? 1 : 0) +
+      plan.imposition.alternatives.length +
+      plan.imposition.rejected.length;
+  }
+
+  // Plan non-text sections (cover, jacket, endleaves)
+  // These may need the spine thickness from text sections
+  for (const section of nonTextSections) {
+    // Inject spine thickness into cover/jacket
+    let enrichedSection = section;
+    if (section.type === "COVER" || section.type === "JACKET") {
+      enrichedSection = {
+        ...section,
+        spineThickness_mm: spineThickness,
+      } as AnySectionConfig;
+    }
+
+    const plan = planSection(
+      enrichedSection,
+      input.trimSize,
+      spineThickness,
+      input.quantity,
+      input.inventory,
+      input.rateCard,
+      sheets,
+      machines,
+      input.overrides?.customPaperCostPerKg,
+    );
+
+    sectionPlans.push(plan);
+
+    plan.imposition.diagnostics.forEach((d) =>
+      allDiagnostics.push({ ...d, code: `${section.id}:${d.code}` }),
+    );
+    plan.paperDiagnostics.forEach((d) =>
+      allDiagnostics.push({ level: d.level, code: `${section.id}:PAPER`, message: d.message }),
+    );
+
+    totalCandidatesEvaluated +=
+      (plan.imposition.selected ? 1 : 0) +
+      plan.imposition.alternatives.length +
+      plan.imposition.rejected.length;
+  }
+
+  // ── Step 3: Calculate total pages ──
+  const totalPages = input.sections
+    .filter((s) => s.enabled && s.type === "TEXT")
+    .reduce((sum, s) => sum + s.pages, 0);
+
+  const planningTime = performance.now() - startTime;
+
+  return {
+    id: `plan_${Date.now()}`,
+    trimSize: input.trimSize,
+    totalPages,
+    quantity: input.quantity,
+    spineThickness_mm: spineThickness,
+    sections: sectionPlans,
+    procurement: allProcurement,
+    diagnostics: allDiagnostics,
+    meta: {
+      planningTime_ms: Math.round(planningTime),
+      candidatesEvaluated: totalCandidatesEvaluated,
+      timestamp: new Date().toISOString(),
+    },
+  };
 }
 
-// ─── PLAN A SINGLE SECTION ───────────────────────────────────────────────────
+// ─── RE-PLANNING (user overrides a selection) ───────────────────────────────
 
-function planSection(params: {
-    sectionName: string;
-    sectionType: "text1" | "text2" | "cover" | "jacket" | "endleaves";
-    totalPages: number;
-    trimWidthMM: number;
-    trimHeightMM: number;
-    gsm: number;
-    paperType: string;
-    paperCode: string;
-    paperSizeLabel: string;
-    colorsFront: number;
-    colorsBack: number;
-    quantity: number;
-    bindingType: string;
-    spineThickness: number;
-    machineId?: string;
-    planningMode?: "auto" | "manual_override";
-    isCustomPaper?: boolean;
-    customPaperWidth?: number;
-    customPaperHeight?: number;
-    customPaperGrain?: "LONG_GRAIN" | "SHORT_GRAIN";
-}): SectionAutoPlan {
-    const startTime = performance.now();
-    const {
-        sectionName, sectionType, totalPages, trimWidthMM, trimHeightMM,
-        gsm, paperType, paperCode, paperSizeLabel, colorsFront, colorsBack,
-        quantity, bindingType, spineThickness, machineId, planningMode,
-        isCustomPaper, customPaperWidth, customPaperHeight, customPaperGrain
-    } = params;
+export interface ReplanOverrides {
+  /** Section ID to re-plan */
+  readonly sectionId: string;
+  /** Force a specific sheet */
+  readonly forceSheet?: string;
+  /** Force a specific machine */
+  readonly forceMachine?: string;
+  /** Force a specific printing method */
+  readonly forceMethod?: PrintingMethod;
+  /** Force a specific signature size */
+  readonly forceSignature?: number;
+  /** Force a specific paper candidate */
+  readonly forcePaperCandidateId?: string;
+}
 
-    const warnings: string[] = [];
-    const allCandidates: SectionPlanCandidate[] = [];
-    let candidateId = 0;
+/**
+ * Re-plan a single section within an existing BookPlan.
+ *
+ * Used when the user overrides a machine, sheet, or paper selection
+ * in the wizard. Only the affected section is recalculated.
+ *
+ * Returns a new BookPlan with the updated section.
+ */
+export function replanSection(
+  existingPlan: BookPlan,
+  overrides: ReplanOverrides,
+  input: AutoPlanInput,
+): BookPlan {
+  const sectionIdx = existingPlan.sections.findIndex(
+    (s) => s.sectionId === overrides.sectionId,
+  );
 
-    // If manual override, skip auto-planning
-    if (planningMode === "manual_override") {
-        const elapsed = performance.now() - startTime;
-        return {
-            sectionName, sectionType,
-            selectedPlan: null,
-            allCandidates: [],
-            blocked: false,
-            blockReason: null,
-            warnings: ["Manual override active — auto-planning skipped"],
-            diagnostics: {
-                strategy: "manual_override",
-                selectedSummary: "User has manually selected production parameters",
-                rejectedSummaries: [],
-                grainStatus: "compliant",
-                grainDetail: "Manual override — grain validation deferred to user",
-                paperSourceStatus: "rate_card",
-                paperSourceDetail: "Manual override — paper source selected by user",
-                machineSelectionDetail: "Manual override — machine selected by user",
-                candidatesEvaluated: 0,
-                candidatesFeasible: 0,
-                candidatesRejected: 0,
-                optimizationTimeMs: Math.round(elapsed * 100) / 100,
-            },
-        };
-    }
+  if (sectionIdx === -1) {
+    return existingPlan; // Section not found, return unchanged
+  }
 
-    // Skip if pages = 0 or section not valid
-    if (totalPages <= 0 || quantity <= 0) {
-        return {
-            sectionName, sectionType, selectedPlan: null, allCandidates: [],
-            blocked: false, blockReason: null, warnings: [],
-            diagnostics: {
-                strategy: "auto_planning", selectedSummary: "Section inactive (0 pages or 0 qty)",
-                rejectedSummaries: [], grainStatus: "compliant", grainDetail: "",
-                paperSourceStatus: "rate_card", paperSourceDetail: "", machineSelectionDetail: "",
-                candidatesEvaluated: 0, candidatesFeasible: 0, candidatesRejected: 0,
-                optimizationTimeMs: 0,
-            },
-        };
-    }
+  const section = input.sections.find((s) => s.id === overrides.sectionId);
+  if (!section) return existingPlan;
 
-    // Determine if strict grain is required
-    const strictGrain = bindingRequiresStrictGrain(bindingType);
+  const sheets = input.sheets ?? STANDARD_SHEETS;
+  const machines = input.machines ?? MACHINE_DATABASE;
 
-    // Run unified optimization — gets best sheet, machine, and signature
-    const maxColors = Math.max(colorsFront, colorsBack);
-    const defaultCostPerKg = 80; // Will be resolved by paper resolver
+  // Re-impose with overrides
+  const reImposed = reImposeSection(
+    {
+      section,
+      trimSize: existingPlan.trimSize,
+      spineThickness_mm: existingPlan.spineThickness_mm,
+      quantity: existingPlan.quantity,
+      sheets,
+      machines,
+    },
+    {
+      forceSheet: overrides.forceSheet,
+      forceMachine: overrides.forceMachine,
+      forceMethod: overrides.forceMethod,
+      forceSignature: overrides.forceSignature,
+    },
+  );
 
-    const signatureCandidates = getSignatureCandidates(totalPages, sectionType);
+  const selectedImp = reImposed.selected;
+  if (!selectedImp) {
+    // No valid candidate with overrides — keep existing
+    return existingPlan;
+  }
 
-    // Also run paper requirement to get source selection
-    const paperResult = calculatePaperRequirement({
-        sectionName, sectionType,
-        totalPages, trimWidthMM, trimHeightMM,
-        gsm, paperType, paperCode,
-        paperSizeLabel: paperSizeLabel || "",
-        colorsFront, colorsBack,
-        quantity, machineCode: machineId,
-        spineThickness,
+  // Recalculate paper and machine with new imposition
+  const netSheets = selectedImp.totalNetSheets;
+  const wastage = lookupWastage(existingPlan.quantity, netSheets);
+  const grossSheets = netSheets + wastage.totalWaste;
+
+  const paperResult = resolvePaper(
+    {
+      category: section.paper.category,
+      gsm: section.customPaper?.gsm ?? section.paper.gsm,
+      requiredGrain: section.paper.grain,
+      sheetSpec: selectedImp.sheet,
+      grossSheets,
+      quantity: existingPlan.quantity,
+      customOverride: section.customPaper,
+    },
+    input.inventory,
+    input.rateCard,
+    input.overrides?.customPaperCostPerKg,
+  );
+
+  // If user forced a specific paper candidate, select it
+  let selectedPaper = paperResult.selected;
+  if (overrides.forcePaperCandidateId) {
+    const forced = [
+      ...paperResult.alternatives,
+      ...(paperResult.selected ? [paperResult.selected] : []),
+    ].find((c) => c.candidateId === overrides.forcePaperCandidateId);
+    if (forced) selectedPaper = forced;
+  }
+
+  const machineResult = selectMachine(
+    {
+      sheet: selectedImp.sheet,
+      maxColors: Math.max(section.colorsFront, section.colorsBack),
+      preferredMethod: overrides.forceMethod ?? selectedImp.method,
+      preferredMachineId: overrides.forceMachine,
+      quantity: existingPlan.quantity,
+      forms: selectedImp.forms,
+    },
+    machines,
+  );
+
+  const weightPerSheet = selectedPaper
+    ? selectedPaper.weightPerSheet_kg
+    : sheetWeight_kg(selectedImp.sheet.size_mm, section.paper.gsm);
+
+  const updatedPlan: SectionPlan = {
+    sectionId: section.id,
+    sectionType: section.type,
+    label: section.label,
+    pages: section.pages,
+    colorsFront: section.colorsFront,
+    colorsBack: section.colorsBack,
+    imposition: reImposed,
+    impositionSummary: getImpositionSummary(reImposed),
+    paper: selectedPaper,
+    paperAlternatives: paperResult.alternatives,
+    paperDiagnostics: paperResult.diagnostics,
+    machine: machineResult.selected,
+    machineAlternatives: machineResult.alternatives,
+    netSheets,
+    wastageSheets: wastage.totalWaste,
+    grossSheets,
+    totalWeight_kg: weightPerSheet * grossSheets,
+    paperCostTotal: selectedPaper ? selectedPaper.costPerSheet * grossSheets : 0,
+    forms: selectedImp.forms,
+    totalPlates: selectedImp.totalPlates,
+    estimatedMachineHours: machineResult.selected?.estimatedHours ?? 0,
+  };
+
+  // Replace the section in the plan
+  const newSections = [...existingPlan.sections];
+  newSections[sectionIdx] = updatedPlan;
+
+  return {
+    ...existingPlan,
+    sections: newSections,
+    diagnostics: [
+      ...existingPlan.diagnostics,
+      {
+        level: "INFO",
+        code: "SECTION_REPLANNED",
+        message: `Section '${section.label}' re-planned with overrides`,
+      },
+    ],
+    meta: {
+      ...existingPlan.meta,
+      timestamp: new Date().toISOString(),
+    },
+  };
+}
+
+// ─── PLAN FOR MULTIPLE QUANTITIES ───────────────────────────────────────────
+
+/**
+ * Generate BookPlans for multiple quantities simultaneously.
+ *
+ * This is what the wizard calls when the user has entered
+ * up to 5 quantity slots. Each quantity gets its own plan
+ * because sheet counts and wastage change with quantity.
+ */
+export function autoPlanMultiQuantity(
+  baseInput: Omit<AutoPlanInput, "quantity">,
+  quantities: readonly number[],
+): Map<number, BookPlan> {
+  const plans = new Map<number, BookPlan>();
+
+  for (const qty of quantities) {
+    if (qty <= 0) continue;
+
+    const plan = autoPlanBook({
+      ...baseInput,
+      quantity: qty,
     });
 
-    const paperSourceInfo = paperResult.sourceSelection || { source: "fallback" as const, confidence: 0.2, inStock: false };
-    const actualCostPerKg = paperResult.substrate?.costPerKg || defaultCostPerKg;
+    plans.set(qty, plan);
+  }
 
-    // 1. Get all feasible sheets
-    const sheets = optimizeSheetSize(
-        trimWidthMM, trimHeightMM,
-        gsm, actualCostPerKg,
-        quantity, totalPages,
-        maxColors,
-        sectionType, bindingType, 3, spineThickness,
-        isCustomPaper, customPaperWidth, customPaperHeight, customPaperGrain
-    );
-
-    // 2. Cartesian Generation
-    for (const sheet of sheets) {
-        if (sheet.ups <= 0) continue;
-
-        const grainCompliant = sheet.grainCompliant;
-        let sheetFeasible = true;
-        let sheetRejReason = sheet.rejectionReason;
-
-        if (!grainCompliant && strictGrain) {
-            sheetFeasible = false;
-            sheetRejReason = `Grain direction invalid for ${bindingType} binding — BLOCKED`;
-        }
-        if (sheet.score === Infinity) {
-            sheetFeasible = false;
-            sheetRejReason = sheetRejReason || "Sheet size not viable";
-        }
-
-        // Optimize signatures for THIS sheet
-        const signatures = optimizeSignature({
-            totalPages,
-            sheetWidthMM: sheet.widthMM,
-            sheetHeightMM: sheet.heightMM,
-            trimWidthMM,
-            trimHeightMM,
-            gsm,
-            costPerKg: actualCostPerKg,
-            quantity,
-            colorsFront,
-            colorsBack,
-            machineCode: machineId || "RMGT",
-            paperSizeCode: sheet.label,
-        });
-
-        // If no signatures, dummy pass for failure recording
-        const sigsToEval = signatures.length > 0 ? signatures : [null];
-
-        for (const sig of sigsToEval) {
-            const sigPP = sig ? sig.ppPerForm : signatureCandidates[0];
-            const numberOfForms = Math.max(1, Math.ceil(totalPages / sigPP));
-            const ups = sig ? sig.ups : sheet.ups;
-            const netSheets = sig ? sig.pressSheets : Math.ceil((quantity * numberOfForms) / ups);
-            const wastageSheets = sig ? sig.wastageSheets : Math.ceil(netSheets * 0.07);
-            const grossSheets = sig ? sig.grossSheets : netSheets + wastageSheets;
-
-            const totalPlates = sig ? sig.totalPlates : (colorsFront + colorsBack) * numberOfForms;
-
-            // Optimize machines for THIS sheet and signature
-            const machines = optimizeMachine(
-                sheet.widthMM, sheet.heightMM,
-                maxColors,
-                totalPlates,
-                grossSheets,
-                sheet.label,
-                quantity
-            );
-
-            // If no machines, dummy pass
-            const machinesToEval = machines.length > 0 ? machines : [null];
-
-            for (const machine of machinesToEval) {
-                let feasible = sheetFeasible;
-                let rejectionReason = sheetRejReason;
-
-                if (machine && !machine.canPrint) {
-                    feasible = false;
-                    rejectionReason = rejectionReason || machine.rejectionReason || "Machine incapable";
-                }
-
-                if (machine && machine.score === Infinity) {
-                    feasible = false;
-                    rejectionReason = rejectionReason || "Machine cost/time not viable";
-                }
-
-                const paperCost = sig ? sig.paperCost : sheet.totalCost;
-
-                // Machine totalCost includes CTP, Print Plates, and Impressions.
-                const printingCost = machine ? machine.totalCost : (sig ? sig.printingCost + sig.ctpCost : 0);
-
-                const totalCost = paperCost + printingCost;
-                const costPerCopy = quantity > 0 ? totalCost / quantity : 0;
-
-                const candidate: SectionPlanCandidate = {
-                    id: `${sectionType}-${candidateId++}`,
-                    sectionName, sectionType,
-                    paperSizeLabel: sheet.label,
-                    paperSizeId: sheet.sheetId,
-                    sheetWidthMM: sheet.widthMM,
-                    sheetHeightMM: sheet.heightMM,
-                    orientation: sheet.orientation,
-                    signaturePP: sigPP,
-                    numberOfForms,
-                    ups,
-                    machineId: machine?.machineId || "",
-                    machineName: machine?.machineName || "Auto",
-                    machineCode: machine?.machineCode || "RMGT",
-                    runtimeHours: machine?.timeHours || 0,
-                    machineCost: machine?.totalCost || 0,
-                    paperSource: paperSourceInfo.source as "inventory" | "rate_card" | "fallback",
-                    paperSourceReference: (paperSourceInfo as any).reference,
-                    paperAvailability: paperSourceInfo.confidence,
-                    costPerKg: actualCostPerKg,
-                    grainCompliant,
-                    grainDirection: sheet.heightMM > sheet.widthMM ? "LONG_GRAIN" : "SHORT_GRAIN",
-                    paperCost,
-                    printingCost, // Combined print/CTP here
-                    ctpCost: 0, // In subsumed machine total
-                    totalCost,
-                    costPerCopy,
-                    wastePct: sig ? sig.wastePct : sheet.paperWastePct,
-                    wastageSheets,
-                    grossSheets,
-                    netSheets,
-                    score: Infinity,
-                    scoreBreakdown: { grainScore: 0, availabilityScore: 0, wasteScore: 0, machineScore: 0, costScore: 0 },
-                    feasible,
-                    selected: false,
-                    rejectionReason,
-                };
-
-                allCandidates.push(candidate);
-            }
-        }
-    }
-
-    // Score all feasible candidates
-    for (const candidate of allCandidates) {
-        if (candidate.feasible) {
-            candidate.score = scoreCandidate(candidate, allCandidates);
-        }
-    }
-
-    // Select best
-    const feasibleCandidates = allCandidates.filter(c => c.feasible).sort((a, b) => a.score - b.score);
-    const selectedPlan = feasibleCandidates.length > 0 ? feasibleCandidates[0] : null;
-    if (selectedPlan) {
-        selectedPlan.selected = true;
-    }
-
-    // Check if blocked (all candidates rejected due to grain)
-    const grainBlockedAll = allCandidates.length > 0 && allCandidates.every(c => !c.feasible && c.rejectionReason?.includes("Grain"));
-    const blocked = grainBlockedAll;
-    const blockReason = blocked ? `All sheet sizes rejected: grain direction invalid for ${bindingType} binding` : null;
-
-    // Grain warnings
-    if (selectedPlan && !selectedPlan.grainCompliant) {
-        warnings.push(`WARNING: Selected sheet ${selectedPlan.paperSizeLabel} has suboptimal grain direction. Potential curl/crack risk.`);
-    }
-
-    // Paper source warnings
-    if (paperSourceInfo.source === "fallback") {
-        warnings.push("Paper not found in inventory or rate card — procurement recommendation generated.");
-    }
-
-    const elapsedMs = performance.now() - startTime;
-
-    // Build diagnostics
-    const rejectedSummaries = allCandidates
-        .filter(c => !c.selected && !c.feasible)
-        .slice(0, 5)
-        .map(c => {
-            let reason = `${c.paperSizeLabel} (${c.signaturePP}pp, ${c.ups} up)`;
-            if (c.rejectionReason) reason += ` — ${c.rejectionReason}`;
-            return reason;
-        });
-
-    const grainStatus: "compliant" | "warning" | "blocked" = blocked
-        ? "blocked"
-        : (selectedPlan && !selectedPlan.grainCompliant ? "warning" : "compliant");
-
-    const diagnostics: SectionDiagnostic = {
-        strategy: "auto_planning",
-        selectedSummary: selectedPlan
-            ? `${selectedPlan.paperSizeLabel} / ${selectedPlan.signaturePP}pp / ${selectedPlan.ups} up / ${selectedPlan.machineName} — ₹${selectedPlan.costPerCopy.toFixed(2)}/copy`
-            : "No viable plan found",
-        rejectedSummaries,
-        grainStatus,
-        grainDetail: grainStatus === "blocked"
-            ? `Grain direction perpendicular for all sheets with ${bindingType}. Production cannot proceed.`
-            : grainStatus === "warning"
-                ? `Selected sheet has suboptimal grain. Consider oversized sheet or alternate paper.`
-                : "Grain direction compliant with binding requirements.",
-        paperSourceStatus: paperSourceInfo.source === "inventory"
-            ? "inventory"
-            : paperSourceInfo.source === "rate_card"
-                ? "rate_card"
-                : (paperResult.procurementRecommendation ? "procurement_needed" : "fallback"),
-        paperSourceDetail: paperSourceInfo.source === "inventory"
-            ? `In-stock match found (confidence: ${Math.round(paperSourceInfo.confidence * 100)}%)`
-            : paperSourceInfo.source === "rate_card"
-                ? `Rate card pricing used (confidence: ${Math.round(paperSourceInfo.confidence * 100)}%)`
-                : "No inventory/rate card match — using fallback assumptions.",
-        machineSelectionDetail: selectedPlan
-            ? `${selectedPlan.machineName} selected (${selectedPlan.runtimeHours.toFixed(1)}h runtime, ₹${Math.round(selectedPlan.machineCost)} total)`
-            : "No machine selected",
-        candidatesEvaluated: allCandidates.length,
-        candidatesFeasible: feasibleCandidates.length,
-        candidatesRejected: allCandidates.length - feasibleCandidates.length,
-        optimizationTimeMs: Math.round(elapsedMs * 100) / 100,
-    };
-
-    return {
-        sectionName, sectionType,
-        selectedPlan, allCandidates,
-        blocked, blockReason, warnings,
-        diagnostics,
-        procurementRecommendation: paperResult.procurementRecommendation,
-    };
+  return plans;
 }
 
-// ─── MAIN: RUN AUTO-PLANNING FOR ALL SECTIONS ────────────────────────────────
+// ─── PLAN SUMMARY (for UI display) ──────────────────────────────────────────
 
-export function runAutoPlanning(input: EstimationInput): AutoPlanResult {
-    const startTime = performance.now();
-
-    // Calculate spine thickness for cover/jacket planning
-    const spineInput: SpineInput = {
-        textSections: input.textSections
-            .filter(s => s.enabled && s.pages > 0)
-            .map(s => ({ pages: s.pages, gsm: s.gsm, paperType: s.paperTypeName || "", customPaperBulk: s.customPaperBulk })),
-        endleaves: input.endleaves.enabled
-            ? { pages: input.endleaves.pages, gsm: input.endleaves.gsm, paperType: input.endleaves.paperTypeName || "", customPaperBulk: input.endleaves.customPaperBulk }
-            : undefined,
-    };
-    const spineThickness = input.bookSpec.spineThickness || calculateSpineThickness(spineInput);
-
-    const sections: SectionAutoPlan[] = [];
-    const allWarnings: string[] = [];
-    const blockReasons: string[] = [];
-
-    // Plan text sections
-    input.textSections.forEach((section: TextSection, index: number) => {
-        if (!section.enabled || section.pages <= 0) return;
-
-        const plan = planSection({
-            sectionName: section.label || `Text ${index + 1}`,
-            sectionType: index === 0 ? "text1" : "text2",
-            totalPages: section.pages,
-            trimWidthMM: input.bookSpec.widthMM,
-            trimHeightMM: input.bookSpec.heightMM,
-            gsm: section.gsm,
-            paperType: section.paperTypeName || "",
-            paperCode: section.paperTypeId || "",
-            paperSizeLabel: section.paperSizeLabel || "",
-            colorsFront: section.colorsFront,
-            colorsBack: section.colorsBack,
-            quantity: input.quantities[0] || 0,
-            bindingType: input.binding.primaryBinding,
-            spineThickness,
-            machineId: section.machineId,
-            planningMode: section.planningMode,
-            isCustomPaper: section.isCustomPaper,
-            customPaperWidth: section.customPaperWidth,
-            customPaperHeight: section.customPaperHeight,
-            customPaperGrain: section.customPaperGrain,
-        });
-
-        sections.push(plan);
-        allWarnings.push(...plan.warnings);
-        if (plan.blocked && plan.blockReason) blockReasons.push(plan.blockReason);
-    });
-
-    // Plan cover
-    const cover = input.cover;
-    if (cover.enabled && !cover.selfCover) {
-        const plan = planSection({
-            sectionName: "Cover",
-            sectionType: "cover",
-            totalPages: cover.pages || 4,
-            trimWidthMM: input.bookSpec.widthMM,
-            trimHeightMM: input.bookSpec.heightMM,
-            gsm: cover.gsm,
-            paperType: cover.paperTypeName || "",
-            paperCode: cover.paperTypeId || "",
-            paperSizeLabel: cover.paperSizeLabel || "",
-            colorsFront: cover.colorsFront,
-            colorsBack: cover.colorsBack,
-            quantity: input.quantities[0] || 0,
-            bindingType: input.binding.primaryBinding,
-            spineThickness,
-            machineId: cover.machineId,
-            planningMode: cover.planningMode,
-            isCustomPaper: cover.isCustomPaper,
-            customPaperWidth: cover.customPaperWidth,
-            customPaperHeight: cover.customPaperHeight,
-            customPaperGrain: cover.customPaperGrain,
-        });
-
-        sections.push(plan);
-        allWarnings.push(...plan.warnings);
-        if (plan.blocked && plan.blockReason) blockReasons.push(plan.blockReason);
-    }
-
-    // Plan jacket
-    const jacket = input.jacket;
-    if (jacket.enabled) {
-        const plan = planSection({
-            sectionName: "Jacket",
-            sectionType: "jacket",
-            totalPages: 2, // Jacket is always a single piece (2 sides)
-            trimWidthMM: input.bookSpec.widthMM,
-            trimHeightMM: input.bookSpec.heightMM,
-            gsm: jacket.gsm,
-            paperType: jacket.paperTypeName || "",
-            paperCode: jacket.paperTypeId || "",
-            paperSizeLabel: jacket.paperSizeLabel || "",
-            colorsFront: jacket.colorsFront,
-            colorsBack: jacket.colorsBack,
-            quantity: input.quantities[0] || 0,
-            bindingType: input.binding.primaryBinding,
-            spineThickness,
-            machineId: jacket.machineId,
-            planningMode: jacket.planningMode,
-            isCustomPaper: jacket.isCustomPaper,
-            customPaperWidth: jacket.customPaperWidth,
-            customPaperHeight: jacket.customPaperHeight,
-            customPaperGrain: jacket.customPaperGrain,
-        });
-
-        sections.push(plan);
-        allWarnings.push(...plan.warnings);
-        if (plan.blocked && plan.blockReason) blockReasons.push(plan.blockReason);
-    }
-
-    // Plan endleaves
-    const endleaves = input.endleaves;
-    if (endleaves.enabled && endleaves.pages > 0) {
-        const plan = planSection({
-            sectionName: "Endleaves",
-            sectionType: "endleaves",
-            totalPages: endleaves.pages,
-            trimWidthMM: input.bookSpec.widthMM,
-            trimHeightMM: input.bookSpec.heightMM,
-            gsm: endleaves.gsm,
-            paperType: endleaves.paperTypeName || "",
-            paperCode: endleaves.paperTypeId || "",
-            paperSizeLabel: endleaves.paperSizeLabel || "",
-            colorsFront: endleaves.colorsFront,
-            colorsBack: endleaves.colorsBack,
-            quantity: input.quantities[0] || 0,
-            bindingType: input.binding.primaryBinding,
-            spineThickness,
-            machineId: endleaves.machineId,
-            planningMode: endleaves.planningMode,
-            isCustomPaper: endleaves.isCustomPaper,
-            customPaperWidth: endleaves.customPaperWidth,
-            customPaperHeight: endleaves.customPaperHeight,
-            customPaperGrain: endleaves.customPaperGrain,
-        });
-
-        sections.push(plan);
-        allWarnings.push(...plan.warnings);
-        if (plan.blocked && plan.blockReason) blockReasons.push(plan.blockReason);
-    }
-
-    const totalMs = performance.now() - startTime;
-    const totalCandidates = sections.reduce((sum, s) => sum + s.allCandidates.length, 0);
-
-    return {
-        sections,
-        blocked: blockReasons.length > 0,
-        blockReasons,
-        warnings: allWarnings,
-        totalOptimizationTimeMs: Math.round(totalMs * 100) / 100,
-        totalCandidatesEvaluated: totalCandidates,
-    };
+export interface PlanSummary {
+  readonly quantity: number;
+  readonly spineThickness_mm: number;
+  readonly sections: Array<{
+    readonly label: string;
+    readonly type: SectionType;
+    readonly sheet: string;
+    readonly signature: string;
+    readonly method: string;
+    readonly ups: number;
+    readonly waste: string;
+    readonly grain: string;
+    readonly machine: string;
+    readonly grossSheets: number;
+    readonly paperCost: number;
+    readonly inStock: boolean;
+  }>;
+  readonly totalPaperCost: number;
+  readonly totalPlates: number;
+  readonly totalMachineHours: number;
+  readonly procurementNeeded: boolean;
+  readonly planningTime_ms: number;
 }
 
-// ─── APPLY AUTO-PLAN TO ESTIMATION INPUT ─────────────────────────────────────
-// Writes the auto-plan results back into the estimation input sections
-// so the wizard shows the recommended values.
-
-export function applyAutoPlanToInput(input: EstimationInput, plan: AutoPlanResult): Partial<EstimationInput> {
-    const updated: Partial<EstimationInput> = {};
-
-    // Process each section from the auto-plan result
-    for (const sectionPlan of plan.sections) {
-        const selected = sectionPlan.selectedPlan;
-
-        if (sectionPlan.sectionType === "text1" || sectionPlan.sectionType === "text2") {
-            const idx = sectionPlan.sectionType === "text1" ? 0 : 1;
-            if (input.textSections[idx]) {
-                if (!updated.textSections) updated.textSections = [...input.textSections];
-                const section = { ...updated.textSections[idx] };
-                section.recommendedPaperSizeLabel = selected?.paperSizeLabel;
-                section.recommendedMachineId = selected?.machineId;
-                section.recommendedMachineName = selected?.machineName;
-                section.recommendedSignature = selected?.signaturePP;
-                section.recommendedUps = selected?.ups;
-                section.planningWarnings = sectionPlan.warnings;
-
-                // Auto-fill if in auto mode and we have a selected plan
-                if (selected && section.planningMode !== "manual_override") {
-                    section.planningMode = "auto";
-                    if (!section.paperSizeLabel || section.paperSizeLabel === "") {
-                        section.paperSizeLabel = selected.paperSizeLabel;
-                        section.paperSizeId = selected.paperSizeId;
-                    }
-                    if (!section.machineId || section.machineId === "") {
-                        section.machineId = selected.machineId;
-                        section.machineName = selected.machineName;
-                    }
-                }
-
-                updated.textSections[idx] = section;
-            }
-        }
-
-        if (sectionPlan.sectionType === "cover") {
-            updated.cover = { ...input.cover };
-            updated.cover.recommendedPaperSizeLabel = selected?.paperSizeLabel;
-            updated.cover.recommendedMachineId = selected?.machineId;
-            updated.cover.recommendedMachineName = selected?.machineName;
-            updated.cover.planningWarnings = sectionPlan.warnings;
-
-            if (selected && updated.cover.planningMode !== "manual_override") {
-                updated.cover.planningMode = "auto";
-                if (!updated.cover.paperSizeLabel || updated.cover.paperSizeLabel === "") {
-                    updated.cover.paperSizeLabel = selected.paperSizeLabel;
-                    updated.cover.paperSizeId = selected.paperSizeId;
-                }
-                if (!updated.cover.machineId || updated.cover.machineId === "") {
-                    updated.cover.machineId = selected.machineId;
-                    updated.cover.machineName = selected.machineName;
-                }
-            }
-        }
-
-        if (sectionPlan.sectionType === "jacket") {
-            updated.jacket = { ...input.jacket };
-            updated.jacket.recommendedPaperSizeLabel = selected?.paperSizeLabel;
-            updated.jacket.recommendedMachineId = selected?.machineId;
-            updated.jacket.recommendedMachineName = selected?.machineName;
-            updated.jacket.planningWarnings = sectionPlan.warnings;
-
-            if (selected && updated.jacket.planningMode !== "manual_override") {
-                updated.jacket.planningMode = "auto";
-                if (!updated.jacket.paperSizeLabel || updated.jacket.paperSizeLabel === "") {
-                    updated.jacket.paperSizeLabel = selected.paperSizeLabel;
-                    updated.jacket.paperSizeId = selected.paperSizeId;
-                }
-                if (!updated.jacket.machineId || updated.jacket.machineId === "") {
-                    updated.jacket.machineId = selected.machineId;
-                    updated.jacket.machineName = selected.machineName;
-                }
-            }
-        }
-
-        if (sectionPlan.sectionType === "endleaves") {
-            updated.endleaves = { ...input.endleaves };
-            updated.endleaves.recommendedPaperSizeLabel = selected?.paperSizeLabel;
-            updated.endleaves.recommendedMachineId = selected?.machineId;
-            updated.endleaves.recommendedMachineName = selected?.machineName;
-            updated.endleaves.planningWarnings = sectionPlan.warnings;
-
-            if (selected && updated.endleaves.planningMode !== "manual_override") {
-                updated.endleaves.planningMode = "auto";
-                if (!updated.endleaves.paperSizeLabel || updated.endleaves.paperSizeLabel === "") {
-                    updated.endleaves.paperSizeLabel = selected.paperSizeLabel;
-                    updated.endleaves.paperSizeId = selected.paperSizeId;
-                }
-                if (!updated.endleaves.machineId || updated.endleaves.machineId === "") {
-                    updated.endleaves.machineId = selected.machineId;
-                    updated.endleaves.machineName = selected.machineName;
-                }
-            }
-        }
-    }
-
-    return updated;
+/**
+ * Generate a human-readable summary of a BookPlan.
+ * Used by the wizard's live preview panel.
+ */
+export function summarizePlan(plan: BookPlan): PlanSummary {
+  return {
+    quantity: plan.quantity,
+    spineThickness_mm: plan.spineThickness_mm,
+    sections: plan.sections.map((s) => ({
+      label: s.label,
+      type: s.sectionType,
+      sheet: s.impositionSummary.sheet,
+      signature: s.impositionSummary.signature,
+      method: s.impositionSummary.method,
+      ups: s.impositionSummary.ups,
+      waste: s.impositionSummary.waste,
+      grain: s.impositionSummary.grain,
+      machine: s.machine?.machine.name ?? "—",
+      grossSheets: s.grossSheets,
+      paperCost: s.paperCostTotal,
+      inStock: s.paper?.inStock ?? false,
+    })),
+    totalPaperCost: plan.sections.reduce((sum, s) => sum + s.paperCostTotal, 0),
+    totalPlates: plan.sections.reduce((sum, s) => sum + s.totalPlates, 0),
+    totalMachineHours: plan.sections.reduce((sum, s) => sum + s.estimatedMachineHours, 0),
+    procurementNeeded: plan.procurement.length > 0,
+    planningTime_ms: plan.meta.planningTime_ms,
+  };
 }
+
