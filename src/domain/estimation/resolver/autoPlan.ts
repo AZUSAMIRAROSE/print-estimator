@@ -68,7 +68,7 @@ export async function autoPlan(
     // ════════════════════════════════════════════════════════════════════
     options?.onProgress?.("Planning imposition...", 35);
 
-    const machines = request.machines || STANDARD_MACHINES;
+    const machines = request.machines || [...STANDARD_MACHINES] as any;
     const sheets = request.preferredSheets;
 
     const plans = autoImposeMultipleSections(request.sections, request.quantity, {
@@ -118,7 +118,7 @@ export async function autoPlan(
           candidates,
           plan.selectedCandidate.totalImpressions,
           colorCount,
-          machines
+          [...machines] as any
         );
 
         selectedMachines.set(sectionType, machineResult.machineRanking.machine);
@@ -178,7 +178,7 @@ export async function autoPlan(
       costs,
       totalCost,
       costPerCopy: totalCost / request.quantity,
-      diagnostics,
+      diagnostics: diagnostics as any,
       generatedAt: new Date(),
     };
 

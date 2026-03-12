@@ -17,9 +17,13 @@ import type { QuotationOptions } from "@/domain/estimation/pricing/quotationGene
  * Component: Auto Estimation Panel
  * Integrated into the New Estimate wizard
  */
+interface AutoEstimationPanelProps {
+  onEstimationComplete?: () => void;
+}
+
 export const AutoEstimationPanel = ({ 
-  onEstimationComplete?: () => void 
-}) => {
+  onEstimationComplete 
+}: AutoEstimationPanelProps) => {
   // Hooks
   const { estimateFromRequest, generateQuotationForEstimation, cancel } = 
     useEstimationWorkflow({ onComplete: onEstimationComplete });

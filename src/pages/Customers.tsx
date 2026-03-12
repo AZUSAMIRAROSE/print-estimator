@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef } from "react";
 import { useAppStore } from "@/stores/appStore";
 import { useDataStore } from "@/stores/dataStore";
+import { syncCustomerCreate, syncCustomerUpdate, syncCustomerDelete } from "@/hooks/useDataSync";
 import { cn } from "@/utils/cn";
 import { saveTextFilePortable } from "@/utils/fileSave";
 import {
@@ -166,7 +167,7 @@ export function Customers() {
           continue;
         }
 
-        addCustomer({
+        const newC = addCustomer({
           ...EMPTY_FORM,
           code,
           name,
@@ -178,6 +179,9 @@ export function Customers() {
           priority,
           status,
         });
+        if (newC) {
+          syncCustomerCreate(newC); // Push each imported customer to the backend
+        }
         imported++;
       }
 
@@ -207,9 +211,11 @@ export function Customers() {
 
     if (modalMode === "add") {
       const newC = addCustomer(finalData);
+      syncCustomerCreate(newC); // Fire-and-forget backend sync
       addNotification({ type: "success", title: "Customer Created", message: `${newC.name} has been created.`, category: "customer" });
     } else if (editingId) {
       updateCustomer(editingId, finalData);
+      syncCustomerUpdate(editingId, finalData); // Fire-and-forget backend sync
       addNotification({ type: "success", title: "Customer Updated", message: `${formData.name} has been updated.`, category: "customer" });
     }
     closeModal();
@@ -217,6 +223,7 @@ export function Customers() {
 
   const handleDelete = (id: string) => {
     deleteCustomer(id);
+    syncCustomerDelete(id); // Fire-and-forget backend sync
     addNotification({ type: "warning", title: "Customer Deleted", message: "Customer removed permanently.", category: "customer" });
     setShowDeleteConfirm(null);
   };
@@ -224,6 +231,7 @@ export function Customers() {
   const handleDuplicate = (id: string) => {
     const dup = duplicateCustomer(id);
     if (dup) {
+      syncCustomerCreate(dup); // Sync the new duplicate to backend
       addNotification({ type: "success", title: "Customer Duplicated", message: `${dup.name} created as draft.`, category: "customer" });
     }
   };

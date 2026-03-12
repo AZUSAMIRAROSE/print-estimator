@@ -481,6 +481,9 @@ interface RateCardState {
 
     // ── Bulk Actions ──
     resetToDefaults: (category: string) => void;
+
+    // ── Backend Sync ──
+    setRateCard: (stateObj: any) => void;
 }
 
 // ── Store Implementation ─────────────────────────────────────────────────────
@@ -716,8 +719,12 @@ export const useRateCardStore = create<RateCardState>()(
                         case "board": s.boardTypes = seedBoards(); break;
                         case "freight": s.freightDestinations = seedFreight(); break;
                         case "packing": s.packingRates = seedPacking(); break;
-                        case "transfers": s.transfers = []; break;
                     }
+                });
+            },
+            setRateCard(stateObj) {
+                set(s => {
+                    Object.assign(s, stateObj);
                 });
             },
         })),

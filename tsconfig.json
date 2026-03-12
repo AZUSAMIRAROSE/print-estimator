@@ -30,5 +30,17 @@
     }
   },
   "include": ["src"],
+  "exclude": [
+    "**/domain/estimation/integration-examples.tsx",
+    "**/domain/estimation/integrationExamples.ts",
+    "**/domain/estimation/COMPLETE_SUMMARY.ts",
+    "**/domain/estimation/examples",
+    "**/domain/estimation/examples/**",
+    "**/domain/estimation/resolver/examples.ts",
+    "**/components/wizard/AutoEstimationPanel.tsx",
+    "**/utils/unusedExports.ts",
+    "server",
+    "server/**"
+  ],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

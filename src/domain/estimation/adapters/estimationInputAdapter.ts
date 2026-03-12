@@ -53,8 +53,8 @@ export function estimationInputToRequest(
           back: section.gsm > 0 ? section.pages : 0,
         },
         colors: {
-          frontColor: section.colors?.length ? (section.colors.includes("4color") ? "4color" : "black") : "black",
-          backColor: section.colors?.length > 1 ? (section.colors[1].includes("4color") ? "4color" : "black") : "black",
+          frontColor: (section.colorsFront >= 4) ? "4color" : "black",
+          backColor: (section.colorsBack >= 4) ? "4color" : "black",
         },
         trimSize,
       },
@@ -71,8 +71,8 @@ export function estimationInputToRequest(
             spineWidth: estimation.bookSpec.spineThickness,
             bleedAllowance: 3,
             colors: {
-              frontColor: estimation.cover.colors?.length ? (estimation.cover.colors[0].includes("4color") ? "4color" : "black") : "black",
-              backColor: estimation.cover.colors?.length > 1 ? (estimation.cover.colors[1].includes("4color") ? "4color" : "black") : "black",
+              frontColor: (estimation.cover.colorsFront >= 4) ? "4color" : "black",
+              backColor: (estimation.cover.colorsBack >= 4) ? "4color" : "black",
             },
           },
         ],
@@ -86,13 +86,13 @@ export function estimationInputToRequest(
           "jacket",
           {
             type: "jacket",
-            bookTrimSize: trimSize,
+            trimSize,
             spineWidth: estimation.bookSpec.spineThickness,
-            flapWidth: 40, // Standard flap width
+            flapWidth: estimation.jacket.flapWidth || 40,
             bleedAllowance: 3,
             colors: {
-              frontColor: estimation.jacket.colors?.length ? (estimation.jacket.colors[0].includes("4color") ? "4color" : "black") : "black",
-              backColor: estimation.jacket.colors?.length > 1 ? (estimation.jacket.colors[1].includes("4color") ? "4color" : "black") : "black",
+              frontColor: (estimation.jacket.colorsFront >= 4) ? "4color" : "black",
+              backColor: (estimation.jacket.colorsBack >= 4) ? "4color" : "black",
             },
           },
         ],
@@ -106,7 +106,7 @@ export function estimationInputToRequest(
           "endleaf",
           {
             type: "endleaf",
-            pageCounts: { front: estimation.endleaves.pages, back: estimation.endleaves.pages },
+            totalPages: estimation.endleaves.pages * 2, // front + back
             colors: { frontColor: "black", backColor: "black" },
             trimSize,
           },
@@ -123,7 +123,7 @@ export function estimationInputToRequest(
   ]) as any;
 
   // ── Extract paper specifications ──────────────────────────────────────────
-  const papers = buildPaperSpecifications(estimation, trimSize);
+  const papers = buildPaperSpecifications(estimation, trimSize) as any;
 
   // ── Build estimation request ──────────────────────────────────────────────
   const request: EstimationRequest = {
@@ -272,15 +272,15 @@ export function quotationOptionsFromUI(
   preparedBy: string;
 } {
   const pricing = estimation.pricing || {
-    margin: 0,
-    discount: 0,
-    currency: "INR",
+    marginPercent: 0,
+    commissionPercent: 0,
+    currency: "INR" as const,
     taxRate: 18,
   };
 
   return {
-    margin: pricing.margin || 25, // Default 25% margin
-    discount: pricing.discount || 0,
+    margin: pricing.marginPercent || 25, // Default 25% margin
+    discount: pricing.commissionPercent || 0,
     currency: pricing.currency || "INR",
     taxRate: pricing.taxRate || 18,
     customerName,

@@ -6,7 +6,7 @@
 import type {
   EstimationResult,
   EstimationRequest,
-} from "@/domain/estimation/imposition";
+} from "@/domain/estimation/imposition/types";
 import type { PriceQuotation } from "./costCalculator";
 import {
   aggregateCosts,
@@ -146,8 +146,8 @@ export function generateQuotation(
   const currency = options.currency ?? "INR";
 
   // Build specification summary
-  const paperDetails = Object.entries(estimation.paperSources)
-    .filter(([_, source]) => source.recommended)
+  const paperDetails = (Object.entries(estimation.paperSources) as [string, any][])
+    .filter(([_, source]) => source?.recommended)
     .map(
       ([sectionType, source]) =>
         `${sectionType}: ${source.recommended?.paper.name} ${source.recommended?.paper.gsm}gsm`

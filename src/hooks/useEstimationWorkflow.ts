@@ -121,16 +121,22 @@ export const useEstimationWorkflow = (options?: UseEstimationWorkflowOptions) =>
   const refreshCurrentQuotation = useCallback(
     async (newOptions: QuotationOptions) => {
       const state = useEstimationStore.getState();
-      const { quotation } = state;
+      const { quotation, domainEstimation } = state;
 
       if (!quotation) {
         setEstimationError("No quotation available to refresh");
         return null;
       }
 
+      if (!domainEstimation) {
+        setEstimationError("No estimation available to refresh quotation against");
+        return null;
+      }
+
       try {
         setEstimationProgress(95, "Refreshing quotation...");
-        const refreshedQuotation = refreshQuotation(quotation, newOptions);
+        const comparison = refreshQuotation(quotation, domainEstimation, newOptions);
+        const refreshedQuotation = comparison.refreshedVersion;
         setQuotation(refreshedQuotation);
         addToQuotationHistory(refreshedQuotation);
         setEstimationProgress(100, "Quotation refreshed");

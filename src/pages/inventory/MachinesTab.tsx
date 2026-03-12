@@ -6,6 +6,7 @@ import { formatCurrency } from "@/utils/format";
 import { Machine, createDefaultMachine } from "@/types/machine.types";
 import { MachineStatus } from "@/types/machine.enums";
 import { Plus, Settings, Trash2, Archive, Activity as Pulse } from "lucide-react";
+import { syncMachineCreate, syncMachineUpdate, syncMachineDelete, syncMachineDuplicate } from "@/hooks/useDataSync";
 
 import { MachineTable } from "@/components/machines/MachineTable";
 import { MachineDetailPanel } from "@/components/machines/MachineDetailPanel";
@@ -31,6 +32,7 @@ export function MachinesTab() {
     const handleSave = (machine: Machine) => {
         if (isAdding) {
             addMachine(machine);
+            syncMachineCreate(machine); // Fire-and-forget sync
             addNotification({
                 type: "success",
                 title: "Machine Commissioned",
@@ -39,6 +41,7 @@ export function MachinesTab() {
             });
         } else {
             updateMachine(machine.id, machine);
+            syncMachineUpdate(machine.id, machine); // Fire-and-forget sync
             addNotification({
                 type: "success",
                 title: "Configuration Synchronized",
@@ -54,6 +57,7 @@ export function MachinesTab() {
         const m = machines.get(id);
         if (confirm(`CRITICAL: Are you sure you want to PERMANENTLY PURGE the records for ${m?.name}? This action is irreversible.`)) {
             useMachineStore.getState().permanentlyDeleteMachine(id, 'PURGE-MACHINE');
+            syncMachineDelete(id); // Fire-and-forget sync
             addNotification({ type: "warning", title: "Record Purged", message: "Machine records physically deleted.", category: "system" });
         }
     };
@@ -98,10 +102,10 @@ export function MachinesTab() {
             <MachineTable
                 machines={activeMachines}
                 onEdit={m => { setSelectedMachine(m); setIsAdding(false); }}
-                onDuplicate={id => duplicateMachine(id)}
+                onDuplicate={id => { duplicateMachine(id); syncMachineDuplicate(id); }}
                 onDelete={id => handleDelete(id)}
-                onArchive={id => deleteMachine(id)}
-                onRestore={id => restoreMachine(id)}
+                onArchive={id => { deleteMachine(id); syncMachineUpdate(id, { isArchived: true }); }}
+                onRestore={id => { restoreMachine(id); syncMachineUpdate(id, { isArchived: false }); }}
             />
 
             {/* Archived Section */}
@@ -114,10 +118,10 @@ export function MachinesTab() {
                     <MachineTable
                         machines={machinesArray.filter(m => m.isArchived)}
                         onEdit={m => setSelectedMachine(m)}
-                        onDuplicate={id => duplicateMachine(id)}
+                        onDuplicate={id => { duplicateMachine(id); syncMachineDuplicate(id); }}
                         onDelete={id => handleDelete(id)}
-                        onArchive={id => deleteMachine(id)}
-                        onRestore={id => restoreMachine(id)}
+                        onArchive={id => { deleteMachine(id); syncMachineUpdate(id, { isArchived: true }); }}
+                        onRestore={id => { restoreMachine(id); syncMachineUpdate(id, { isArchived: false }); }}
                     />
                 </div>
             )}

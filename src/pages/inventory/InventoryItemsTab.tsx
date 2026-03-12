@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useInventoryStore } from "@/stores/inventoryStore";
 import { useAppStore } from "@/stores/appStore";
+import { syncInventoryCreate, syncInventoryUpdate, syncInventoryDelete } from "@/hooks/useDataSync";
 import { cn } from "@/utils/cn";
 import { formatCurrency, formatNumber, generateId } from "@/utils/format";
 import type { InventoryItem, InventoryCategory } from "@/types";
@@ -60,11 +61,13 @@ export function InventoryItemsTab() {
         if (!form.name?.trim()) return;
         if (editId) {
             updateItem(editId, form);
+            syncInventoryUpdate(editId, form); // Fire-and-forget backend sync
             addNotification({ type: "success", title: "Item Updated", message: `${form.name} updated.`, category: "system" });
             addActivityLog({ action: "INVENTORY_UPDATED", category: "inventory", description: `Updated: ${form.name}`, user: "Current User", entityType: "inventory", entityId: editId, level: "info" });
         } else {
             const newItemId = generateId();
             addItem({ ...form, id: newItemId } as unknown as Omit<InventoryItem, "id" | "lastUpdated">);
+            syncInventoryCreate({ ...form, id: newItemId }); // Fire-and-forget backend sync
             addNotification({ type: "success", title: "Item Added", message: `${form.name} added to inventory.`, category: "system" });
             addActivityLog({ action: "INVENTORY_ADDED", category: "inventory", description: `Added: ${form.name}`, user: "Current User", entityType: "inventory", entityId: newItemId, level: "info" });
         }
@@ -73,8 +76,12 @@ export function InventoryItemsTab() {
 
     const handleSaveDraft = () => {
         if (!form.name?.trim()) return;
-        if (editId) { updateItem(editId, { ...form, status: "draft" }); }
-        else { addItem({ ...form, status: "draft" } as Omit<InventoryItem, "id" | "lastUpdated">); }
+        if (editId) {
+            updateItem(editId, { ...form, status: "draft" });
+            syncInventoryUpdate(editId, { ...form, status: "draft" }); // Fire-and-forget backend sync
+        } else {
+            addItem({ ...form, status: "draft" } as Omit<InventoryItem, "id" | "lastUpdated">);
+        }
         addNotification({ type: "info", title: "Draft Saved", message: `${form.name} saved as draft.`, category: "system" });
         setShowModal(false); setEditId(null);
     };
@@ -82,14 +89,17 @@ export function InventoryItemsTab() {
     const handleDelete = (id: string) => {
         const item = items.find(i => i.id === id);
         deleteItem(id);
+        syncInventoryDelete(id); // Fire-and-forget backend sync
         addNotification({ type: "warning", title: "Item Deleted", message: `${item?.name} removed.`, category: "system" });
         addActivityLog({ action: "INVENTORY_DELETED", category: "inventory", description: `Deleted: ${item?.name}`, user: "Current User", entityType: "inventory", entityId: id, level: "warning" });
         setDeleteConfirm(null);
     };
 
     const handleDuplicate = (id: string) => {
-        duplicateItem(id);
         const item = items.find(i => i.id === id);
+        duplicateItem(id);
+        // Note: duplicateItem doesn't return the new item; duplicate sync
+        // will happen on next periodic backend reconciliation
         addNotification({ type: "info", title: "Item Duplicated", message: `${item?.name} duplicated.`, category: "system" });
     };
 

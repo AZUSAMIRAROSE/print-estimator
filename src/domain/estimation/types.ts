@@ -1,4 +1,4 @@
-﻿// ============================================================================
+// ============================================================================
 // DOMAIN TYPES — CANONICAL TYPE SYSTEM FOR AUTO-PLANNING ESTIMATION ENGINE
 // ============================================================================
 //
@@ -454,5 +454,62 @@ export interface ProcurementRecommendation {
   readonly estimatedCost: number;
   readonly leadTime_days?: number;
   readonly confidence: number;
+}
+
+// ─── ENGINE RESULT TYPES ────────────────────────────────────────────────────
+// These types are used by engine.ts to wrap the calculation output from
+// the legacy estimator into a structured domain envelope.
+
+/** Cost breakdown by category for the estimation result */
+export interface CostBreakdown {
+  readonly paper: number;
+  readonly printing: number;
+  readonly ctp: number;
+  readonly binding: number;
+  readonly finishing: number;
+  readonly packing: number;
+  readonly freight: number;
+  readonly prePress: number;
+  readonly additional: number;
+  readonly totalProduction: number;
+}
+
+/** Validation issue reported during estimation */
+export interface ValidationIssue {
+  readonly code: string;
+  readonly severity: "error" | "warning" | "info";
+  readonly message: string;
+  readonly section?: string;
+  readonly impact?: string;
+}
+
+/** Per-section planning output with imposition and machine selection */
+export interface PlannedSection {
+  readonly section: string;
+  readonly paperSize: string;
+  readonly imposition: string;
+  readonly signature: number;
+  readonly ups: number;
+  readonly grainCompliant: boolean;
+  readonly machineId?: string;
+  readonly machineName?: string;
+  readonly source: string;
+  readonly warnings: string[];
+}
+
+/** Aggregate planning result for all sections */
+export interface PlanningOutput {
+  sections: PlannedSection[];
+  blocked: boolean;
+  issues: ValidationIssue[];
+}
+
+/** Full estimation result envelope wrapping input, results, and planning */
+export interface EstimationResultEnvelope {
+  readonly input: any; // EstimationInput from @/types
+  readonly results: any[]; // ReturnType<typeof calculateFullEstimation>
+  readonly planning: PlanningOutput;
+  readonly procurement: ProcurementRecommendation[];
+  readonly issues: ValidationIssue[];
 }
 

@@ -111,6 +111,20 @@ export function runMigrations() {
       updated_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS machines (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      machine_type TEXT NOT NULL,
+      status TEXT DEFAULT 'active',
+      manufacturer TEXT DEFAULT '',
+      model TEXT DEFAULT '',
+      installation_date TEXT DEFAULT '',
+      base_hourly_rate REAL DEFAULT 0,
+      payload_json TEXT DEFAULT '{}',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS inventory (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -122,6 +136,12 @@ export function runMigrations() {
       cost_per_unit REAL DEFAULT 0,
       supplier TEXT DEFAULT '',
       last_updated TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS config_store (
+      config_key TEXT PRIMARY KEY,
+      payload_json TEXT NOT NULL,
+      updated_by TEXT NOT NULL,
+      updated_at TEXT NOT NULL
     );
   `);
 

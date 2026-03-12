@@ -9,8 +9,8 @@ import type {
 } from "@/types";
 import { generateId } from "@/utils/format";
 import { EPSON_PROOF_RATE, WET_PROOF_RATE, PACKING_RATES } from "@/constants";
-import type { EstimationRequest, EstimationResult as DomainEstimationResult, CustomerQuotation } from "@/domain/estimation/imposition/types";
-import type { QuotationOptions } from "@/domain/estimation/pricing/quotationGenerator";
+import type { EstimationRequest, EstimationResult as DomainEstimationResult } from "@/domain/estimation/imposition/types";
+import type { QuotationOptions, CustomerQuotation } from "@/domain/estimation/pricing/quotationGenerator";
 
 interface EstimationState {
   estimation: EstimationInput;

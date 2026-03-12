@@ -7,7 +7,7 @@
 import type {
   EstimationResult,
   ImpositionCandidate,
-} from "@/domain/estimation/imposition";
+} from "@/domain/estimation/imposition/types";
 
 // ============================================================================
 // COST BREAKDOWN INTERFACES

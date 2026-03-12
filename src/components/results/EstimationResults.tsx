@@ -2,6 +2,7 @@ import React, { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppStore } from "@/stores/appStore";
 import { useDataStore } from "@/stores/dataStore";
+import { syncJobCreate, syncQuotationCreate } from "@/hooks/useDataSync";
 import { cn } from "@/utils/cn";
 import { formatCurrency, formatNumber, formatPercent } from "@/utils/format";
 import { buildEstimationCsv, downloadTextFile } from "@/utils/export";
@@ -183,6 +184,8 @@ export function EstimationResults({ estimation, results, spineThickness, onBackT
       tags: [],
     });
 
+    syncJobCreate(savedJob); // Fire-and-forget backend sync
+
     setLiveMessage(`Job ${savedJob.jobNumber} saved.`);
     addNotification({
       type: "success",
@@ -226,6 +229,8 @@ export function EstimationResults({ estimation, results, spineThickness, onBackT
       comments: [],
       revisionNumber: 0,
     });
+
+    syncQuotationCreate(newQuotation); // Fire-and-forget backend sync
 
     setShowQuotationModal(false);
     setLiveMessage(`Quotation ${newQuotation.quotationNumber} created.`);

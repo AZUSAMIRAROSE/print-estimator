@@ -11,7 +11,7 @@
 
 import { useCallback, useState, useRef } from "react";
 import { useEstimationStore } from "@/stores/estimationStore";
-import { useDataStore } from "@/stores/dataStore";
+import { useInventoryStore } from "@/stores/inventoryStore";
 import { useRateCardStore } from "@/stores/rateCardStore";
 import { useMachineStore } from "@/stores/machineStore";
 import { autoPlan } from "@/domain/estimation/resolver";
@@ -25,11 +25,11 @@ import {
 import {
   convertInventoryItems,
   convertRateCardEntries,
-  type InventoryPaperItem,
-  type RateCardPaper,
 } from "@/domain/estimation/adapters/storeAdapters";
+import type { InventoryPaperItem, RateCardPaper } from "@/domain/estimation/resolver/paperResolver";
 import type { EstimationInput } from "@/types";
-import type { EstimationRequest, EstimationResult, CustomerQuotation } from "@/domain/estimation/imposition/types";
+import type { EstimationRequest, EstimationResult } from "@/domain/estimation/imposition/types";
+import type { CustomerQuotation } from "@/domain/estimation/pricing/quotationGenerator";
 
 // ============================================================================
 // USE ESTIMATION HOOK
@@ -37,7 +37,7 @@ import type { EstimationRequest, EstimationResult, CustomerQuotation } from "@/d
 
 export function useEstimation() {
   const estimationStore = useEstimationStore();
-  const dataStore = useDataStore();
+  const inventoryStore = useInventoryStore();
   const rateCardStore = useRateCardStore();
   const machineStore = useMachineStore();
 
@@ -47,9 +47,9 @@ export function useEstimation() {
 
   // ── Gather live data from stores ──────────────────────────────────────────
   const getInventoryItems = useCallback((): InventoryPaperItem[] => {
-    const inventory = dataStore.items?.filter((i) => i.category === "paper") || [];
+    const inventory = (inventoryStore.items || []).filter((i: any) => i.category === "paper");
     return convertInventoryItems(inventory);
-  }, [dataStore.items]);
+  }, [inventoryStore.items]);
 
   const getRateCardItems = useCallback((): RateCardPaper[] => {
     const rates = rateCardStore.paperRates?.filter((r) => r.status === "active") || [];
@@ -106,8 +106,8 @@ export function useEstimation() {
         );
 
         const quotation = generateQuotation(result, {
-          margin: quotationOptions.margin,
-          discount: quotationOptions.discount,
+          marginPercent: quotationOptions.margin,
+          discountPercent: quotationOptions.discount,
           currency: quotationOptions.currency,
           taxRate: quotationOptions.taxRate,
           customerName: quotationOptions.customerName,

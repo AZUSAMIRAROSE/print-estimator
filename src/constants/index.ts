@@ -549,6 +549,7 @@ export const WIZARD_STEPS: WizardStep[] = [
 export const SIDEBAR_ITEMS = [
   { id: "dashboard", label: "Dashboard", icon: "LayoutDashboard", path: "/dashboard" },
   { id: "new_estimate", label: "New Estimate", icon: "FilePlus", path: "/estimate/new" },
+  { id: "estimate_v2", label: "Estimate V2", icon: "FlaskConical", path: "/estimate/v2" },
   { id: "jobs", label: "Jobs", icon: "Briefcase", path: "/jobs" },
   { id: "quotations", label: "Quotations", icon: "FileCheck", path: "/quotations" },
   { id: "customers", label: "Customers", icon: "Users", path: "/customers" },

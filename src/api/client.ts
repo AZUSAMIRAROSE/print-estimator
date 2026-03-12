@@ -75,8 +75,11 @@ export const apiClient = {
   // Quotes
   listQuotes: () => request("/quotes"),
   createQuote: (payload: JsonBody) => request("/quotes", { method: "POST", body: JSON.stringify(payload) }),
+  updateQuote: (id: string, payload: JsonBody) =>
+    request(`/quotes/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
   updateQuoteStatus: (id: string, status: string) =>
     request(`/quotes/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) }),
+  deleteQuote: (id: string) => request(`/quotes/${id}`, { method: "DELETE" }),
 
   // Rates
   listRates: () => request("/rates"),
@@ -116,9 +119,20 @@ export const apiClient = {
   exportInventoryCSV: () => downloadFile("/inventory/export/csv", "inventory.csv"),
   importInventoryCSV: (rows: JsonBody[]) => request("/inventory/import/csv", { method: "POST", body: JSON.stringify({ rows }) }),
 
+  // Machines
+  listMachines: () => request<{ machines: JsonBody[] }>("/machines"),
+  createMachine: (payload: JsonBody) => request("/machines", { method: "POST", body: JSON.stringify(payload) }),
+  updateMachine: (id: string, payload: JsonBody) => request(`/machines/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
+  deleteMachine: (id: string) => request(`/machines/${id}`, { method: "DELETE" }),
+  duplicateMachine: (id: string) => request(`/machines/${id}/duplicate`, { method: "POST" }),
+
   // System
   health: () => request("/system/health"),
   auditLogs: () => request("/system/admin/audit-logs"),
+
+  // Rates
+  getRateCard: () => request<{ rateCard: any; updatedAt: string }>("/rates"),
+  upsertRateCard: (payload: JsonBody) => request("/rates", { method: "PUT", body: JSON.stringify(payload) }),
 
   // Files
   listFiles: () => request("/files"),

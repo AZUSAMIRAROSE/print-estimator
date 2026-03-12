@@ -3,10 +3,10 @@
  * Bridges frontend React components with backend REST endpoints
  */
 
-import type { EstimationRequest, EstimationResult as DomainEstimationResult, CustomerQuotation } from "@/domain/estimation/imposition/types";
-import type { QuotationOptions } from "@/domain/estimation/pricing/quotationGenerator";
+import type { EstimationRequest, EstimationResult as DomainEstimationResult } from "@/domain/estimation/imposition/types";
+import type { QuotationOptions, CustomerQuotation } from "@/domain/estimation/pricing/quotationGenerator";
 
-const API_BASE = "/api";
+const API_BASE = import.meta.env.VITE_API_URL || "/api/v1";
 
 export interface ApiResponse<T> {
   success: boolean;
@@ -157,7 +157,7 @@ export const quotationApi = {
    */
   async refresh(quotation: CustomerQuotation, newOptions: QuotationOptions): Promise<ApiResponse<CustomerQuotation>> {
     try {
-      const response = await fetch(`${API_BASE}/quotation/${quotation.id}/refresh`, {
+      const response = await fetch(`${API_BASE}/quotation/${quotation.quotationId}/refresh`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

@@ -128,7 +128,7 @@ export * from "./adapters/estimationInputAdapter";
 // ============================================================================
 // EXAMPLES & WORKFLOWS
 // ============================================================================
-export * from "./examples";
+// export * from "./examples"; // Examples excluded — reference-only code, import directly if needed
 
 // ============================================================================
 // LEGACY EXPORTS (for backward compatibility)

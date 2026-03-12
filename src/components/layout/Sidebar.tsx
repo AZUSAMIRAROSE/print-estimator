@@ -6,11 +6,11 @@ import { SIDEBAR_ITEMS, APP_NAME, APP_VERSION } from "@/constants";
 import {
   LayoutDashboard, FilePlus, Briefcase, FileCheck, Users,
   CreditCard, Calculator, Warehouse, BarChart3, Settings,
-  ChevronLeft, ChevronRight, Printer
+  ChevronLeft, ChevronRight, Printer, FlaskConical
 } from "lucide-react";
 
 const iconMap: Record<string, React.ElementType> = {
-  LayoutDashboard, FilePlus, Briefcase, FileCheck, Users,
+  LayoutDashboard, FilePlus, FlaskConical, Briefcase, FileCheck, Users,
   CreditCard, Calculator, Warehouse, BarChart3, Settings
 };
 

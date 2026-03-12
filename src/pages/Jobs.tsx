@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useDataStore } from "@/stores/dataStore";
 import { useAppStore } from "@/stores/appStore";
+import { syncJobDelete, syncJobDuplicate, syncJobUpdate } from "@/hooks/useDataSync";
 import { cn } from "@/utils/cn";
 import { formatCurrency, getRelativeTime, formatNumber } from "@/utils/format";
 import {
@@ -91,6 +92,7 @@ export function Jobs() {
     }
     const dup = duplicateJob(job.id);
     if (dup) {
+      syncJobDuplicate(job.id); // Fire-and-forget backend sync
       addNotification({ type: "success", title: "Job Duplicated", message: `"${dup.title}" created as ${dup.jobNumber}`, category: "job" });
       addActivityLog({ action: "JOB_DUPLICATED", category: "job", description: `Duplicated job: ${job.title} → ${dup.jobNumber}`, user: "Current User", entityType: "job", entityId: dup.id, level: "info" });
     }
@@ -108,6 +110,7 @@ export function Jobs() {
       addNotification({ type: "info", title: "Demo Data", message: "Cannot delete demo data.", category: "job" });
     } else if (job) {
       deleteJob(job.id);
+      syncJobDelete(job.id); // Fire-and-forget backend sync
       addNotification({ type: "warning", title: "Job Deleted", message: `"${job.title}" has been removed.`, category: "job" });
       addActivityLog({ action: "JOB_DELETED", category: "job", description: `Deleted job: ${job.title}`, user: "Current User", entityType: "job", entityId: job.id, level: "warning" });
     }
@@ -428,7 +431,7 @@ export function Jobs() {
           jobId={selectedJobId}
           isOpen={!!selectedJobId}
           onClose={() => setSelectedJobId(null)}
-          onEditJob={updateJob}
+          onEditJob={(id, updates) => { updateJob(id, updates); syncJobUpdate(id, updates); }}
         />
       )}
     </div>

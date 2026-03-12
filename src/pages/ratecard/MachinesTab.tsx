@@ -3,6 +3,7 @@ import { useMachineStore } from "@/stores/machineStore";
 import { useAppStore } from "@/stores/appStore";
 import { Machine, createDefaultMachine } from "@/types/machine.types";
 import { Plus } from "lucide-react";
+import { syncMachineCreate, syncMachineUpdate, syncMachineDelete, syncMachineDuplicate } from "@/hooks/useDataSync";
 
 import { MachineTable } from "@/components/machines/MachineTable";
 import { MachineDetailPanel } from "@/components/machines/MachineDetailPanel";
@@ -27,6 +28,7 @@ export function MachinesTab({ search, canEdit }: { search: string; canEdit: bool
         const m = machines.get(id);
         if (confirm(`CRITICAL: Are you sure you want to PERMANENTLY PURGE the records for ${m?.name}? This action is irreversible.`)) {
             useMachineStore.getState().permanentlyDeleteMachine(id, 'PURGE-MACHINE');
+            syncMachineDelete(id); // Fire-and-forget sync
             addNotification({ type: "warning", title: "Record Purged", message: "Machine records physically deleted.", category: "system" });
         }
     };
@@ -49,10 +51,10 @@ export function MachinesTab({ search, canEdit }: { search: string; canEdit: bool
             <MachineTable
                 machines={filtered}
                 onEdit={m => setSelectedMachine(m)}
-                onDuplicate={id => duplicateMachine(id)}
+                onDuplicate={id => { duplicateMachine(id); syncMachineDuplicate(id); }}
                 onDelete={id => handleDelete(id)}
-                onArchive={id => deleteMachine(id)}
-                onRestore={id => restoreMachine(id)}
+                onArchive={id => { deleteMachine(id); syncMachineUpdate(id, { isArchived: true }); }}
+                onRestore={id => { restoreMachine(id); syncMachineUpdate(id, { isArchived: false }); }}
             />
 
             {selectedMachine && (
@@ -62,8 +64,10 @@ export function MachinesTab({ search, canEdit }: { search: string; canEdit: bool
                     onSave={(m) => {
                         if (!m.id) {
                             useMachineStore.getState().addMachine(m);
+                            syncMachineCreate(m); // Fire-and-forget sync
                         } else {
                             useMachineStore.getState().updateMachine(m.id, m);
+                            syncMachineUpdate(m.id, m); // Fire-and-forget sync
                         }
                         setSelectedMachine(null);
                         addNotification({ type: 'success', title: 'State Committed', message: 'Machine configuration synchronized.', category: 'system' });

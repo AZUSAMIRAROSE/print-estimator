@@ -1,5 +1,6 @@
 import { useNavigate, useLocation, Outlet } from "react-router-dom";
 import { useAppStore } from "@/stores/appStore";
+import { useDataSync } from "@/hooks/useDataSync";
 import { cn } from "@/utils/cn";
 import { SIDEBAR_ITEMS, APP_NAME, APP_VERSION } from "@/constants";
 import { Header } from "@/components/layout/Header";
@@ -7,12 +8,13 @@ import { SearchOverlay } from "@/components/layout/SearchOverlay";
 import {
   LayoutDashboard, FilePlus, Briefcase, FileCheck, Users,
   CreditCard, Calculator, Warehouse, BarChart3, Settings,
-  ChevronLeft, ChevronRight, Printer
+  ChevronLeft, ChevronRight, Printer, FlaskConical
 } from "lucide-react";
 
 const ICON_MAP: Record<string, React.ReactNode> = {
   LayoutDashboard: <LayoutDashboard className="w-5 h-5" />,
   FilePlus: <FilePlus className="w-5 h-5" />,
+  FlaskConical: <FlaskConical className="w-5 h-5" />,
   Briefcase: <Briefcase className="w-5 h-5" />,
   FileCheck: <FileCheck className="w-5 h-5" />,
   Users: <Users className="w-5 h-5" />,
@@ -127,6 +129,7 @@ export function Sidebar() {
 
 export function MainLayout() {
   const { sidebarCollapsed, searchOpen } = useAppStore();
+  const { status: syncStatus } = useDataSync();
 
   return (
     <div className="min-h-screen bg-surface-light-primary dark:bg-surface-dark-primary flex flex-col">

@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { cn } from "@/utils/cn";
 import { useAppStore } from "@/stores/appStore";
 import { useDataStore } from "@/stores/dataStore";
+import { syncQuotationCreate, syncQuotationUpdate, syncQuotationDelete, syncQuotationStatusUpdate } from "@/hooks/useDataSync";
 import { saveBinaryFilePortable, saveTextFilePortable } from "@/utils/fileSave";
 import { formatCurrency, formatDate, getRelativeTime } from "@/utils/format";
 import {
@@ -113,6 +114,7 @@ export function Quotations() {
   const handleDelete = () => {
     if (showDeleteConfirm) {
       deleteQuotation(showDeleteConfirm.id);
+      syncQuotationDelete(showDeleteConfirm.id); // Fire-and-forget backend sync
       addNotification({ type: 'success', title: 'Quotation Deleted', message: `Quotation ${showDeleteConfirm.quotationNumber} has been removed.`, category: 'quotation' });
       setShowDeleteConfirm(null);
     }
@@ -136,6 +138,7 @@ export function Quotations() {
   const saveEdit = () => {
     if (editingQtn && editingQtn.id) {
       updateQuotation(editingQtn.id, editingQtn);
+      syncQuotationUpdate(editingQtn.id, editingQtn); // Fire-and-forget backend sync
       addNotification({ type: 'success', title: 'Updates Saved', message: 'Details updated successfully.', category: 'quotation' });
       setIsEditModalOpen(false);
       setEditingQtn(null);
@@ -178,6 +181,7 @@ export function Quotations() {
         });
 
         if (updated) {
+          syncQuotationUpdate(id, updated); // Fire-and-forget backend sync
           addNotification({
             type: 'success',
             title: 'Pricing Refreshed',

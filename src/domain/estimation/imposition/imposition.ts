@@ -459,11 +459,12 @@ function selectBestCandidate(
 
   // Apply machine preference if specified
   if (state.preferredMachine) {
-    const filtered = sorted.filter(
-      (c) =>
-        state.machines.find((m) => m.id === state.preferredMachine)?.id ===
-        state.machines.find((m) => m === c.sheet)?.id
-    );
+    const preferredMachineSpec = state.machines.find((m) => m.id === state.preferredMachine);
+    const filtered = preferredMachineSpec
+      ? sorted.filter((c) =>
+          sheetFitsInMachine(c.sheet.width, c.sheet.height, preferredMachineSpec)
+        )
+      : [];
     if (filtered.length > 0) {
       return { selected: filtered[0], rejected };
     }

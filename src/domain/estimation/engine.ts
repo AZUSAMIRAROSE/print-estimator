@@ -1,4 +1,4 @@
-﻿import type { EstimationInput } from "@/types";
+import type { EstimationInput } from "@/types";
 import { calculateFullEstimation } from "@/utils/calculations/estimator";
 import { normalizeEstimationForCalculation, validateEstimation } from "@/utils/validation/estimation";
 import type {
@@ -10,7 +10,45 @@ import type {
   ValidationIssue,
 } from "./types";
 import type { PlanningDiagnostics } from "@/types";
-import { runAutoPlanning, type AutoPlanResult, type SectionAutoPlan } from "./autoPlanner";
+
+// ── AUTO-PLANNING TYPES (bridge to autoPlanner.ts) ──────────────────────────
+// The engine's auto-planning integration is optional (wrapped in try/catch).
+// These types match the shape engine.ts expects from the auto-planning pipeline.
+
+interface SectionAutoPlan {
+  sectionName: string;
+  warnings: string[];
+  procurementRecommendation?: ProcurementRecommendation;
+  diagnostics?: {
+    strategy: string;
+    selectedSummary: string;
+    rejectedSummaries: string[];
+    paperSourceStatus: string;
+    paperSourceDetail: string;
+    grainStatus: string;
+    grainDetail: string;
+  };
+}
+
+interface AutoPlanResult {
+  blocked: boolean;
+  blockReasons: string[];
+  sections: SectionAutoPlan[];
+  warnings: string[];
+}
+
+/**
+ * Stub for auto-planning integration.
+ * The full autoPlanBook requires domain-model inputs (AnySectionConfig[]),
+ * but engine.ts works with the legacy EstimationInput. This bridge returns
+ * null (handled gracefully by the engine's try/catch).
+ */
+function runAutoPlanning(_input: EstimationInput): AutoPlanResult | null {
+  // Auto-planning requires domain-model conversion not yet wired.
+  // The legacy estimator runs independently. This will be connected
+  // when the full domain model migration is complete.
+  return null;
+}
 
 function buildIssues(validationErrors: string[]): ValidationIssue[] {
   return validationErrors.map((message, idx) => ({

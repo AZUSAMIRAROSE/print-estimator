@@ -74,4 +74,52 @@ router.patch("/:id/status", requireAuth, (req, res) => {
   res.json({ id: req.params.id, status: status.data, updatedAt: now });
 });
 
+// ── Full update ────────────────────────────────────────────────────────────────
+router.put("/:id", requireAuth, (req, res) => {
+  const actorId = req.user?.sub || "system-local";
+  const now = new Date().toISOString();
+  const { customerName, customerEmail, payload, totalAmount, status, quoteNumber } = req.body;
+
+  const result = db
+    .prepare(
+      `UPDATE quotes SET
+         customer_name  = COALESCE(?, customer_name),
+         customer_email = COALESCE(?, customer_email),
+         payload_json   = COALESCE(?, payload_json),
+         total_amount   = COALESCE(?, total_amount),
+         status         = COALESCE(?, status),
+         quote_number   = COALESCE(?, quote_number),
+         updated_at     = ?
+       WHERE id = ?`
+    )
+    .run(
+      customerName ?? null,
+      customerEmail ?? null,
+      payload ? JSON.stringify(payload) : null,
+      totalAmount ?? null,
+      status ?? null,
+      quoteNumber ?? null,
+      now,
+      req.params.id
+    );
+
+  if (!result.changes) return res.status(404).json({ error: "Quote not found" });
+
+  writeAudit(actorId, "quote.update", "quote", req.params.id, { updated: Object.keys(req.body) });
+
+  res.json({ id: req.params.id, updatedAt: now });
+});
+
+// ── Delete ─────────────────────────────────────────────────────────────────────
+router.delete("/:id", requireAuth, (req, res) => {
+  const actorId = req.user?.sub || "system-local";
+  const result = db.prepare("DELETE FROM quotes WHERE id = ?").run(req.params.id);
+
+  if (!result.changes) return res.status(404).json({ error: "Quote not found" });
+
+  writeAudit(actorId, "quote.delete", "quote", req.params.id, {});
+
+  res.json({ ok: true });
+});
+
 export default router;

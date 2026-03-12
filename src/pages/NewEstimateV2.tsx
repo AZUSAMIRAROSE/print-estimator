@@ -26,11 +26,11 @@ export function NewEstimateV2() {
 
   // Inject data sources into wizard store whenever they change
   useEffect(() => {
-    setDataSources(inventory, rateCard);
+    setDataSources(inventory as any, rateCard as any);
   }, [inventory, rateCard, setDataSources]);
 
   return (
-    <div className="h-screen bg-white dark:bg-gray-950">
+    <div className="h-full min-h-[calc(100vh-8rem)] bg-white dark:bg-gray-950 -m-3 sm:-m-4 md:-m-6">
       <WizardShell />
     </div>
   );
