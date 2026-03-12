@@ -67,6 +67,9 @@ export function OnboardingScreen() {
               <p className="text-text-light-secondary dark:text-text-dark-secondary max-w-sm mx-auto mb-2">
                 The industry's most advanced commercial print estimation platform.
                 Calculate costs for paper, printing, binding, finishing, packing, and freight — all in one place.
+                Designed and fully coded by
+                Mr. Irshad Ansari with passion and precision, this tool is built to revolutionize how print professionals estimate and manage their projects.
+                With Love from India ( PUSA INSTITUTE OF TECHNOLOGY ) ❤️
               </p>
               <div className="flex items-center justify-center gap-2 text-xs text-text-light-tertiary dark:text-text-dark-tertiary mt-4">
                 <Sparkles className="w-3.5 h-3.5" />
