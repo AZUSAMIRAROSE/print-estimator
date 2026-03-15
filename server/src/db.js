@@ -11,6 +11,7 @@ db.pragma("journal_mode = WAL");
 db.pragma("foreign_keys = ON");
 
 export function runMigrations() {
+  // ── Core Tables ──────────────────────────────────────────────────────────
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
@@ -88,6 +89,7 @@ export function runMigrations() {
       notes TEXT DEFAULT '',
       total_orders INTEGER DEFAULT 0,
       total_revenue REAL DEFAULT 0,
+      payload_json TEXT DEFAULT '{}',
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -106,6 +108,7 @@ export function runMigrations() {
       currency TEXT DEFAULT 'INR',
       priority TEXT DEFAULT 'medium',
       notes TEXT DEFAULT '',
+      due_date TEXT DEFAULT '',
       payload_json TEXT DEFAULT '{}',
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
@@ -137,6 +140,7 @@ export function runMigrations() {
       supplier TEXT DEFAULT '',
       last_updated TEXT NOT NULL
     );
+
     CREATE TABLE IF NOT EXISTS config_store (
       config_key TEXT PRIMARY KEY,
       payload_json TEXT NOT NULL,
@@ -145,6 +149,35 @@ export function runMigrations() {
     );
   `);
 
+  // ── Migration: Add payload_json to customers if missing ──────────────────
+  const customerCols = db.prepare("PRAGMA table_info(customers)").all().map(c => c.name);
+  if (!customerCols.includes("payload_json")) {
+    db.exec("ALTER TABLE customers ADD COLUMN payload_json TEXT DEFAULT '{}'");
+  }
+
+  // ── Migration: Add due_date to jobs if missing ───────────────────────────
+  const jobCols = db.prepare("PRAGMA table_info(jobs)").all().map(c => c.name);
+  if (!jobCols.includes("due_date")) {
+    db.exec("ALTER TABLE jobs ADD COLUMN due_date TEXT DEFAULT ''");
+  }
+
+  // ── Performance Indexes ──────────────────────────────────────────────────
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
+    CREATE INDEX IF NOT EXISTS idx_jobs_customer_id ON jobs(customer_id);
+    CREATE INDEX IF NOT EXISTS idx_jobs_priority ON jobs(priority);
+    CREATE INDEX IF NOT EXISTS idx_jobs_created_at ON jobs(created_at);
+    CREATE INDEX IF NOT EXISTS idx_customers_status ON customers(status);
+    CREATE INDEX IF NOT EXISTS idx_customers_name ON customers(name);
+    CREATE INDEX IF NOT EXISTS idx_quotes_status ON quotes(status);
+    CREATE INDEX IF NOT EXISTS idx_quotes_created_at ON quotes(created_at);
+    CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
+    CREATE INDEX IF NOT EXISTS idx_audit_logs_entity ON audit_logs(entity_type, entity_id);
+    CREATE INDEX IF NOT EXISTS idx_inventory_category ON inventory(category);
+    CREATE INDEX IF NOT EXISTS idx_machines_status ON machines(status);
+  `);
+
+  // ── Seed system user ─────────────────────────────────────────────────────
   db.prepare(
     `INSERT OR IGNORE INTO users (id, name, email, password_hash, role, created_at)
      VALUES (?, ?, ?, ?, ?, ?)`

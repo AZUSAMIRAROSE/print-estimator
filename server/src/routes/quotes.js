@@ -19,12 +19,27 @@ const quoteSchema = z.object({
   status: quoteStatusSchema.default("draft"),
 });
 
+// Map snake_case DB row to camelCase response
+function enrichRow(r) {
+  return {
+    id: r.id,
+    quoteNumber: r.quote_number,
+    customerName: r.customer_name,
+    customerEmail: r.customer_email,
+    payload: JSON.parse(r.payload_json || "{}"),
+    totalAmount: r.total_amount,
+    status: r.status,
+    createdBy: r.created_by,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  };
+}
+
 router.get("/", requireAuth, (req, res) => {
   const rows = db
     .prepare("SELECT * FROM quotes ORDER BY created_at DESC LIMIT 500")
-    .all()
-    .map((r) => ({ ...r, payload: JSON.parse(r.payload_json) }));
-  res.json({ quotes: rows });
+    .all();
+  res.json({ quotes: rows.map(enrichRow) });
 });
 
 router.post("/", requireAuth, (req, res) => {

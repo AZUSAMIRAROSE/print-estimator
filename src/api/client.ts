@@ -1,23 +1,85 @@
 const API_BASE = import.meta.env.VITE_API_URL || "/api/v1";
 const TOKEN_STORAGE_KEY = "print-estimator-api-token";
+const REFRESH_TOKEN_KEY = "print-estimator-refresh-token";
 
 let authToken = "";
+let refreshToken = "";
+let isRefreshing = false;
+let refreshQueue: Array<() => void> = [];
+
 if (typeof window !== "undefined") {
   authToken = localStorage.getItem(TOKEN_STORAGE_KEY) || "";
+  refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY) || "";
 }
 
-type JsonValue = string | number | boolean | null | JsonValue[] | { [k: string]: JsonValue };
-type JsonBody = Record<string, JsonValue>;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type JsonBody = Record<string, any>;
 
-export function setApiToken(token: string): void {
+export function setApiToken(token: string, refresh?: string): void {
   authToken = token || "";
+  if (refresh !== undefined) refreshToken = refresh || "";
   if (typeof window === "undefined") return;
   if (authToken) {
     localStorage.setItem(TOKEN_STORAGE_KEY, authToken);
   } else {
     localStorage.removeItem(TOKEN_STORAGE_KEY);
   }
+  if (refreshToken) {
+    localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+  } else {
+    localStorage.removeItem(REFRESH_TOKEN_KEY);
+  }
 }
+
+export function clearApiTokens(): void {
+  authToken = "";
+  refreshToken = "";
+  if (typeof window !== "undefined") {
+    localStorage.removeItem(TOKEN_STORAGE_KEY);
+    localStorage.removeItem(REFRESH_TOKEN_KEY);
+  }
+}
+
+// ── Silent token refresh ─────────────────────────────────────────────────────
+
+async function silentRefresh(): Promise<boolean> {
+  if (!refreshToken) return false;
+  if (isRefreshing) {
+    // Wait for the existing refresh to complete
+    return new Promise((resolve) => {
+      refreshQueue.push(() => resolve(!!authToken));
+    });
+  }
+
+  isRefreshing = true;
+  try {
+    const res = await fetch(`${API_BASE}/auth/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken }),
+    });
+
+    if (!res.ok) {
+      clearApiTokens();
+      return false;
+    }
+
+    const data = await res.json();
+    setApiToken(data.token, data.refreshToken);
+
+    // Resolve all pending requests waiting for refresh
+    refreshQueue.forEach((cb) => cb());
+    refreshQueue = [];
+    return true;
+  } catch {
+    clearApiTokens();
+    return false;
+  } finally {
+    isRefreshing = false;
+  }
+}
+
+// ── Request helper with auto-refresh ─────────────────────────────────────────
 
 async function request<T = unknown>(path: string, options: globalThis.RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = {
@@ -29,10 +91,23 @@ async function request<T = unknown>(path: string, options: globalThis.RequestIni
     headers.Authorization = `Bearer ${authToken}`;
   }
 
-  const response = await fetch(`${API_BASE}${path}`, {
+  let response = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers,
   });
+
+  // Auto-refresh on 401
+  if (response.status === 401 && refreshToken && !path.includes("/auth/")) {
+    const refreshed = await silentRefresh();
+    if (refreshed) {
+      // Retry with new token
+      headers.Authorization = `Bearer ${authToken}`;
+      response = await fetch(`${API_BASE}${path}`, {
+        ...options,
+        headers,
+      });
+    }
+  }
 
   const isJson = response.headers.get("content-type")?.includes("application/json");
   const body = isJson ? await response.json() : await response.text();
@@ -70,10 +145,11 @@ export const apiClient = {
   // Auth
   register: (payload: JsonBody) => request("/auth/register", { method: "POST", body: JSON.stringify(payload) }),
   login: (payload: JsonBody) => request("/auth/login", { method: "POST", body: JSON.stringify(payload) }),
+  refreshTokens: () => request("/auth/refresh", { method: "POST", body: JSON.stringify({ refreshToken }) }),
   me: () => request("/auth/me"),
 
   // Quotes
-  listQuotes: () => request("/quotes"),
+  listQuotes: () => request<{ quotes: JsonBody[] }>("/quotes"),
   createQuote: (payload: JsonBody) => request("/quotes", { method: "POST", body: JSON.stringify(payload) }),
   updateQuote: (id: string, payload: JsonBody) =>
     request(`/quotes/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
@@ -130,8 +206,8 @@ export const apiClient = {
   health: () => request("/system/health"),
   auditLogs: () => request("/system/admin/audit-logs"),
 
-  // Rates
-  getRateCard: () => request<{ rateCard: any; updatedAt: string }>("/rates"),
+  // Rate card
+  getRateCard: () => request<{ rateCard: Record<string, unknown> | null; updatedAt: string }>("/rates"),
   upsertRateCard: (payload: JsonBody) => request("/rates", { method: "PUT", body: JSON.stringify(payload) }),
 
   // Files

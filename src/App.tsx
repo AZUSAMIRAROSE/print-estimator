@@ -1,6 +1,7 @@
-import { useEffect } from "react";
+import { useEffect, useCallback } from "react";
 import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { useAppStore } from "@/stores/appStore";
+import { useEstimationStore } from "@/stores/estimationStore";
 import { setApiToken } from "@/api/client";
 import { MainLayout } from "@/layouts/MainLayout";
 import { OnboardingScreen } from "@/pages/Onboarding";
@@ -18,7 +19,7 @@ import { Settings } from "@/pages/Settings";
 import { ProfileSettings } from "@/pages/ProfileSettings";
 
 export default function App() {
-  const { isOnboarded, theme } = useAppStore();
+  const { isOnboarded, theme, addNotification } = useAppStore();
   const navigate = useNavigate();
 
   // Apply theme to document
@@ -31,9 +32,30 @@ export default function App() {
     }
   }, [theme]);
 
+  // Restore tokens
   useEffect(() => {
-    setApiToken(localStorage.getItem("print-estimator-api-token") || "");
+    const token = localStorage.getItem("print-estimator-api-token") || "";
+    const refresh = localStorage.getItem("print-estimator-refresh-token") || "";
+    setApiToken(token, refresh);
   }, []);
+
+  // ── Save handler ─────────────────────────────────────────────────────────
+  const handleSave = useCallback(() => {
+    // Force-persist all Zustand stores (they use localStorage middleware)
+    const estimation = useEstimationStore.getState().estimation;
+    if (estimation) {
+      useEstimationStore.getState().updateEstimation({
+        updatedAt: new Date().toISOString(),
+      });
+    }
+
+    addNotification({
+      type: "success",
+      title: "Saved",
+      message: "All changes have been saved to local storage.",
+      category: "system",
+    });
+  }, [addNotification]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -43,16 +65,21 @@ export default function App() {
         e.preventDefault();
         navigate("/estimate/new");
       }
-      // Ctrl+S or Cmd+S - Save (handled by stores)
+      // Ctrl+S or Cmd+S - Save current work
       if ((e.ctrlKey || e.metaKey) && e.key === "s") {
         e.preventDefault();
-        // Trigger save action
+        handleSave();
+      }
+      // Ctrl+K or Cmd+K - Open search
+      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+        e.preventDefault();
+        useAppStore.getState().setSearchOpen(true);
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [navigate]);
+  }, [navigate, handleSave]);
 
   // Not onboarded — show onboarding
   if (!isOnboarded) {

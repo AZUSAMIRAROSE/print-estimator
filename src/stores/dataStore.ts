@@ -108,7 +108,7 @@ export const useDataStore = create<DataState>()(
         if (!original) return undefined;
         const now = new Date().toISOString();
         const clone: Customer = {
-          ...JSON.parse(JSON.stringify(original)),
+          ...structuredClone(original),
           id: generateId(),
           code: generateCustomerCode(`${original.name} Copy`),
           name: `${original.name} (Copy)`,
@@ -154,7 +154,7 @@ export const useDataStore = create<DataState>()(
         if (!original) return undefined;
         const now = new Date().toISOString();
         const dup: Job = {
-          ...JSON.parse(JSON.stringify(original)),
+          ...structuredClone(original),
           id: generateId(),
           jobNumber: generateJobNumber(),
           title: `${original.title} (Copy)`,
@@ -198,7 +198,7 @@ export const useDataStore = create<DataState>()(
         if (!original) return undefined;
         const now = new Date().toISOString();
         const clone: Quotation = {
-          ...JSON.parse(JSON.stringify(original)),
+          ...structuredClone(original),
           id: generateId(),
           quotationNumber: generateQuotationNumber(),
           status: "draft",

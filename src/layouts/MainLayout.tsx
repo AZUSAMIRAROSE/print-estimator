@@ -1,3 +1,4 @@
+import React from "react";
 import { useNavigate, useLocation, Outlet } from "react-router-dom";
 import { useAppStore } from "@/stores/appStore";
 import { useDataSync } from "@/hooks/useDataSync";
