@@ -14,7 +14,7 @@
 A domain-driven ERP application that replaces manual spreadsheet-based
 estimation workflows with a deterministic, auditable costing engine.
 
-**Solo-developed by [Irshad Ansari](https://github.com/irshad-ansari)**
+**Solo-developed by [Irshad Ansari](https://github.com/AZUSAMIRAROSE)**
 
 </div>
 
