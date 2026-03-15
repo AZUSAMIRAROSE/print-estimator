@@ -485,7 +485,7 @@ truth for each data shape.
 
 <div align="center">
 
-**Built by [Irshad Ansari](https://github.com/irshad-ansari)**
+**Built by [Irshad Ansari](https://github.com/AZUSAMIRAROSE)**
 
 Full-stack engineer focused on TypeScript, system design,
 and domain-driven architecture.
