@@ -2,9 +2,16 @@ import { useState, useMemo } from "react";
 import { cn } from "@/utils/cn";
 import { useAppStore } from "@/stores/appStore";
 import { useDataStore } from "@/stores/dataStore";
-import { syncQuotationCreate, syncQuotationUpdate, syncQuotationDelete, syncQuotationStatusUpdate } from "@/hooks/useDataSync";
+import { syncQuotationCreate, syncQuotationUpdate, syncQuotationDelete } from "@/hooks/useDataSync";
+import { useInventoryStore } from "@/stores/inventoryStore";
+import { useRateCardStore } from "@/stores/rateCardStore";
 import { saveBinaryFilePortable, saveTextFilePortable } from "@/utils/fileSave";
 import { formatCurrency, formatDate, getRelativeTime } from "@/utils/format";
+import { runCanonicalEstimation } from "@/domain/estimation/canonicalEngine";
+import {
+  buildCanonicalDataSources,
+  buildQuotationArtifactsFromCanonical,
+} from "@/domain/estimation/adapters/v2Workflow";
 import {
   FileCheck, Search, Eye, Check, X,
   Download, Clock, AlertCircle, Send,
@@ -29,8 +36,10 @@ const QTN_STATUS_CONFIG: Record<string, { bg: string; text: string; label: strin
 };
 
 export function Quotations() {
-  const { addNotification, addActivityLog } = useAppStore();
+  const { addNotification, addActivityLog, user } = useAppStore();
   const { quotations, updateQuotation, deleteQuotation, duplicateQuotation, refreshQuotationPricing } = useDataStore();
+  const inventoryItems = useInventoryStore((state) => state.items || []);
+  const paperRates = useRateCardStore((state) => state.paperRates || []);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
@@ -111,19 +120,34 @@ export function Quotations() {
     }
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (showDeleteConfirm) {
       deleteQuotation(showDeleteConfirm.id);
-      syncQuotationDelete(showDeleteConfirm.id); // Fire-and-forget backend sync
-      addNotification({ type: 'success', title: 'Quotation Deleted', message: `Quotation ${showDeleteConfirm.quotationNumber} has been removed.`, category: 'quotation' });
+      const syncSucceeded = await syncQuotationDelete(showDeleteConfirm.id);
+      addNotification({
+        type: syncSucceeded ? 'success' : 'warning',
+        title: 'Quotation Deleted',
+        message: syncSucceeded
+          ? `Quotation ${showDeleteConfirm.quotationNumber} has been removed.`
+          : `Quotation ${showDeleteConfirm.quotationNumber} was removed locally. Backend sync is pending.`,
+        category: 'quotation'
+      });
       setShowDeleteConfirm(null);
     }
   };
 
-  const handleDuplicate = (id: string) => {
+  const handleDuplicate = async (id: string) => {
     const newQtn = duplicateQuotation(id);
     if (newQtn) {
-      addNotification({ type: 'success', title: 'Duplicated', message: `Created draft revision ${newQtn.quotationNumber}.`, category: 'quotation' });
+      const syncSucceeded = await syncQuotationCreate(newQtn);
+      addNotification({
+        type: syncSucceeded ? 'success' : 'warning',
+        title: 'Duplicated',
+        message: syncSucceeded
+          ? `Created draft revision ${newQtn.quotationNumber}.`
+          : `Created local draft revision ${newQtn.quotationNumber}. Backend sync is pending.`,
+        category: 'quotation'
+      });
     }
   };
 
@@ -135,11 +159,18 @@ export function Quotations() {
     }
   };
 
-  const saveEdit = () => {
+  const saveEdit = async () => {
     if (editingQtn && editingQtn.id) {
       updateQuotation(editingQtn.id, editingQtn);
-      syncQuotationUpdate(editingQtn.id, editingQtn); // Fire-and-forget backend sync
-      addNotification({ type: 'success', title: 'Updates Saved', message: 'Details updated successfully.', category: 'quotation' });
+      const syncSucceeded = await syncQuotationUpdate(editingQtn.id, editingQtn);
+      addNotification({
+        type: syncSucceeded ? 'success' : 'warning',
+        title: 'Updates Saved',
+        message: syncSucceeded
+          ? 'Details updated successfully.'
+          : 'Details updated locally. Backend sync is pending.',
+        category: 'quotation'
+      });
       setIsEditModalOpen(false);
       setEditingQtn(null);
     }
@@ -149,10 +180,10 @@ export function Quotations() {
     const original = quotations.find((q) => q.id === id);
     if (!original) return;
 
-    // Check if there's an estimation input to recalculate from
     const estimationInput = original.quoteSnapshot?.estimationInput;
+    const hasCanonicalInput = Boolean(original.canonicalSnapshot?.input?.id);
 
-    if (!estimationInput || !estimationInput.id) {
+    if ((!estimationInput || !estimationInput.id) && !hasCanonicalInput) {
       addNotification({
         type: 'warning',
         title: 'Cannot Reprice',
@@ -165,42 +196,77 @@ export function Quotations() {
     setIsRepricing(true);
 
     try {
-      // Import the estimation engine dynamically to avoid circular dependencies
-      const { runEstimation } = await import('@/domain/estimation/engine');
+      let updated: Quotation | undefined;
 
-      // Run fresh calculation with latest rates
-      const estimationResult = runEstimation(estimationInput);
+      if (original.canonicalSnapshot?.input) {
+        const dataSources = buildCanonicalDataSources(inventoryItems, paperRates);
+        const canonicalResults = runCanonicalEstimation(original.canonicalSnapshot.input, dataSources)
+          .sort((left, right) => left.quantity - right.quantity);
 
-      if (estimationResult.results && estimationResult.results.length > 0) {
-        const updated = refreshQuotationPricing(id, {
-          ...estimationResult.results[0],
-          estimationInput: estimationResult.input,
-          planning: estimationResult.planning,
-          procurement: estimationResult.procurement,
-          issues: estimationResult.issues,
+        if (!canonicalResults.length) {
+          throw new Error("No canonical estimate tiers were generated during repricing.");
+        }
+
+        const quotationArtifacts = buildQuotationArtifactsFromCanonical(
+          original.canonicalSnapshot.input,
+          canonicalResults,
+          dataSources,
+          user?.name || "Current User",
+          original.id,
+          (original.pricingVersion || 1) + 1,
+        );
+
+        updated = refreshQuotationPricing(id, {
+          results: quotationArtifacts.legacyResults,
+          quoteSnapshot: quotationArtifacts.quoteSnapshot,
+          canonicalSnapshot: quotationArtifacts.canonicalSnapshot,
+          reason: "Repriced with the canonical V2 engine",
+        });
+      } else {
+        if (!estimationInput) {
+          throw new Error("No estimation input is available for legacy repricing.");
+        }
+
+        // Import the legacy estimation engine dynamically to avoid circular dependencies
+        const { runEstimation } = await import('@/domain/estimation/engine');
+        const estimationResult = runEstimation(estimationInput);
+
+        if (!estimationResult.results || estimationResult.results.length === 0) {
+          throw new Error("No calculation results generated");
+        }
+
+        updated = refreshQuotationPricing(id, {
+          result: {
+            ...estimationResult.results[0],
+            estimationInput: estimationResult.input,
+            planning: estimationResult.planning,
+            procurement: estimationResult.procurement,
+            issues: estimationResult.issues,
+          } as Quotation["results"][number],
+          reason: "Repriced with the legacy estimation engine",
+        });
+      }
+
+      if (updated) {
+        const syncSucceeded = await syncQuotationUpdate(id, updated);
+        addNotification({
+          type: syncSucceeded ? 'success' : 'warning',
+          title: 'Pricing Refreshed',
+          message: syncSucceeded
+            ? `Quotation repriced to version ${updated.pricingVersion}. Original snapshot preserved.`
+            : `Quotation repriced locally to version ${updated.pricingVersion}. Backend sync is pending.`,
+          category: 'quotation'
         });
 
-        if (updated) {
-          syncQuotationUpdate(id, updated); // Fire-and-forget backend sync
-          addNotification({
-            type: 'success',
-            title: 'Pricing Refreshed',
-            message: `Quotation repriced to version ${updated.pricingVersion}. Original snapshot preserved.`,
-            category: 'quotation'
-          });
-
-          addActivityLog({
-            action: 'QUOTATION_REPRICED',
-            category: 'quotation',
-            description: `Quotation ${original.quotationNumber} repriced to version ${updated.pricingVersion}`,
-            user: 'Current User',
-            entityType: 'quotation',
-            entityId: id,
-            level: 'info',
-          });
-        }
-      } else {
-        throw new Error("No calculation results generated");
+        addActivityLog({
+          action: 'QUOTATION_REPRICED',
+          category: 'quotation',
+          description: `Quotation ${original.quotationNumber} repriced to version ${updated.pricingVersion}`,
+          user: user?.name || 'Current User',
+          entityType: 'quotation',
+          entityId: id,
+          level: syncSucceeded ? 'info' : 'warning',
+        });
       }
     } catch (error) {
       console.error('Reprice error:', error);
@@ -467,7 +533,7 @@ export function Quotations() {
                     <>
                       <h3 className="text-sm font-bold uppercase tracking-wider text-text-light-tertiary mt-8 text-left">Revision History</h3>
                       <div className="space-y-3 mt-3">
-                        {viewDetailsQtn.pricingRevisions.map((rev, index) => (
+                        {viewDetailsQtn.pricingRevisions.map((rev) => (
                           <div key={rev.id} className="p-4 rounded-xl border border-surface-light-border bg-surface-light-secondary dark:bg-surface-dark-secondary">
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-2">

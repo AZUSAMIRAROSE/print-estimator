@@ -24,7 +24,7 @@ const FREIGHT_MODES = [
 export function StepDelivery() {
   const { estimation, setEstimationField } = useWizardStore();
 
-  const delivery = (estimation as any).delivery ?? {
+  const delivery = estimation.delivery ?? {
     deliveryType: "fob",
     freightMode: "sea",
     destination: "",

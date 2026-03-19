@@ -35,6 +35,111 @@ interface ApiInventoryList { items: Array<Record<string, unknown> & { id: string
 interface ApiQuoteList { quotes: Array<Record<string, unknown> & { id: string }> }
 interface ApiMachineList { machines: Array<Record<string, unknown> & { id: string }> }
 interface ApiRateCard { rateCard: Record<string, unknown> | null; updatedAt?: string }
+interface BackendQuoteRecord {
+  id: string;
+  quoteNumber?: string;
+  customerName?: string;
+  customerEmail?: string | null;
+  payload?: Record<string, unknown>;
+  totalAmount?: number;
+  status?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function normalizeQuotationStatus(status: unknown): Quotation["status"] {
+  switch (status) {
+    case "sent":
+    case "accepted":
+    case "rejected":
+    case "expired":
+    case "revised":
+      return status;
+    default:
+      return "draft";
+  }
+}
+
+function normalizeQuotation(remote: BackendQuoteRecord): Quotation | null {
+  const payload = isRecord(remote.payload) ? remote.payload : {};
+  const localQuotation = isRecord(payload.localQuotation) ? payload.localQuotation : payload;
+  const now = new Date().toISOString();
+  const results = Array.isArray(localQuotation.results)
+    ? (localQuotation.results as Quotation["results"])
+    : [];
+  const quantities = Array.isArray(localQuotation.quantities)
+    ? (localQuotation.quantities as number[])
+    : results.map((result) => result?.quantity ?? 0).filter((quantity) => quantity > 0);
+
+  if (!remote.id && typeof localQuotation.id !== "string") {
+    return null;
+  }
+
+  return {
+    ...(localQuotation as unknown as Partial<Quotation>),
+    id: remote.id || String(localQuotation.id),
+    quotationNumber: remote.quoteNumber || String(localQuotation.quotationNumber || `QTN-${Date.now()}`),
+    jobId: String(localQuotation.jobId || remote.id || ""),
+    jobTitle: String(localQuotation.jobTitle || payload.jobTitle || "Untitled Job"),
+    customerId: String(localQuotation.customerId || ""),
+    customerName: remote.customerName || String(localQuotation.customerName || "Unknown Customer"),
+    status: normalizeQuotationStatus(remote.status || localQuotation.status),
+    quantities,
+    results,
+    currency: (localQuotation.currency as Quotation["currency"]) || "INR",
+    exchangeRate: Number(localQuotation.exchangeRate || 1),
+    validityDays: Number(localQuotation.validityDays || 15),
+    validUntil: String(localQuotation.validUntil || remote.updatedAt || now),
+    paymentTerms: String(localQuotation.paymentTerms || ""),
+    deliveryTerms: String(localQuotation.deliveryTerms || ""),
+    notes: String(localQuotation.notes || ""),
+    termsAndConditions: String(localQuotation.termsAndConditions || ""),
+    comments: Array.isArray(localQuotation.comments) ? (localQuotation.comments as Quotation["comments"]) : [],
+    revisionNumber: Number(localQuotation.revisionNumber || 0),
+    pricingVersion: localQuotation.pricingVersion ? Number(localQuotation.pricingVersion) : undefined,
+    sourceEstimateId: typeof localQuotation.sourceEstimateId === "string" ? localQuotation.sourceEstimateId : undefined,
+    quoteSnapshot: isRecord(localQuotation.quoteSnapshot)
+      ? (localQuotation.quoteSnapshot as Quotation["quoteSnapshot"])
+      : undefined,
+    pricingRevisions: Array.isArray(localQuotation.pricingRevisions)
+      ? (localQuotation.pricingRevisions as Quotation["pricingRevisions"])
+      : undefined,
+    sentDate: typeof localQuotation.sentDate === "string" ? localQuotation.sentDate : undefined,
+    acceptedDate: typeof localQuotation.acceptedDate === "string" ? localQuotation.acceptedDate : undefined,
+    rejectedDate: typeof localQuotation.rejectedDate === "string" ? localQuotation.rejectedDate : undefined,
+    createdAt: remote.createdAt || String(localQuotation.createdAt || now),
+    updatedAt: remote.updatedAt || String(localQuotation.updatedAt || now),
+  };
+}
+
+function toBackendQuotePayload(quotationLike: SyncPayload): SyncPayload {
+  const results = Array.isArray(quotationLike.results)
+    ? (quotationLike.results as Array<{ grandTotal?: number }>)
+    : [];
+
+  return {
+    id: typeof quotationLike.id === "string" ? quotationLike.id : undefined,
+    quoteNumber: typeof quotationLike.quotationNumber === "string"
+      ? quotationLike.quotationNumber
+      : `QTN-${Date.now()}`,
+    customerName: typeof quotationLike.customerName === "string" && quotationLike.customerName.trim()
+      ? quotationLike.customerName
+      : "Unknown Customer",
+    customerEmail: typeof quotationLike.customerEmail === "string" ? quotationLike.customerEmail : null,
+    payload: {
+      localQuotation: quotationLike,
+      syncedAt: new Date().toISOString(),
+    },
+    totalAmount: typeof quotationLike.totalValue === "number"
+      ? quotationLike.totalValue
+      : (results[0]?.grandTotal ?? 0),
+    status: normalizeQuotationStatus(quotationLike.status),
+  };
+}
 
 // ── Merge Strategy ───────────────────────────────────────────────────────────
 
@@ -161,7 +266,10 @@ export function useDataSync() {
         const remoteQuotes = data?.quotes || [];
         if (Array.isArray(remoteQuotes) && remoteQuotes.length > 0) {
           const localQuotations = useDataStore.getState().quotations;
-          const merged = mergeById(localQuotations, remoteQuotes as unknown as Quotation[]);
+          const normalizedQuotes = remoteQuotes
+            .map((quote) => normalizeQuotation(quote as unknown as BackendQuoteRecord))
+            .filter((quote): quote is Quotation => quote !== null);
+          const merged = mergeById(localQuotations, normalizedQuotes);
           useDataStore.setState({ quotations: merged });
         }
       }
@@ -254,7 +362,6 @@ export function useDataSync() {
 // ============================================================================
 
 // Utility: accepts typed objects OR plain records for maximum flexibility
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type SyncPayload = Record<string, any>;
 
 export async function syncCustomerCreate(customerData: Partial<Customer> | Record<string, unknown>): Promise<void> {
@@ -281,19 +388,23 @@ export async function syncCustomerDelete(id: string): Promise<void> {
   }
 }
 
-export async function syncJobCreate(jobData: Partial<Job> | Record<string, unknown>): Promise<void> {
+export async function syncJobCreate(jobData: Partial<Job> | Record<string, unknown>): Promise<boolean> {
   try {
     await apiClient.createJob(jobData as Record<string, unknown>);
+    return true;
   } catch {
     console.warn("[sync] Failed to sync job create to backend");
+    return false;
   }
 }
 
-export async function syncJobUpdate(id: string, updates: Partial<Job> | Record<string, unknown>): Promise<void> {
+export async function syncJobUpdate(id: string, updates: Partial<Job> | Record<string, unknown>): Promise<boolean> {
   try {
     await apiClient.updateJob(id, updates as Record<string, unknown>);
+    return true;
   } catch {
     console.warn("[sync] Failed to sync job update to backend");
+    return false;
   }
 }
 
@@ -329,35 +440,50 @@ export async function syncInventoryDelete(id: string): Promise<void> {
   }
 }
 
-export async function syncQuotationCreate(quotationData: SyncPayload): Promise<void> {
+export async function syncQuotationCreate(quotationData: SyncPayload): Promise<boolean> {
   try {
-    await apiClient.createQuote(quotationData);
+    await apiClient.createQuote(toBackendQuotePayload(quotationData));
+    return true;
   } catch {
     console.warn("[sync] Failed to sync quotation create to backend");
+    return false;
   }
 }
 
-export async function syncQuotationUpdate(id: string, updates: SyncPayload): Promise<void> {
+export async function syncQuotationUpdate(id: string, updates: SyncPayload): Promise<boolean> {
   try {
-    await apiClient.updateQuote(id, updates);
+    const currentQuotation = useDataStore.getState().quotations.find((quotation) => quotation.id === id);
+    const mergedPayload = {
+      ...(currentQuotation as unknown as SyncPayload | undefined),
+      ...updates,
+      id,
+    };
+
+    await apiClient.updateQuote(id, toBackendQuotePayload(mergedPayload));
+    return true;
   } catch {
     console.warn("[sync] Failed to sync quotation update to backend");
+    return false;
   }
 }
 
-export async function syncQuotationDelete(id: string): Promise<void> {
+export async function syncQuotationDelete(id: string): Promise<boolean> {
   try {
     await apiClient.deleteQuote(id);
+    return true;
   } catch {
     console.warn("[sync] Failed to sync quotation delete to backend");
+    return false;
   }
 }
 
-export async function syncQuotationStatusUpdate(id: string, status: string): Promise<void> {
+export async function syncQuotationStatusUpdate(id: string, status: string): Promise<boolean> {
   try {
     await apiClient.updateQuoteStatus(id, status);
+    return true;
   } catch {
     console.warn("[sync] Failed to sync quotation status update to backend");
+    return false;
   }
 }
 

@@ -141,6 +141,8 @@ const DEFAULT_ESTIMATION: CanonicalEstimationInput = {
   id: generateId(),
   jobTitle: "Untitled Job",
   customerName: "—",
+  estimatedBy: "",
+  poNumber: "",
   book: {
     trimSize: { width: 153, height: 234 },
     totalPages: 0,
@@ -197,6 +199,31 @@ const DEFAULT_ESTIMATION: CanonicalEstimationInput = {
     taxRate: 0,
     includesTax: false,
   },
+  additionalCosts: [],
+  packing: {
+    cartonType: "5PLY",
+    booksPerCarton: 20,
+    palletize: true,
+    palletType: "WOODEN",
+    shrinkWrap: true,
+  },
+  delivery: {
+    deliveryType: "fob",
+    freightMode: "sea",
+    destination: "",
+    destinationCity: "",
+    destinationCountry: "United Kingdom",
+  },
+  prePress: {
+    epsonProofs: 0,
+    epsonRatePerPage: 25,
+    wetProofs: 0,
+    wetProofRatePerForm: 500,
+    filmOutput: false,
+    filmRatePerPlate: 200,
+    designCharges: 0,
+  },
+  notes: "",
 };
 
 // ─── STORE CREATION ─────────────────────────────────────────────────────────
@@ -365,7 +392,13 @@ export const useWizardStore = create<WizardState>()(
               // Mark imposition as auto-planned
               if (section.imposition.selected) {
                 s.meta[section.sectionId]["imposition"] = createFieldMeta(
-                  section.imposition.selected.sheet.label,
+                  {
+                    sheet: section.imposition.selected.sheet.label,
+                    signature: `${section.imposition.selected.signaturePages}pp`,
+                    method: section.imposition.selected.method,
+                    waste: `${section.imposition.selected.wastePercent.toFixed(1)}%`,
+                    grain: section.imposition.selected.grain.note,
+                  },
                   "AUTO_PLANNED",
                   0.8,
                   `Auto-imposed: ${section.imposition.selected.sheet.label}, ${section.imposition.selected.signaturePages}pp`,
@@ -517,8 +550,8 @@ export const useWizardStore = create<WizardState>()(
 
       setDataSources: (inventory: readonly InventoryPaperItem[], rateCard: readonly RateCardPaperEntry[]) => {
         set((state) => {
-          state.inventory = inventory as any;
-          state.rateCard = rateCard as any;
+          state.inventory = [...inventory];
+          state.rateCard = [...rateCard];
         });
       },
 
@@ -655,4 +688,3 @@ export function useFieldConfidence(sectionId: string, fieldName: string): number
   const { meta } = useWizardStore();
   return meta[sectionId]?.[fieldName]?.confidence ?? 0.5;
 }
-

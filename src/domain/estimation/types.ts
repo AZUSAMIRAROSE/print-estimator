@@ -358,15 +358,55 @@ export interface PricingConfig {
   readonly includesTax: boolean;
 }
 
+export interface AdditionalCostItem {
+  readonly id: string;
+  readonly description: string;
+  readonly isPerCopy: boolean;
+  readonly costPerCopy: number;
+  readonly totalCost: number;
+}
+
+export interface PackingConfig {
+  readonly cartonType: "3PLY" | "5PLY" | "SLEEVE";
+  readonly booksPerCarton: number;
+  readonly palletize: boolean;
+  readonly palletType: "WOODEN" | "PLASTIC" | "NONE";
+  readonly shrinkWrap: boolean;
+}
+
+export interface DeliveryConfig {
+  readonly deliveryType: "ex_works" | "fob" | "cif" | "ddp";
+  readonly freightMode: "road" | "sea" | "air" | "courier";
+  readonly destination?: string;
+  readonly destinationCity?: string;
+  readonly destinationCountry?: string;
+}
+
+export interface PrePressConfig {
+  readonly epsonProofs: number;
+  readonly epsonRatePerPage: number;
+  readonly wetProofs: number;
+  readonly wetProofRatePerForm: number;
+  readonly filmOutput: boolean;
+  readonly filmRatePerPlate: number;
+  readonly designCharges: number;
+}
+
 export interface CanonicalEstimationInput {
   readonly id: string;
   readonly jobTitle: string;
   readonly customerName: string;
+  readonly estimatedBy?: string;
+  readonly poNumber?: string;
   readonly book: BookSpec;
   readonly sections: readonly AnySectionConfig[];
   readonly binding: BindingConfig;
   readonly finishing: FinishingConfig;
   readonly pricing: PricingConfig;
+  readonly additionalCosts?: readonly AdditionalCostItem[];
+  readonly packing?: PackingConfig;
+  readonly delivery?: DeliveryConfig;
+  readonly prePress?: PrePressConfig;
   readonly notes?: string;
 }
 
@@ -512,4 +552,3 @@ export interface EstimationResultEnvelope {
   readonly procurement: ProcurementRecommendation[];
   readonly issues: ValidationIssue[];
 }
-

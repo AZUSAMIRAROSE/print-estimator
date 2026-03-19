@@ -272,6 +272,116 @@ function calculateFreightCostFallback(quantity: number): number {
   return quantity * 5;
 }
 
+function calculatePrePressCost(
+  input: CanonicalEstimationInput,
+  totalPlates: number,
+): number {
+  const prePress = input.prePress;
+  if (!prePress) return 0;
+
+  return round2(
+    (prePress.epsonProofs * prePress.epsonRatePerPage) +
+      (prePress.wetProofs * prePress.wetProofRatePerForm) +
+      (prePress.filmOutput ? totalPlates * prePress.filmRatePerPlate : 0) +
+      prePress.designCharges,
+  );
+}
+
+function calculateAdditionalCosts(
+  input: CanonicalEstimationInput,
+  quantity: number,
+): number {
+  return round2(
+    (input.additionalCosts ?? []).reduce((sum, item) => {
+      if (item.isPerCopy) {
+        return sum + (item.costPerCopy * quantity);
+      }
+      return sum + item.totalCost;
+    }, 0),
+  );
+}
+
+function calculatePackingCost(
+  input: CanonicalEstimationInput,
+  quantity: number,
+  bookWeight_g: number,
+): number {
+  const packing = input.packing;
+  if (!packing) {
+    return calculatePackingCostFallback(quantity);
+  }
+
+  const booksPerCarton = Math.max(1, packing.booksPerCarton || 20);
+  const cartons = Math.ceil(quantity / booksPerCarton);
+  const cartonRate =
+    packing.cartonType === "3PLY" ? 40 :
+    packing.cartonType === "SLEEVE" ? 25 :
+    65;
+
+  const palletCapacity =
+    packing.palletType === "PLASTIC" ? 36 :
+    packing.palletType === "WOODEN" ? 40 :
+    0;
+  const pallets =
+    packing.palletize && palletCapacity > 0
+      ? Math.ceil(cartons / palletCapacity)
+      : 0;
+  const palletRate =
+    packing.palletType === "PLASTIC" ? 950 :
+    packing.palletType === "WOODEN" ? 1250 :
+    0;
+
+  const shrinkWrapCost = packing.shrinkWrap ? cartons * 12 : 0;
+  const weightFactor =
+    bookWeight_g > 750 ? 1.15 :
+    bookWeight_g < 150 ? 0.9 :
+    1;
+
+  return round2(
+    (cartons * cartonRate + pallets * palletRate + shrinkWrapCost) * weightFactor,
+  );
+}
+
+function calculateFreightCost(
+  input: CanonicalEstimationInput,
+  quantity: number,
+  bookWeight_g: number,
+): number {
+  const delivery = input.delivery;
+  if (!delivery || delivery.deliveryType === "ex_works") {
+    return 0;
+  }
+
+  const totalWeight_kg = (quantity * Math.max(0.1, bookWeight_g)) / 1000;
+  const modeRatePerKg =
+    delivery.freightMode === "air" ? 24 :
+    delivery.freightMode === "courier" ? 38 :
+    delivery.freightMode === "road" ? 4.5 :
+    2.2;
+
+  const minimumCharge =
+    delivery.freightMode === "air" ? 3500 :
+    delivery.freightMode === "courier" ? 2200 :
+    750;
+
+  const handlingCost =
+    delivery.deliveryType === "ddp" ? 4500 :
+    delivery.deliveryType === "cif" ? 2500 :
+    delivery.deliveryType === "fob" ? 1200 :
+    0;
+
+  const internationalFactor =
+    delivery.destinationCountry &&
+    delivery.destinationCountry.trim().toLowerCase() !== "india"
+      ? 1.2
+      : 1;
+
+  return round2(
+    Math.max(minimumCharge, totalWeight_kg * modeRatePerKg) * internationalFactor +
+      handlingCost,
+  );
+}
+
 // ─── SINGLE-QUANTITY ESTIMATION ─────────────────────────────────────────────
 
 /**
@@ -291,6 +401,7 @@ function estimateForQuantity(
   let totalMakereadyHours = 0;
   let totalRunningHours = 0;
   let totalBookWeightG = 0;
+  let totalPlates = 0;
 
   // ── Process each section ──
   for (const sectionPlan of bookPlan.sections) {
@@ -346,6 +457,7 @@ function estimateForQuantity(
 
     totalMakereadyHours += makereadyHours;
     totalRunningHours += runningHours;
+    totalPlates += sectionPlan.totalPlates;
 
     // Track weight for binding/packing
     totalBookWeightG += (sectionPlan.totalWeight_kg * 1000) / Math.max(1, quantity);
@@ -384,7 +496,7 @@ function estimateForQuantity(
   );
 
   // ── Packing cost ──
-  const packingCost = calculatePackingCostFallback(quantity);
+  const packingCost = calculatePackingCost(input, quantity, totalBookWeightG);
   aggregator.addLine(
     "PACKING",
     "Packing",
@@ -394,7 +506,7 @@ function estimateForQuantity(
   );
 
   // ── Freight cost ──
-  const freightCost = calculateFreightCostFallback(quantity);
+  const freightCost = calculateFreightCost(input, quantity, totalBookWeightG);
   aggregator.addLine(
     "FREIGHT",
     "Freight",
@@ -402,6 +514,36 @@ function estimateForQuantity(
     "fallback",
     undefined,
   );
+
+  const prePressCost = calculatePrePressCost(input, totalPlates);
+  if (prePressCost > 0) {
+    aggregator.addLine(
+      "PRE_PRESS",
+      "Pre-Press",
+      prePressCost,
+      "wizard",
+      undefined,
+      {
+        epsonProofs: input.prePress?.epsonProofs ?? 0,
+        wetProofs: input.prePress?.wetProofs ?? 0,
+        totalPlates,
+      },
+    );
+  }
+
+  const additionalCost = calculateAdditionalCosts(input, quantity);
+  if (additionalCost > 0) {
+    aggregator.addLine(
+      "ADDITIONAL",
+      "Additional",
+      additionalCost,
+      "wizard",
+      undefined,
+      {
+        lineItems: input.additionalCosts?.length ?? 0,
+      },
+    );
+  }
 
   // ── Machine hours ──
   const avgHourlyRate = bookPlan.sections.reduce(
@@ -771,4 +913,3 @@ export function calculateFullEstimationV2(
   const canonicalResults = runCanonicalEstimation(canonicalInput, dataSources);
   return canonicalResults;
 }
-

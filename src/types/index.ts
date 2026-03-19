@@ -1145,6 +1145,7 @@ export interface Quotation {
   revisionNumber: number;
   pricingVersion?: number;
   sourceEstimateId?: string;
+  canonicalSnapshot?: CanonicalQuotationAttachment;
   quoteSnapshot?: {
     id: string;
     quotationId: string;
@@ -1419,4 +1420,4 @@ export interface WizardStep {
   isValid: boolean;
   tipText: string;
 }
-
+import type { CanonicalQuotationAttachment } from "@/domain/estimation/quotationTypes";

@@ -35,7 +35,7 @@ export function StepBasicInfo() {
         <FieldWrapper sectionId="__global__" fieldName="estimatedBy" label="Estimated By">
           <input
             type="text"
-            value={(estimation as any).estimatedBy ?? ""}
+            value={estimation.estimatedBy ?? ""}
             onChange={(e) => setEstimationField("estimatedBy", e.target.value)}
             className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm"
           />
@@ -44,7 +44,7 @@ export function StepBasicInfo() {
         <FieldWrapper sectionId="__global__" fieldName="poNumber" label="PO / Reference">
           <input
             type="text"
-            value={(estimation as any).poNumber ?? ""}
+            value={estimation.poNumber ?? ""}
             onChange={(e) => setEstimationField("poNumber", e.target.value)}
             placeholder="Optional"
             className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm"

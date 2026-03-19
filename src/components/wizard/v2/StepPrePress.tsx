@@ -9,7 +9,7 @@ import { FieldWrapper } from "./shared/FieldWrapper";
 export function StepPrePress() {
   const { estimation, setEstimationField } = useWizardStore();
 
-  const prePress = (estimation as any).prePress ?? {
+  const prePress = estimation.prePress ?? {
     epsonProofs: 0,
     epsonRatePerPage: 25,
     wetProofs: 0,

@@ -3,13 +3,22 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import { immer } from "zustand/middleware/immer";
 import type {
   Customer, Job, Quotation,
-  FreightDestination, BoardType, CoveringMaterial, EstimationInput
+  FreightDestination, BoardType, CoveringMaterial, EstimationInput, EstimationResult
 } from "@/types";
 import {
   DEFAULT_DESTINATIONS, DEFAULT_BOARD_TYPES,
   DEFAULT_COVERING_MATERIALS
 } from "@/constants";
 import { generateId, generateJobNumber, generateQuotationNumber, generateCustomerCode } from "@/utils/format";
+
+interface QuotationRefreshPayload {
+  result?: EstimationResult;
+  results?: EstimationResult[];
+  quoteSnapshot?: NonNullable<Quotation["quoteSnapshot"]>;
+  canonicalSnapshot?: Quotation["canonicalSnapshot"];
+  reason?: string;
+  validUntil?: string;
+}
 
 interface DataState {
   // Entities
@@ -46,7 +55,7 @@ interface DataState {
   getQuotation: (id: string) => Quotation | undefined;
   duplicateQuotation: (id: string) => Quotation | undefined;
   addQuotationComment: (quotationId: string, author: string, text: string, type: "internal" | "external") => void;
-  refreshQuotationPricing: (quotationId: string, newResult?: any) => Quotation | undefined;
+  refreshQuotationPricing: (quotationId: string, payload?: QuotationRefreshPayload) => Quotation | undefined;
 
   // Rate Card CRUD
   addDestination: (dest: Omit<FreightDestination, "id">) => void;
@@ -225,13 +234,15 @@ export const useDataStore = create<DataState>()(
       }),
 
       // ── Quotation Refresh/Reprice ────────────────────────────────────────
-      refreshQuotationPricing: (quotationId, newResult) => {
+      refreshQuotationPricing: (quotationId, payload) => {
         const original = get().quotations.find((q) => q.id === quotationId);
         if (!original) return undefined;
 
         const now = new Date().toISOString();
         const currentVersion = original.pricingVersion || 1;
         const newVersion = currentVersion + 1;
+        const updatedResults = payload?.results ?? (payload?.result ? [payload.result] : original.results);
+        const nextResults = updatedResults.length > 0 ? updatedResults : original.results;
 
         // Create snapshot of current state before refresh
         const snapshotToArchive = original.quoteSnapshot ? {
@@ -255,25 +266,23 @@ export const useDataStore = create<DataState>()(
 
         // Initialize or update pricing revisions array
         const revisions = original.pricingRevisions || [];
-        
-        // Calculate new results
-        let updatedResults = original.results;
-        if (newResult) {
-          updatedResults = [newResult];
-        }
 
         // Create new snapshot with latest calculations
-        const newSnapshot = newResult ? {
+        const newSnapshot = payload?.quoteSnapshot ? {
+          ...payload.quoteSnapshot,
+          quotationId: original.id,
+          pricingVersion: newVersion,
+        } : payload?.result ? {
           id: generateId(),
           quotationId: original.id,
           sourceEstimateId: original.sourceEstimateId || "",
           pricingVersion: newVersion,
           plannedAt: now,
-          estimationInput: (newResult as any)?.estimationInput || {} as any,
-          result: newResult,
-          planning: (newResult as any)?.planning || { sections: [], blocked: false, issues: [] },
-          procurement: (newResult as any)?.procurement || [],
-          issues: (newResult as any)?.issues || [],
+          estimationInput: (payload.result as unknown as { estimationInput?: EstimationInput })?.estimationInput || {} as EstimationInput,
+          result: payload.result,
+          planning: (payload.result as unknown as { planning?: NonNullable<Quotation["quoteSnapshot"]>["planning"] })?.planning || { sections: [], blocked: false, issues: [] },
+          procurement: (payload.result as unknown as { procurement?: NonNullable<Quotation["quoteSnapshot"]>["procurement"] })?.procurement || [],
+          issues: (payload.result as unknown as { issues?: NonNullable<Quotation["quoteSnapshot"]>["issues"] })?.issues || [],
         } : snapshotToArchive;
 
         // Update quotation with new pricing
@@ -289,7 +298,7 @@ export const useDataStore = create<DataState>()(
                   quotationId: original.id,
                   version: currentVersion,
                   createdAt: original.updatedAt,
-                  reason: "Previous version",
+                  reason: payload?.reason || "Previous version",
                   snapshot: snapshotToArchive,
                 }
               ];
@@ -297,15 +306,13 @@ export const useDataStore = create<DataState>()(
 
             // Update with new snapshot and results
             state.quotations[idx].quoteSnapshot = newSnapshot;
-            state.quotations[idx].results = updatedResults;
+            state.quotations[idx].canonicalSnapshot = payload?.canonicalSnapshot ?? original.canonicalSnapshot;
+            state.quotations[idx].results = nextResults;
+            state.quotations[idx].quantities = nextResults.map((result) => result.quantity);
             state.quotations[idx].pricingVersion = newVersion;
             state.quotations[idx].updatedAt = now;
+            state.quotations[idx].validUntil = payload?.validUntil || state.quotations[idx].validUntil;
             state.quotations[idx].status = original.status === "accepted" || original.status === "rejected" ? "revised" : original.status;
-            
-            // Update total value from new results
-            if (updatedResults[0]?.grandTotal) {
-              state.quotations[idx].results[0].grandTotal = updatedResults[0].grandTotal;
-            }
           }
         });
 

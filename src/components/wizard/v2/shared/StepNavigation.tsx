@@ -74,11 +74,15 @@ export function StepButtons() {
   const isFirst = currentStep === 0;
   const isLast = currentStep === TOTAL_STEPS - 1;
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (currentStep === 1 && !isPlanning) {
-      // Auto-plan when leaving book spec step
-      runAutoPlanning(inventory as any, rateCard as any);
+      await runAutoPlanning(inventory, rateCard);
+
+      if (useWizardStore.getState().planError) {
+        return;
+      }
     }
+
     nextStep();
   };
 
@@ -102,7 +106,7 @@ export function StepButtons() {
         {currentStep >= 1 && currentStep <= 2 && (
           <button
             type="button"
-            onClick={() => runAutoPlanning(inventory as any, rateCard as any)}
+            onClick={() => runAutoPlanning(inventory, rateCard)}
             disabled={isPlanning}
             className="flex-1 sm:flex-none px-3 py-2.5 text-xs sm:text-sm font-medium text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100 dark:bg-blue-950 dark:text-blue-300 dark:hover:bg-blue-900 disabled:opacity-50 transition-colors min-h-[44px] sm:min-h-auto flex items-center justify-center"
           >
@@ -128,4 +132,3 @@ export function StepButtons() {
     </div>
   );
 }
-

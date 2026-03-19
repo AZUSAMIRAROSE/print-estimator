@@ -16,8 +16,7 @@ const CARTON_TYPES = [
 export function StepPacking() {
   const { estimation, setEstimationField } = useWizardStore();
 
-  // Packing config stored in a sub-object
-  const packing = (estimation as any).packing ?? {
+  const packing = estimation.packing ?? {
     cartonType: "5PLY",
     booksPerCarton: 20,
     palletize: true,

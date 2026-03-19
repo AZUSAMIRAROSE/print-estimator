@@ -1,66 +1,54 @@
-// ============================================================================
-// COST BREAKDOWN TABLE — Multi-quantity results display
-// ============================================================================
-
 import React from "react";
+import type { CurrencyCode } from "@/types";
 import type { CanonicalEstimationResult } from "@/domain/estimation/types";
 import { cn } from "@/utils/cn";
+import { formatCurrency } from "@/utils/format";
 
 interface Props {
   results: readonly CanonicalEstimationResult[];
   currency: string;
 }
 
-const CURRENCY_SYMBOLS: Record<string, string> = {
-  INR: "₹", GBP: "£", USD: "$", EUR: "€", AED: "د.إ", SGD: "S$",
-};
-
 export function CostBreakdownTable({ results, currency }: Props) {
-  const sym = CURRENCY_SYMBOLS[currency] ?? currency;
-  const isINR = currency === "INR";
+  const safeCurrency = (currency || "INR") as CurrencyCode;
+  const isINR = safeCurrency === "INR";
 
-  const fmt = (n: number) => {
-    if (n === 0) return "—";
-    return n >= 1000 ? n.toLocaleString("en-IN", { maximumFractionDigits: 0 })
-      : n.toFixed(2);
-  };
+  const fmtTotal = (value: number) => value > 0 ? formatCurrency(value, safeCurrency) : "—";
+  const fmtCopy = (value: number) => value > 0 ? `${formatCurrency(value, safeCurrency)}/copy` : "—";
 
-  const fmtCopy = (n: number) => n > 0 ? n.toFixed(2) : "—";
-
-  const rows: { label: string; key: keyof CanonicalEstimationResult["costs"]; icon: string }[] = [
-    { label: "Paper", key: "paper", icon: "📄" },
-    { label: "CTP (Plates)", key: "ctp", icon: "🔲" },
-    { label: "Printing", key: "printing", icon: "🖨️" },
-    { label: "Binding", key: "binding", icon: "📚" },
-    { label: "Finishing", key: "finishing", icon: "✨" },
-    { label: "Packing", key: "packing", icon: "📦" },
-    { label: "Freight", key: "freight", icon: "🚛" },
-    { label: "Pre-Press", key: "prePress", icon: "🎨" },
-    { label: "Additional", key: "additional", icon: "➕" },
+  const rows: Array<{ label: string; key: keyof CanonicalEstimationResult["costs"] }> = [
+    { label: "Paper", key: "paper" },
+    { label: "CTP", key: "ctp" },
+    { label: "Printing", key: "printing" },
+    { label: "Binding", key: "binding" },
+    { label: "Finishing", key: "finishing" },
+    { label: "Packing", key: "packing" },
+    { label: "Freight", key: "freight" },
+    { label: "Pre-Press", key: "prePress" },
+    { label: "Additional", key: "additional" },
   ];
 
-  if (!results || results.length === 0) {
+  if (!results.length) {
     return (
-      <div className="p-8 text-center text-gray-500">
-        No results to display. Click "Calculate Estimate" to generate.
+      <div className="rounded-3xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400">
+        No calculated results to display yet.
       </div>
     );
   }
 
   return (
-    <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+    <div className="overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          {/* Header */}
-          <thead className="bg-gray-50 dark:bg-gray-900">
+        <table className="w-full min-w-[860px] text-sm">
+          <thead className="bg-gray-50 dark:bg-gray-950">
             <tr>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase w-48">
+              <th className="w-52 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                 Cost Element
               </th>
-              {results.map((r) => (
-                <th key={r.id} className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">
-                  <span className="block">{r.quantity.toLocaleString()} copies</span>
-                  <span className="text-[10px] font-normal text-gray-400">Total / Per copy</span>
+              {results.map((result) => (
+                <th key={result.id} className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  <span className="block">{result.quantity.toLocaleString()} copies</span>
+                  <span className="text-[10px] font-normal text-gray-400">Total / per copy</span>
                 </th>
               ))}
             </tr>
@@ -68,83 +56,78 @@ export function CostBreakdownTable({ results, currency }: Props) {
 
           <tbody>
             {rows.map((row) => (
-              <tr key={row.key} className="border-t dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900/50">
-                <td className="px-4 py-2 text-gray-700 dark:text-gray-300">
-                  <span className="mr-1.5">{row.icon}</span>
-                  {row.label}
-                </td>
-                {results.map((r) => {
-                  const total = r.costs[row.key];
-                  const perCopy = r.quantity > 0 ? total / r.quantity : 0;
+              <tr key={row.key} className="border-t border-gray-200 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-950/40">
+                <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-200">{row.label}</td>
+                {results.map((result) => {
+                  const total = result.costs[row.key];
+                  const perCopy = result.quantity > 0 ? total / result.quantity : 0;
+
                   return (
-                    <td key={r.id} className="px-4 py-2 text-right font-mono">
-                      <span className="text-gray-800 dark:text-gray-200">₹{fmt(total)}</span>
-                      <span className="block text-[10px] text-gray-400">₹{fmtCopy(perCopy)}/copy</span>
+                    <td key={result.id} className="px-4 py-3 text-right font-mono">
+                      <span className="text-gray-900 dark:text-gray-100">{fmtTotal(total)}</span>
+                      <span className="block text-[10px] text-gray-400">{fmtCopy(perCopy)}</span>
                     </td>
                   );
                 })}
               </tr>
             ))}
 
-            {/* Total production */}
-            <tr className="border-t-2 border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-800 font-semibold">
-              <td className="px-4 py-2 text-gray-800 dark:text-gray-200">Total Production</td>
-              {results.map((r) => (
-                <td key={r.id} className="px-4 py-2 text-right font-mono text-gray-800 dark:text-gray-200">
-                  ₹{fmt(r.costs.totalProduction)}
-                  <span className="block text-[10px] font-normal text-gray-500">₹{fmtCopy(r.pricing.costPerCopy)}/copy</span>
+            <tr className="border-t-2 border-gray-300 bg-gray-100 dark:border-gray-700 dark:bg-gray-800">
+              <td className="px-4 py-3 font-semibold text-gray-900 dark:text-gray-100">Total Production</td>
+              {results.map((result) => (
+                <td key={result.id} className="px-4 py-3 text-right font-mono font-semibold text-gray-900 dark:text-gray-100">
+                  {formatCurrency(result.costs.totalProduction, safeCurrency)}
+                  <span className="block text-[10px] font-normal text-gray-500">{fmtCopy(result.pricing.costPerCopy)}</span>
                 </td>
               ))}
             </tr>
 
-            {/* Selling price */}
-            <tr className="border-t dark:border-gray-700 bg-blue-50 dark:bg-blue-950">
-              <td className="px-4 py-3 font-semibold text-blue-800 dark:text-blue-200">
-                💰 Selling Price
-              </td>
-              {results.map((r) => (
-                <td key={r.id} className="px-4 py-3 text-right font-mono">
+            <tr className="border-t border-gray-200 bg-blue-50 dark:border-gray-700 dark:bg-blue-950/35">
+              <td className="px-4 py-3 font-semibold text-blue-800 dark:text-blue-200">Selling Price</td>
+              {results.map((result) => (
+                <td key={result.id} className="px-4 py-3 text-right font-mono">
                   <span className="text-lg font-bold text-blue-700 dark:text-blue-300">
-                    ₹{fmt(r.pricing.totalSellingPrice)}
+                    {formatCurrency(result.pricing.totalSellingPrice, safeCurrency)}
                   </span>
                   <span className="block text-xs text-blue-600 dark:text-blue-400">
-                    ₹{fmtCopy(r.pricing.sellingPricePerCopy)}/copy
+                    {fmtCopy(result.pricing.sellingPricePerCopy)}
                   </span>
                   {!isINR && (
-                    <span className="block text-[10px] text-gray-500 mt-0.5">
-                      {sym}{fmtCopy(r.pricing.sellingPricePerCopy_foreign)}/copy
+                    <span className="mt-0.5 block text-[10px] text-gray-500">
+                      {formatCurrency(result.pricing.sellingPricePerCopy_foreign, safeCurrency)}/copy
                     </span>
                   )}
                 </td>
               ))}
             </tr>
 
-            {/* Margin */}
-            <tr className="border-t dark:border-gray-700">
-              <td className="px-4 py-2 text-gray-600 dark:text-gray-400">
+            <tr className="border-t border-gray-200 dark:border-gray-700">
+              <td className="px-4 py-3 text-gray-600 dark:text-gray-400">
                 Margin ({results[0]?.pricing.pricingMethod === "OVERHEAD" ? "overhead" : "margin"} method)
               </td>
-              {results.map((r) => (
-                <td key={r.id} className="px-4 py-2 text-right font-mono text-sm">
-                  <span className={cn(
-                    r.pricing.marginPercent >= 20 ? "text-green-600" :
-                    r.pricing.marginPercent >= 10 ? "text-amber-600" : "text-red-600",
-                  )}>
-                    {r.pricing.marginPercent.toFixed(1)}%
+              {results.map((result) => (
+                <td key={result.id} className="px-4 py-3 text-right font-mono">
+                  <span
+                    className={cn(
+                      result.pricing.marginPercent >= 20 ? "text-green-600" :
+                        result.pricing.marginPercent >= 10 ? "text-amber-600" :
+                          "text-red-600",
+                    )}
+                  >
+                    {result.pricing.marginPercent.toFixed(1)}%
                   </span>
                   <span className="block text-[10px] text-gray-400">
-                    ₹{fmt(r.pricing.marginAmount)}
+                    {formatCurrency(result.pricing.marginAmount, safeCurrency)}
                   </span>
                 </td>
               ))}
             </tr>
 
-            {/* Physical specs */}
-            <tr className="border-t dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
-              <td className="px-4 py-2 text-xs text-gray-500">Book weight / Spine / Machine hours</td>
-              {results.map((r) => (
-                <td key={r.id} className="px-4 py-2 text-right text-xs text-gray-500 font-mono">
-                  {r.bookWeight_g}g · {r.spineThickness_mm}mm · {r.machineHours.toFixed(1)}h
+            <tr className="border-t border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-950/40">
+              <td className="px-4 py-3 text-xs text-gray-500">Book weight / Spine / Machine hours</td>
+              {results.map((result) => (
+                <td key={result.id} className="px-4 py-3 text-right text-xs text-gray-500">
+                  {result.bookWeight_g}g • {result.spineThickness_mm.toFixed(2)}mm • {result.machineHours.toFixed(1)}h
                 </td>
               ))}
             </tr>

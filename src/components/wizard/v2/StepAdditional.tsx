@@ -4,19 +4,12 @@
 
 import React, { useCallback } from "react";
 import { useWizardStore } from "@/domain/estimation/wizardStore";
-
-interface AdditionalCostItem {
-  id: string;
-  description: string;
-  isPerCopy: boolean;
-  costPerCopy: number;
-  totalCost: number;
-}
+import type { AdditionalCostItem } from "@/domain/estimation/types";
 
 export function StepAdditional() {
   const { estimation, setEstimationField } = useWizardStore();
 
-  const items: AdditionalCostItem[] = (estimation as any).additionalCosts ?? [];
+  const items = estimation.additionalCosts ?? [];
 
   const updateItems = useCallback((newItems: AdditionalCostItem[]) => {
     setEstimationField("additionalCosts", newItems);
