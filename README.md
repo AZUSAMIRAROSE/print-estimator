@@ -14,7 +14,7 @@
 A domain-driven ERP application that replaces manual spreadsheet-based
 estimation workflows with a deterministic, auditable costing engine.
 
-**Solo-developed by [Irshad Ansari](https://github.com/irshad-ansari)**
+**Solo-developed by [Irshad Ansari](https://github.com/AZUSAMIRAROSE)**
 
 </div>
 
@@ -485,7 +485,7 @@ truth for each data shape.
 
 <div align="center">
 
-**Built by [Irshad Ansari](https://github.com/irshad-ansari)**
+**Built by [Irshad Ansari](https://github.com/AZUSAMIRAROSE)**
 
 Full-stack engineer focused on TypeScript, system design,
 and domain-driven architecture.
