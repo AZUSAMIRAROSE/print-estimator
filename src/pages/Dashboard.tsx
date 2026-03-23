@@ -37,12 +37,40 @@ export function Dashboard() {
 
     const totalRevenue = jobs.reduce((s, j) => s + (j.totalValue || 0), 0);
     const now = new Date();
+    const thisMonth = now.getMonth();
+    const thisYear = now.getFullYear();
+    const lastMonth = thisMonth === 0 ? 11 : thisMonth - 1;
+    const lastMonthYear = thisMonth === 0 ? thisYear - 1 : thisYear;
 
-    const currentMonthJobs = jobs.filter(j => {
-      const d = new Date(j.createdAt || j.updatedAt || Date.now());
-      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-    });
+    const isThisMonth = (dateStr: string | undefined) => {
+      if (!dateStr) return false;
+      const d = new Date(dateStr);
+      return d.getMonth() === thisMonth && d.getFullYear() === thisYear;
+    };
+    const isLastMonth = (dateStr: string | undefined) => {
+      if (!dateStr) return false;
+      const d = new Date(dateStr);
+      return d.getMonth() === lastMonth && d.getFullYear() === lastMonthYear;
+    };
+
+    const currentMonthJobs = jobs.filter(j => isThisMonth(j.createdAt || j.updatedAt));
+    const lastMonthJobs = jobs.filter(j => isLastMonth(j.createdAt || j.updatedAt));
     const monthlyRevenue = currentMonthJobs.reduce((s, j) => s + (j.totalValue || 0), 0);
+    const lastMonthRevenue = lastMonthJobs.reduce((s, j) => s + (j.totalValue || 0), 0);
+
+    const currentMonthQuots = quotations.filter(q => isThisMonth(q.createdAt || q.updatedAt));
+    const lastMonthQuots = quotations.filter(q => isLastMonth(q.createdAt || q.updatedAt));
+
+    const currentMonthCustomers = customers.filter(c => isThisMonth(c.createdAt || c.updatedAt));
+    const lastMonthCustomers = customers.filter(c => isLastMonth(c.createdAt || c.updatedAt));
+
+    const safePercent = (curr: number, prev: number) =>
+      prev === 0 ? (curr > 0 ? 100 : 0) : Math.round(((curr - prev) / prev) * 1000) / 10;
+
+    const jobsChange = safePercent(currentMonthJobs.length, lastMonthJobs.length);
+    const quotsChange = safePercent(currentMonthQuots.length, lastMonthQuots.length);
+    const customersChange = safePercent(currentMonthCustomers.length, lastMonthCustomers.length);
+    const revenueChange = safePercent(monthlyRevenue, lastMonthRevenue);
 
     const avgJobValue = jobs.length > 0 ? totalRevenue / jobs.length : 0;
 
@@ -53,7 +81,7 @@ export function Dashboard() {
 
     const overdueJobs = jobs.filter(j => j.status !== "completed" && j.status !== "cancelled" && j.dueDate && new Date(j.dueDate) < now).length;
 
-    return { totalJobs, activeQuotations, totalCustomers, monthlyRevenue, avgJobValue, conversionRate, pendingApprovals, overdueJobs };
+    return { totalJobs, activeQuotations, totalCustomers, monthlyRevenue, avgJobValue, conversionRate, pendingApprovals, overdueJobs, jobsChange, quotsChange, customersChange, revenueChange };
   }, [jobs, quotations, customers]);
 
   // Recent jobs from real data or mock if empty to prevent empty screen feeling
@@ -188,7 +216,7 @@ export function Dashboard() {
         <StatCard
           title="Total Jobs"
           value={formatNumber(stats.totalJobs)}
-          change={12.5}
+          change={stats.jobsChange}
           icon={<Briefcase className="w-5 h-5 text-blue-600 dark:text-blue-400" />}
           color="bg-blue-50 dark:bg-blue-500/10"
           onClick={() => navigate("/jobs")}
@@ -196,7 +224,7 @@ export function Dashboard() {
         <StatCard
           title="Active Quotations"
           value={formatNumber(stats.activeQuotations)}
-          change={-3.2}
+          change={stats.quotsChange}
           icon={<FileCheck className="w-5 h-5 text-amber-600 dark:text-amber-400" />}
           color="bg-amber-50 dark:bg-amber-500/10"
           onClick={() => navigate("/quotations")}
@@ -204,7 +232,7 @@ export function Dashboard() {
         <StatCard
           title="Customers"
           value={formatNumber(stats.totalCustomers)}
-          change={8.1}
+          change={stats.customersChange}
           icon={<Users className="w-5 h-5 text-green-600 dark:text-green-400" />}
           color="bg-green-50 dark:bg-green-500/10"
           onClick={() => navigate("/customers")}
@@ -212,7 +240,7 @@ export function Dashboard() {
         <StatCard
           title="Monthly Revenue"
           value={formatCurrency(stats.monthlyRevenue)}
-          change={15.7}
+          change={stats.revenueChange}
           icon={<DollarSign className="w-5 h-5 text-purple-600 dark:text-purple-400" />}
           color="bg-purple-50 dark:bg-purple-500/10"
           onClick={() => navigate("/reports")}
@@ -222,12 +250,14 @@ export function Dashboard() {
       {/* Quick Actions */}
       <div className="card p-5">
         <h3 className="text-sm font-semibold text-text-light-primary dark:text-text-dark-primary mb-3">Quick Actions</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
           {[
             { label: "New Estimate", icon: <FilePlus className="w-5 h-5" />, path: "/estimate/new", color: "text-primary-600 bg-primary-50 dark:bg-primary-500/10 dark:text-primary-400" },
+            { label: "Estimate V2", icon: <Target className="w-5 h-5" />, path: "/estimate/v2", color: "text-teal-600 bg-teal-50 dark:bg-teal-500/10 dark:text-teal-400" },
             { label: "View Jobs", icon: <Briefcase className="w-5 h-5" />, path: "/jobs", color: "text-blue-600 bg-blue-50 dark:bg-blue-500/10 dark:text-blue-400" },
             { label: "Quotations", icon: <FileCheck className="w-5 h-5" />, path: "/quotations", color: "text-amber-600 bg-amber-50 dark:bg-amber-500/10 dark:text-amber-400" },
             { label: "Customers", icon: <Users className="w-5 h-5" />, path: "/customers", color: "text-green-600 bg-green-50 dark:bg-green-500/10 dark:text-green-400" },
+            { label: "Inventory", icon: <Package className="w-5 h-5" />, path: "/inventory", color: "text-indigo-600 bg-indigo-50 dark:bg-indigo-500/10 dark:text-indigo-400" },
             { label: "Calculator", icon: <Printer className="w-5 h-5" />, path: "/calculator", color: "text-purple-600 bg-purple-50 dark:bg-purple-500/10 dark:text-purple-400" },
             { label: "Reports", icon: <BarChart3 className="w-5 h-5" />, path: "/reports", color: "text-red-600 bg-red-50 dark:bg-red-500/10 dark:text-red-400" },
           ].map((action) => (
@@ -260,7 +290,14 @@ export function Dashboard() {
               <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500" /> Jobs</span>
             </div>
           </div>
-          <div className="h-64 w-full min-w-0">
+          <div className="h-64 w-full min-w-0 relative">
+            {jobs.length === 0 && quotations.length === 0 && (
+              <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-white/80 dark:bg-surface-dark-secondary/80 backdrop-blur-sm rounded-xl">
+                <BarChart3 className="w-8 h-8 text-text-light-tertiary dark:text-text-dark-tertiary opacity-40 mb-2" />
+                <p className="text-sm font-medium text-text-light-secondary dark:text-text-dark-secondary">No revenue data yet</p>
+                <button onClick={() => navigate("/estimate/new")} className="text-xs text-primary-600 dark:text-primary-400 font-medium hover:underline mt-1">Create your first estimate to get started</button>
+              </div>
+            )}
             <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={1}>
               <AreaChart data={dynamicMonthlyData}>
                 <defs>

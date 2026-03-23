@@ -142,7 +142,7 @@ export function MainLayout() {
           sidebarCollapsed ? "lg:ml-[68px]" : "lg:ml-[252px]" // Sidebar offset on desktop
         )}
       >
-        <Header />
+        <Header syncStatus={syncStatus} />
         <main className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 w-full">
           <Outlet />
         </main>

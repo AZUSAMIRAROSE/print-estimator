@@ -48,7 +48,7 @@ export function StepBinding() {
                 <p className="text-sm font-medium text-gray-800 dark:text-gray-200">
                   {method.label}
                 </p>
-                <p className="text-xs text-gray-500">{method.description}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">{method.description}</p>
               </div>
             </button>
           ))}

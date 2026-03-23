@@ -66,5 +66,20 @@ export default defineConfig(async ({ command }) => {
         "Content-Security-Policy": PREVIEW_CONTENT_SECURITY_POLICY,
       },
     },
+    build: {
+      chunkSizeWarningLimit: 600,
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            recharts: ["recharts"],
+            html2canvas: ["html2canvas"],
+            dompurify: ["dompurify"],
+            vendor: ["react", "react-dom", "react-router-dom"],
+            state: ["zustand", "immer", "@tanstack/react-query"],
+            icons: ["lucide-react"],
+          },
+        },
+      },
+    },
   };
 });

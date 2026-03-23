@@ -42,6 +42,13 @@ router.get("/", requireAuth, (req, res) => {
   res.json({ quotes: rows.map(enrichRow) });
 });
 
+// Get single quote by ID
+router.get("/:id", requireAuth, (req, res) => {
+  const row = db.prepare("SELECT * FROM quotes WHERE id = ?").get(req.params.id);
+  if (!row) return res.status(404).json({ error: "Quote not found" });
+  res.json({ quote: enrichRow(row) });
+});
+
 router.post("/", requireAuth, (req, res) => {
   const parsed = quoteSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });

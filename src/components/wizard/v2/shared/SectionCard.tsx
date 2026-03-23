@@ -45,7 +45,7 @@ export function SectionCard({
               {title}
             </h3>
             {subtitle && (
-              <p className="text-xs text-gray-500">{subtitle}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">{subtitle}</p>
             )}
           </div>
         </div>
@@ -54,7 +54,7 @@ export function SectionCard({
           {actions}
           {onToggle && (
             <label className="flex items-center gap-1.5 cursor-pointer">
-              <span className="text-xs text-gray-500">
+              <span className="text-xs text-gray-500 dark:text-gray-400">
                 {enabled ? "ON" : "OFF"}
               </span>
               <button

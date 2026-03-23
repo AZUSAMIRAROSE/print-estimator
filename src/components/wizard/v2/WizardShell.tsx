@@ -2,7 +2,7 @@
 // WIZARD SHELL — Master layout that renders all steps
 // ============================================================================
 
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import { useWizardStore } from "@/domain/estimation/wizardStore";
 import { StepNavigation, StepButtons } from "./shared/StepNavigation";
 import { PlanPreview } from "./shared/PlanPreview";
@@ -44,6 +44,12 @@ export function WizardShell() {
   const { currentStep, showLivePreview, toggleLivePreview, getMetaStats } = useWizardStore();
   const StepComponent = STEP_COMPONENTS[currentStep] ?? (() => null);
   const stats = getMetaStats();
+  const stepContentRef = useRef<HTMLDivElement>(null);
+
+  // Scroll step content area to top when step changes
+  useEffect(() => {
+    stepContentRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  }, [currentStep]);
 
   return (
     <div className="flex flex-col lg:flex-row gap-3 sm:gap-4 md:gap-6 h-full">
@@ -55,7 +61,7 @@ export function WizardShell() {
         </div>
 
         {/* Step content */}
-        <div className="flex-1 overflow-y-auto px-3 sm:px-4 md:px-6 py-3 sm:py-4">
+        <div ref={stepContentRef} className="flex-1 overflow-y-auto px-3 sm:px-4 md:px-6 py-3 sm:py-4">
           <StepComponent />
         </div>
 
@@ -90,10 +96,10 @@ export function WizardShell() {
             {stats.totalFields > 0 && (
               <div className="text-xs space-y-1 p-3 rounded-lg bg-white dark:bg-gray-900 border dark:border-gray-700">
                 <p className="font-semibold text-gray-700 dark:text-gray-300">📊 Field Stats</p>
-                <p>Auto-planned: <span className="font-mono">{stats.autoPlannedFields}</span></p>
-                <p>User overrides: <span className="font-mono">{stats.userOverrideFields}</span></p>
-                <p>Low confidence: <span className="font-mono text-amber-600">{stats.lowConfidenceFields}</span></p>
-                <p>Avg confidence: <span className="font-mono">{(stats.averageConfidence * 100).toFixed(0)}%</span></p>
+                <p className="text-gray-600 dark:text-gray-400">Auto-planned: <span className="font-mono">{stats.autoPlannedFields}</span></p>
+                <p className="text-gray-600 dark:text-gray-400">User overrides: <span className="font-mono">{stats.userOverrideFields}</span></p>
+                <p className="text-gray-600 dark:text-gray-400">Low confidence: <span className="font-mono text-amber-600">{stats.lowConfidenceFields}</span></p>
+                <p className="text-gray-600 dark:text-gray-400">Avg confidence: <span className="font-mono">{(stats.averageConfidence * 100).toFixed(0)}%</span></p>
               </div>
             )}
           </div>

@@ -55,7 +55,7 @@ export function StepDelivery() {
               )}
             >
               <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">{dt.label}</p>
-              <p className="text-xs text-gray-500 mt-0.5">{dt.description}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{dt.description}</p>
             </button>
           ))}
         </div>
@@ -79,7 +79,7 @@ export function StepDelivery() {
                 )}
               >
                 <p className="text-lg">{fm.icon}</p>
-                <p className="text-[10px] text-gray-500">{fm.label}</p>
+                <p className="text-[10px] text-gray-500 dark:text-gray-400">{fm.label}</p>
               </button>
             ))}
           </div>

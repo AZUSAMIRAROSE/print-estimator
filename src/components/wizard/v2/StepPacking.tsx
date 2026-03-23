@@ -47,7 +47,7 @@ export function StepPacking() {
               )}
             >
               <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{ct.label}</p>
-              <p className="text-xs text-gray-500 mt-0.5">{ct.description}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{ct.description}</p>
             </button>
           ))}
         </div>

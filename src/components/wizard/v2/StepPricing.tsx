@@ -18,11 +18,11 @@ const CURRENCIES = [
 
 const DEFAULT_EXCHANGE_RATES: Record<string, number> = {
   INR: 1,
-  GBP: 110,
-  USD: 85,
-  EUR: 92,
-  AED: 23,
-  SGD: 63,
+  GBP: 118,
+  USD: 90,
+  EUR: 104,
+  AED: 24.5,
+  SGD: 67,
 };
 
 export function StepPricing() {

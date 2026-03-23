@@ -6,9 +6,11 @@ import { getRelativeTime, getInitials } from "@/utils/format";
 import {
   Search, Bell, Sun, Moon, LogOut, User, Settings,
   ChevronDown, Check, FileText, Download, Upload,
-  Package, Briefcase, AlertCircle, X, ExternalLink
+  Package, Briefcase, AlertCircle, X, ExternalLink,
+  Cloud, CloudOff, Loader2, CheckCircle2
 } from "lucide-react";
 import type { AppNotification } from "@/types";
+import type { SyncStatus } from "@/hooks/useDataSync";
 
 const NOTIF_ICON_MAP: Record<string, React.ReactNode> = {
   estimate: <FileText className="w-4 h-4" />,
@@ -28,7 +30,7 @@ const NOTIF_COLOR_MAP: Record<string, string> = {
   action: "bg-primary-50 text-primary-600 dark:bg-primary-500/20 dark:text-primary-400",
 };
 
-export function Header() {
+export function Header({ syncStatus }: { syncStatus?: SyncStatus }) {
   const navigate = useNavigate();
   const {
     user, theme, toggleTheme, setSearchOpen,
@@ -118,6 +120,52 @@ export function Header() {
 
       {/* Right Side Actions */}
       <div className="flex items-center gap-1 sm:gap-2 ml-auto flex-shrink-0">
+        {/* Sync Status Pill */}
+        {syncStatus && (
+          <div
+            className={cn(
+              "hidden sm:inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold transition-all",
+              syncStatus.isSyncing
+                ? "bg-blue-50 text-blue-600 dark:bg-blue-500/15 dark:text-blue-400"
+                : syncStatus.error
+                  ? "bg-red-50 text-red-600 dark:bg-red-500/15 dark:text-red-400"
+                  : !syncStatus.isOnline
+                    ? "bg-amber-50 text-amber-600 dark:bg-amber-500/15 dark:text-amber-400"
+                    : "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400"
+            )}
+            title={
+              syncStatus.isSyncing
+                ? "Syncing with server..."
+                : syncStatus.error
+                  ? `Sync error: ${syncStatus.error}`
+                  : !syncStatus.isOnline
+                    ? "Working offline"
+                    : syncStatus.lastSyncedAt
+                      ? `Last synced ${getRelativeTime(syncStatus.lastSyncedAt)}`
+                      : "Connected"
+            }
+          >
+            {syncStatus.isSyncing ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : syncStatus.error ? (
+              <AlertCircle className="h-3 w-3" />
+            ) : !syncStatus.isOnline ? (
+              <CloudOff className="h-3 w-3" />
+            ) : (
+              <Cloud className="h-3 w-3" />
+            )}
+            {syncStatus.isSyncing
+              ? "Syncing"
+              : syncStatus.error
+                ? "Error"
+                : !syncStatus.isOnline
+                  ? "Offline"
+                  : syncStatus.lastSyncedAt
+                    ? getRelativeTime(syncStatus.lastSyncedAt)
+                    : "Synced"}
+          </div>
+        )}
+
         {/* Theme Toggle */}
         <button
           onClick={toggleTheme}
